@@ -1,0 +1,16 @@
+# Third online stage alongside the Next.js app (Vercel) and Socket.IO
+# server (fly.toml). Deploy with: fly deploy --config fly.clip-worker.toml
+
+app = "fgc-stream-clip-worker"   # must be globally unique on Fly — change this
+primary_region = "iad"
+
+[build]
+  dockerfile = "Dockerfile.worker"
+
+# No [http_service] block — this process doesn't listen on a port, it
+# only pulls jobs off the BullMQ queue. Fly still keeps it running as a
+# background machine.
+[[vm]]
+  cpu_kind = "shared"
+  cpus = 1
+  memory_mb = 1024   # FFmpeg needs headroom beyond the socket server's 512mb

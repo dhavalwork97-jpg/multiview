@@ -1,0 +1,44 @@
+version: "3.9"
+
+# Phase 1 scope: just the stateful services a developer needs locally
+# (Postgres + Redis). The Next.js app and Socket.IO server run with
+# `npm run dev` / `npm run socket:dev` outside Docker for fast reload.
+# Full multi-service docker-compose (app, socket server, FFmpeg workers,
+# SFU) lands in the Phase 3 streaming-architecture deliverable.
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: fgc_postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: fgc
+      POSTGRES_PASSWORD: fgc_dev_password
+      POSTGRES_DB: fgc_stream
+    ports:
+      - "5432:5432"
+    volumes:
+      - fgc_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U fgc -d fgc_stream"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: fgc_redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - fgc_redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  fgc_postgres_data:
+  fgc_redis_data:
