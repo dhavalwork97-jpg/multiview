@@ -1,0 +1,16 @@
+FROM node:20-slim AS base
+WORKDIR /app
+RUN apt-get update && apt-get install -y --no-install-recommends ffmpeg && rm -rf /var/lib/apt/lists/*
+
+FROM base AS deps
+COPY package.json package-lock.json* ./
+RUN npm ci
+
+FROM base AS runner
+ENV NODE_ENV=production
+COPY --from=deps /app/node_modules ./node_modules
+COPY package.json tsconfig.json ./
+COPY src/server ./src/server
+COPY src/lib ./src/lib
+
+CMD ["npx", "tsx", "src/server/ai/hype-worker.ts"]

@@ -1,3 +1,9 @@
+> **Note:** Stage 2 below (the socket server) uses Fly.io, which requires
+> a credit card on file. If you'd rather not do that, see
+> `RENDER_DEPLOYMENT.md` for a no-card alternative that replaces Stage 2
+> and covers the Phase 3/4 worker services too — everything else in this
+> guide (Neon, Upstash, Vercel) is identical either way.
+
 # Deploying online instead of locally
 
 Right now you run two processes on your machine:

@@ -1,0 +1,65 @@
+# Render Blueprint — deploys all three non-Vercel, non-EC2 services in one
+# pass. In the Render dashboard: New → Blueprint → point at this repo →
+# Render reads this file and creates all three services with their env
+# var slots ready to fill in.
+#
+# Why these three and not the LiveKit media server: Render (like Fly)
+# proxies a single public port per service and doesn't expose the wide
+# UDP port range WebRTC needs — see STREAMING_ARCHITECTURE.md. The media
+# server stays on EC2 regardless of which platform hosts everything else.
+#
+# `plan: starter` (not `free`) is deliberate for the socket server: free
+# web services on Render sleep after 15 minutes idle with a 30-60s cold
+# start, which would drop every viewer's connection the first time a
+# tournament goes quiet for a bit. The two workers are less latency-
+# sensitive (a delayed clip/hype-score tick is much less bad than a
+# dropped live connection) — free tier is a reasonable place to start for
+# those and upgrade later if cold starts become a problem.
+
+services:
+  - type: web
+    name: fgc-stream-socket
+    env: docker
+    dockerfilePath: ./Dockerfile.socket
+    plan: starter
+    envVars:
+      - key: REDIS_URL
+        sync: false
+      - key: NEXT_PUBLIC_APP_URL
+        sync: false
+      - key: SOCKET_SERVER_PORT
+        value: 4000
+
+  - type: worker
+    name: fgc-stream-clip-worker
+    env: docker
+    dockerfilePath: ./Dockerfile.worker
+    plan: free
+    envVars:
+      - key: REDIS_URL
+        sync: false
+      - key: DATABASE_URL
+        sync: false
+      - key: AWS_ACCESS_KEY_ID
+        sync: false
+      - key: AWS_SECRET_ACCESS_KEY
+        sync: false
+      - key: AWS_REGION
+        sync: false
+      - key: S3_BUCKET_CLIPS
+        sync: false
+      - key: NEXT_PUBLIC_CLOUDFRONT_DOMAIN
+        sync: false
+
+  - type: worker
+    name: fgc-stream-ai-worker
+    env: docker
+    dockerfilePath: ./Dockerfile.ai-worker
+    plan: free
+    envVars:
+      - key: DATABASE_URL
+        sync: false
+      - key: REDIS_URL
+        sync: false
+      - key: NEXT_PUBLIC_CLOUDFRONT_DOMAIN
+        sync: false

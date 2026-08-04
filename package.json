@@ -15,7 +15,9 @@
     "prisma:studio": "prisma studio",
     "prisma:seed": "tsx prisma/seed.ts",
     "socket:dev": "tsx watch src/server/socket/index.ts",
-    "clip-worker:dev": "tsx watch src/server/streaming/clip-worker.ts"
+    "clip-worker:dev": "tsx watch src/server/streaming/clip-worker.ts",
+    "test:integration": "vitest run tests/integration",
+    "test:e2e": "playwright test"
   },
   "dependencies": {
     "next": "15.1.0",
@@ -34,6 +36,8 @@
     "livekit-server-sdk": "2.9.2",
     "livekit-client": "2.7.4",
     "@aws-sdk/client-s3": "3.716.0",
+    "@upstash/ratelimit": "2.0.5",
+    "@upstash/redis": "1.34.3",
     "zod": "3.23.8",
     "tailwindcss": "3.4.14",
     "class-variance-authority": "0.7.0",
@@ -51,6 +55,7 @@
     "eslint": "8.57.1",
     "eslint-config-next": "15.1.0",
     "vitest": "2.1.4",
-    "tsx": "4.19.2"
+    "tsx": "4.19.2",
+    "@playwright/test": "1.49.1"
   }
 }

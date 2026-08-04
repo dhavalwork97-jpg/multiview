@@ -99,7 +99,7 @@ here and is flagged rather than silently assumed done.
 |---|---|---|---|
 | 1 | Next.js app | Vercel | stateless request/response, native fit |
 | 2 | Socket.IO server | Fly.io | long-lived process, doesn't need public UDP |
-| 3 | **LiveKit media server** (server + ingress + egress) | **AWS EC2** (plain VM) | needs direct UDP reachability across a wide port range — PaaS proxied networking doesn't give you this |
+| 3 | **LiveKit media server** (server + ingress + egress) | **AWS EC2 (or Oracle Cloud Always Free — see `ORACLE_FREE_TIER_DEPLOYMENT.md`)** | needs direct UDP reachability across a wide port range — PaaS proxied networking doesn't give you this |
 | 4 | **Clip worker** | **Fly.io** | idle-then-bursty FFmpeg jobs; no public ports needed, just outbound to S3/Redis |
 
 Stage 3 is the one that can't go on Vercel/Fly and needs a real VM — see

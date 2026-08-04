@@ -1,3 +1,9 @@
+> **Note:** Stage C below (the clip worker) uses Fly.io, which requires a
+> credit card. See `RENDER_DEPLOYMENT.md` for a no-card alternative
+> covering this worker and the Phase 4 AI worker together. Stage B (the
+> LiveKit media server, EC2) is unaffected either way — no PaaS handles
+> the UDP range it needs.
+
 # Deploying Phase 3 online
 
 Builds on `DEPLOYMENT_GUIDE.md` (Vercel app + Fly socket server). This
@@ -41,7 +47,17 @@ access key + secret — these become `AWS_ACCESS_KEY_ID` /
 
 ---
 
-## Stage B — LiveKit media server on EC2
+## Stage B — LiveKit media server on a VM
+
+**Note on cost:** these steps use AWS EC2, which — as of AWS's July 2025
+free tier changes — no longer gives new accounts a lasting free VM (you
+get a $200 credit that draws down over 6 months, then it's paid). If you
+want a genuinely free-indefinitely option instead, see
+`ORACLE_FREE_TIER_DEPLOYMENT.md`, which replaces this stage only —
+everything else in this guide is unchanged either way. Google Cloud's
+always-free e2-micro is also an option but too small for real Egress
+load; fine for the "watch it work" step in isolation, not for actual
+tournament traffic.
 
 ### B.1 Launch the instance
 
@@ -142,7 +158,6 @@ LIVEKIT_API_KEY=<from B.4>
 LIVEKIT_API_SECRET=<from B.4>
 LIVEKIT_WS_URL=wss://media.fgcstream.com
 LIVEKIT_HTTP_URL=https://media.fgcstream.com
-LIVEKIT_WEBHOOK_SIGNING_SECRET=<see D.1>
 CLOUDFRONT_DOMAIN=d1234abcd.cloudfront.net
 NEXT_PUBLIC_CLOUDFRONT_DOMAIN=d1234abcd.cloudfront.net
 AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY / AWS_REGION / S3_BUCKET_VODS / S3_BUCKET_CLIPS
@@ -163,9 +178,9 @@ webhook:
 
 `docker compose restart livekit-server`. LiveKit signs webhook payloads
 with your API secret — `src/app/api/webhooks/livekit/route.ts` verifies
-that signature via `WebhookReceiver`, so there's no separate secret to
-generate here; `LIVEKIT_WEBHOOK_SIGNING_SECRET` in the table above is
-just `LIVEKIT_API_SECRET` again, listed separately for clarity.
+that signature via `WebhookReceiver`, using the same `LIVEKIT_API_KEY`/
+`LIVEKIT_API_SECRET` already set in Vercel. No separate webhook secret
+exists or needs generating.
 
 ---
 
