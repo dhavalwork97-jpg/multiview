@@ -357,11 +357,14 @@ model Clip {
 }
 
 model WatchHistoryEntry {
-  id        String   @id @default(cuid())
-  durationSeconds Int @default(0)
+  id              String   @id @default(cuid())
+  userId          String
+  matchId         String
+  watchedAt       DateTime @default(now())
+  durationSeconds Int      @default(0)
 
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  match     Match    @relation(fields: [matchId], references: [id], onDelete: Cascade)
+  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  match Match @relation(fields: [matchId], references: [id], onDelete: Cascade)
 
   @@index([userId, watchedAt])
   @@map("watch_history_entries")
