@@ -5,6 +5,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends ffmpeg && rm -r
 FROM base AS deps
 COPY package.json package-lock.json* ./
 RUN npm ci
+COPY prisma ./prisma
+RUN npx prisma generate
 
 FROM base AS runner
 ENV NODE_ENV=production
