@@ -17,7 +17,7 @@ import { EVENTS_CHANNEL, type AppEvent } from "@/lib/events";
 // without it, a viewer connected to socket-instance-2 would never see an
 // event published while connected to socket-instance-1.
 
-const PORT = Number(process.env.SOCKET_SERVER_PORT ?? 4000);
+const PORT = Number(process.env.PORT ?? process.env.SOCKET_SERVER_PORT ?? 4000);
 const REDIS_URL = process.env.REDIS_URL ?? "redis://localhost:6379";
 
 const httpServer = createServer();
