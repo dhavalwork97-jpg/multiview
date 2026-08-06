@@ -7,6 +7,7 @@ import {
   type IngressAudioOptions,
   type IngressVideoOptions,
 } from "livekit-server-sdk";
+import { EncodedFileOutput, EncodedFileType, SegmentedFileOutput } from "@livekit/protocol";
 
 const LIVEKIT_HTTP_URL = process.env.LIVEKIT_HTTP_URL!;
 const API_KEY = process.env.LIVEKIT_API_KEY!;
@@ -77,16 +78,16 @@ export async function startRoomEgress(roomName: string, matchId: string, station
   const segmentPrefix = `recordings/${stationId}/${matchId}`;
 
   const info = await egressClient.startRoomCompositeEgress(roomName, {
-  file: {
-    fileType: 2, // MP4
-    filepath: `${filePrefix}/full.mp4`,
-  },
-  segments: {
-    filenamePrefix: `${segmentPrefix}/segment`,
-    playlistName: `${segmentPrefix}/index.m3u8`,
-    segmentDuration: 4,
-  },
-});
+    file: new EncodedFileOutput({
+      fileType: EncodedFileType.MP4,
+      filepath: `${filePrefix}/full.mp4`,
+    }),
+    segments: new SegmentedFileOutput({
+      filenamePrefix: `${segmentPrefix}/segment`,
+      playlistName: `${segmentPrefix}/index.m3u8`,
+      segmentDuration: 4,
+    }),
+  });
 
   return { egressId: info.egressId, hlsPlaylistKey: `${segmentPrefix}/index.m3u8`, mp4Key: `${filePrefix}/full.mp4` };
 }
