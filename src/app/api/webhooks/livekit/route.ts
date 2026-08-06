@@ -21,7 +21,7 @@ export async function POST(req: Request) {
 
   let event;
   try {
-    event = receiver.receive(body, authHeader);
+    event = await receiver.receive(body, authHeader);
   } catch {
     return NextResponse.json({ error: "Invalid webhook signature" }, { status: 401 });
   }
