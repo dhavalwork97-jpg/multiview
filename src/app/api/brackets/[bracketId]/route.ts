@@ -1,0 +1,61 @@
+import { NextResponse } from "next/server";
+import { db } from "@/lib/db";
+
+// Public — brackets are viewer-facing (clicking a player opens their live
+// match). Enrichment strategy: the stored `structure` JSON is the layout
+// (round order, slot positions), and we separately pull every Match row
+// for this bracket to get current status/score/station, then hand the
+// client both. This avoids re-deriving layout from Match rows (lossy,
+// since not every slot has a Match yet) while keeping status always fresh
+// (never baked into the stored structure).
+export async function GET(_req: Request, { params }: { params: Promise<{ bracketId: string }> }) {
+  const { bracketId } = await params;
+
+  const bracket = await db.bracket.findUnique({
+    where: { id: bracketId },
+    include: {
+      matches: {
+        select: {
+          id: true,
+          round: true,
+          status: true,
+          playerOneId: true,
+          playerTwoId: true,
+          playerOneScore: true,
+          playerTwoScore: true,
+          winnerId: true,
+          stationId: true,
+          playerOne: { select: { gamertag: true } },
+          playerTwo: { select: { gamertag: true } },
+          station: { select: { label: true } },
+        },
+      },
+    },
+  });
+
+  if (!bracket) {
+    return NextResponse.json({ error: "Bracket not found" }, { status: 404 });
+  }
+
+  // playerId -> matchId, but only for matches currently LIVE — this is
+  // exactly what the bracket UI needs to decide whether clicking a
+  // player's name should jump to a live stream or just show a tooltip.
+  const liveMatchByPlayerId: Record<string, string> = {};
+  for (const m of bracket.matches) {
+    if (m.status === "LIVE") {
+      liveMatchByPlayerId[m.playerOneId] = m.id;
+      liveMatchByPlayerId[m.playerTwoId] = m.id;
+    }
+  }
+
+  return NextResponse.json({
+    bracket: {
+      id: bracket.id,
+      name: bracket.name,
+      format: bracket.format,
+      structure: bracket.structure,
+    },
+    matches: bracket.matches,
+    liveMatchByPlayerId,
+  });
+}

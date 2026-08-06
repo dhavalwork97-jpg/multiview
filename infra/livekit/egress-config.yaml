@@ -1,0 +1,32 @@
+# Egress runs the recording/HLS jobs the app starts via the LiveKit API
+# (see src/app/api/webhooks/livekit/route.ts, which kicks off egress the
+# moment a station's room goes live). It's Chrome-based for room-composite
+# jobs, so it's the heaviest of the three LiveKit services — give it real
+# CPU on the VM (see PHASE3_DEPLOYMENT_GUIDE.md sizing note).
+
+redis:
+  address: redis:6379
+
+api_key: APIKeyPlaceholder
+api_secret: secretPlaceholder
+ws_url: ws://livekit-server:7880
+
+s3:
+  access_key: ${AWS_ACCESS_KEY_ID}
+  secret: ${AWS_SECRET_ACCESS_KEY}
+  region: ${AWS_REGION}
+  bucket: ${S3_BUCKET_VODS}
+
+# Segmented HLS output: each station's live HLS playlist lands at
+# recordings/{stationId}/{matchId}/index.m3u8, continuously appended while
+# a match is LIVE. This is both the "HLS fallback" viewing path (via
+# CloudFront) and the source the clip worker cuts "instant replay" clips
+# from — see src/server/streaming/clip-worker.ts.
+segment_outputs:
+  filename_prefix: "recordings"
+  playlist_name: "index.m3u8"
+  segment_duration_seconds: 4
+
+# Full-match MP4 for the permanent VOD, finalized when the room closes.
+file_outputs:
+  filename_prefix: "vods"

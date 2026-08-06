@@ -1,0 +1,13 @@
+# Fifth online stage. Deploy with: fly deploy --config fly.ai-worker.toml
+app = "fgc-stream-ai-worker"   # must be globally unique on Fly — change this
+primary_region = "iad"
+
+[build]
+  dockerfile = "Dockerfile.ai-worker"
+
+# No [http_service] — polls the database and samples HLS streams over
+# outbound HTTP; nothing needs to reach it.
+[[vm]]
+  cpu_kind = "shared"
+  cpus = 1
+  memory_mb = 1024

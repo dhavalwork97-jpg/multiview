@@ -1,0 +1,24 @@
+# Deploy target for src/server/socket/index.ts ONLY — see the step-by-step
+# guide (DEPLOYMENT_GUIDE.md) for the full walkthrough. Not used by the
+# Next.js app, which deploys to Vercel instead.
+
+app = "fgc-stream-socket"          # must be globally unique on Fly — change this
+primary_region = "iad"              # pick the region closest to your Vercel deploy / venue
+
+[build]
+  dockerfile = "Dockerfile.socket"
+
+[http_service]
+  internal_port = 4000
+  force_https = true
+  auto_stop_machines = false        # keep the WebSocket server always warm — no cold starts mid-tournament
+  auto_start_machines = true
+  min_machines_running = 1
+
+[[vm]]
+  cpu_kind = "shared"
+  cpus = 1
+  memory_mb = 512
+
+[env]
+  SOCKET_SERVER_PORT = "4000"

@@ -1,0 +1,31 @@
+name: Redeploy media server
+
+# The LiveKit stage (EC2 or Oracle, see PHASE3_DEPLOYMENT_GUIDE.md /
+# ORACLE_FREE_TIER_DEPLOYMENT.md) isn't behind a platform that redeploys
+# on push — it's a plain VM running docker compose. This SSHes in,
+# pulls the latest infra/livekit/ configs, and restarts the stack. Only
+# triggers on changes to that directory, since app-code pushes have
+# nothing to do with this stage.
+on:
+  push:
+    branches: [main]
+    paths:
+      - "infra/livekit/**"
+
+jobs:
+  redeploy:
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - name: SSH and redeploy
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.MEDIA_SERVER_HOST }}
+          username: ${{ secrets.MEDIA_SERVER_SSH_USER }}
+          key: ${{ secrets.MEDIA_SERVER_SSH_KEY }}
+          script: |
+            cd ~/fgc-stream/infra/livekit
+            git pull origin main
+            docker compose pull
+            docker compose up -d
+            docker compose ps   # visible in the Action log — quick sanity check that all three services are Up

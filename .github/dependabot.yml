@@ -1,0 +1,18 @@
+version: 2
+updates:
+  - package-ecosystem: "npm"
+    directory: "/"
+    schedule: { interval: "weekly" }
+    groups:
+      # Group non-major bumps into one PR instead of one-PR-per-package —
+      # a dozen individual patch-bump PRs a week is noise, not signal.
+      minor-and-patch:
+        update-types: ["minor", "patch"]
+
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule: { interval: "weekly" }
+
+  - package-ecosystem: "docker"
+    directory: "/"
+    schedule: { interval: "weekly" }

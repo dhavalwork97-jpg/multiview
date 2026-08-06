@@ -1,0 +1,14 @@
+# The Ingress service is what station encoders (OBS/capture-card box at
+# each PS5 setup) actually connect to. It validates the stream key against
+# LiveKit via Redis RPC, transcodes to a WebRTC-compatible format, and
+# publishes into the room the app created for that station.
+
+redis:
+  address: redis:6379
+
+rtmp_port: 1935
+whip_port: 7885
+
+api_key: APIKeyPlaceholder       # must match livekit.yaml
+api_secret: secretPlaceholder
+ws_url: ws://livekit-server:7880

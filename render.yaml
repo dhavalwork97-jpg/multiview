@@ -1,0 +1,68 @@
+# Render Blueprint — deploys all three non-Vercel, non-EC2 services in one
+# pass. In the Render dashboard: New → Blueprint → point at this repo →
+# Render reads this file and creates all three services with their env
+# var slots ready to fill in.
+#
+# Why these three and not the LiveKit media server: Render (like Fly)
+# proxies a single public port per service and doesn't expose the wide
+# UDP port range WebRTC needs — see STREAMING_ARCHITECTURE.md. The media
+# server stays on a VM (Oracle/EC2) regardless of which platform hosts
+# everything else.
+#
+# All three are `type: web`, including the clip worker and AI worker,
+# which are functionally background job processors with no need to
+# listen on a port. This is deliberate: Render's "Background Worker"
+# service type has NO free tier at any level ($7/mo minimum, Starter and
+# up, regardless of Blueprint vs. manual creation) — only Web Services
+# and static sites do. src/lib/health-server.ts adds a one-line health
+# endpoint to both workers so they can register as Web Services instead
+# and actually get the free tier. See RENDER_DEPLOYMENT.md for the
+# keep-alive workaround for the cold-start tradeoff this implies.
+
+services:
+  - type: web
+    name: fgc-stream-socket
+    env: docker
+    dockerfilePath: ./Dockerfile.socket
+    plan: free
+    envVars:
+      - key: REDIS_URL
+        sync: false
+      - key: NEXT_PUBLIC_APP_URL
+        sync: false
+      - key: SOCKET_SERVER_PORT
+        value: 4000
+
+  - type: web
+    name: fgc-stream-clip-worker
+    env: docker
+    dockerfilePath: ./Dockerfile.worker
+    plan: free
+    envVars:
+      - key: REDIS_URL
+        sync: false
+      - key: DATABASE_URL
+        sync: false
+      - key: AWS_ACCESS_KEY_ID
+        sync: false
+      - key: AWS_SECRET_ACCESS_KEY
+        sync: false
+      - key: AWS_REGION
+        sync: false
+      - key: S3_BUCKET_CLIPS
+        sync: false
+      - key: NEXT_PUBLIC_CLOUDFRONT_DOMAIN
+        sync: false
+
+  - type: web
+    name: fgc-stream-ai-worker
+    env: docker
+    dockerfilePath: ./Dockerfile.ai-worker
+    plan: free
+    envVars:
+      - key: DATABASE_URL
+        sync: false
+      - key: REDIS_URL
+        sync: false
+      - key: NEXT_PUBLIC_CLOUDFRONT_DOMAIN
+        sync: false

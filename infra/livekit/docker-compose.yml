@@ -1,0 +1,62 @@
+version: "3.9"
+
+# The media-server stage. Runs on a cloud VM with a public IP (see
+# PHASE3_DEPLOYMENT_GUIDE.md) — this is not meant to run on your laptop;
+# WebRTC needs real UDP reachability for station encoders and viewers.
+#
+# Four services: livekit-server (SFU + signaling + control API),
+# livekit-ingress (RTMP/WHIP intake), livekit-egress (recording + HLS
+# output to S3), and a dedicated redis for the three to coordinate
+# through. This redis is intentionally separate from the app's
+# Upstash Redis (Socket.IO pub/sub) — different failure domain, different
+# traffic pattern (control-plane RPC vs. pub/sub fan-out).
+
+services:
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    volumes:
+      - livekit_redis_data:/data
+
+  livekit-server:
+    image: livekit/livekit-server:latest
+    restart: unless-stopped
+    command: --config /etc/livekit.yaml
+    network_mode: host   # required: the wide RTC UDP port range doesn't
+                          # work through Docker's default bridge NAT
+    volumes:
+      - ./livekit.yaml:/etc/livekit.yaml
+    depends_on:
+      - redis
+
+  livekit-ingress:
+    image: livekit/ingress:latest
+    restart: unless-stopped
+    network_mode: host
+    volumes:
+      - ./ingress-config.yaml:/etc/ingress.yaml
+    environment:
+      - INGRESS_CONFIG_FILE=/etc/ingress.yaml
+    depends_on:
+      - livekit-server
+
+  livekit-egress:
+    image: livekit/egress:latest
+    restart: unless-stopped
+    # Egress runs a headless Chrome per room-composite job — needs
+    # /dev/shm larger than Docker's tiny 64MB default or Chrome crashes
+    # under load.
+    shm_size: "2gb"
+    volumes:
+      - ./egress-config.yaml:/etc/egress.yaml
+    environment:
+      - EGRESS_CONFIG_FILE=/etc/egress.yaml
+      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
+      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
+      - AWS_REGION=${AWS_REGION}
+      - S3_BUCKET_VODS=${S3_BUCKET_VODS}
+    depends_on:
+      - livekit-server
+
+volumes:
+  livekit_redis_data:

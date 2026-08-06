@@ -1,0 +1,368 @@
+// ============================================================================
+// FGC Stream — Phase 1 Schema
+// Covers: auth/users, tournaments, players, stations, live matches
+// Later phases will add: clips/VODs, AI highlight events, notifications,
+// subscriptions/billing, watch history, favorites (stubbed here as models
+// so Phase 1 API routes have something to point at, but not yet wired to UI).
+// ============================================================================
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ----------------------------------------------------------------------------
+// Enums
+// ----------------------------------------------------------------------------
+
+enum Role {
+  VIEWER
+  PLAYER
+  ORGANIZER
+  ADMIN
+}
+
+enum TournamentStatus {
+  DRAFT
+  SCHEDULED
+  LIVE
+  COMPLETED
+  ARCHIVED
+}
+
+enum StationStatus {
+  OFFLINE       // no encoder connected
+  IDLE          // encoder connected, no active match
+  LIVE          // actively streaming a match
+  ERROR         // encoder connected but unhealthy (dropped frames, etc.)
+}
+
+enum MatchStatus {
+  QUEUED        // assigned to a station, not started
+  LIVE
+  COMPLETED
+  DISPUTED
+}
+
+enum StreamProtocol {
+  WEBRTC
+  HLS
+}
+
+enum MatchEventType {
+  COMEBACK
+  PERFECT_ROUND
+  HYPE_SPIKE
+}
+
+// AI-detected (or, later, scorekeeper-flagged) notable moments. Each one
+// is both a UI marker on the watch page/bracket AND — for COMEBACK and
+// PERFECT_ROUND — the trigger for an auto-generated Clip (see
+// src/server/ai/hype-worker.ts). timestampSeconds is relative to the
+// match's Recording, same coordinate space Clip.startSeconds/endSeconds
+// already use, so no separate mapping is needed between the two.
+model MatchEvent {
+  id               String         @id @default(cuid())
+  matchId          String
+  type             MatchEventType
+  timestampSeconds Int
+  confidence       Float          // 0–1, heuristic-derived — see hype-worker.ts caveats
+  metadata         Json?          // e.g. { playerLowHpFraction: 0.08, side: "playerOne" }
+  createdAt        DateTime       @default(now())
+
+  match            Match          @relation(fields: [matchId], references: [id], onDelete: Cascade)
+
+  @@index([matchId])
+  @@map("match_events")
+}
+
+enum SubscriptionStatus {
+  NONE
+  ACTIVE
+  PAST_DUE
+  CANCELED
+}
+
+// Clerk is the identity provider — this table mirrors Clerk users by
+// clerkId so we can attach app-specific data (role, favorites, etc).
+// Synced via the /api/webhooks/clerk route (user.created/updated/deleted).
+// ----------------------------------------------------------------------------
+
+model User {
+  id            String   @id @default(cuid())
+  clerkId       String   @unique
+  email         String   @unique
+  username      String   @unique
+  displayName   String?
+  avatarUrl     String?
+  role          Role     @default(VIEWER)
+
+  stripeCustomerId     String?             @unique
+  stripeSubscriptionId String?             @unique
+  subscriptionStatus   SubscriptionStatus  @default(NONE)
+
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  organizedTournaments Tournament[]      @relation("TournamentOrganizer")
+  playerProfile        Player?
+  favorites            Favorite[]
+  watchHistory         WatchHistoryEntry[]
+  clipsCreated         Clip[]
+
+  @@index([role])
+  @@map("users")
+}
+
+// A Player is the competitive identity (gamertag) shown on brackets,
+// separate from User so organizers can register players who don't yet
+// have — or never make — a platform account.
+model Player {
+  id           String   @id @default(cuid())
+  gamertag     String   @unique
+  realName     String?
+  country      String?
+  avatarUrl    String?
+
+  userId       String?  @unique
+  user         User?    @relation(fields: [userId], references: [id])
+
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  entrants     TournamentEntrant[]
+  matchesAsP1  Match[]  @relation("MatchPlayerOne")
+  matchesAsP2  Match[]  @relation("MatchPlayerTwo")
+  favoritedBy  Favorite[]
+
+  @@index([gamertag])
+  @@map("players")
+}
+
+model Favorite {
+  id        String   @id @default(cuid())
+  userId    String
+  playerId  String
+  createdAt DateTime @default(now())
+
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  player    Player   @relation(fields: [playerId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, playerId])
+  @@map("favorites")
+}
+
+// ----------------------------------------------------------------------------
+// Tournaments
+// ----------------------------------------------------------------------------
+
+model Tournament {
+  id            String            @id @default(cuid())
+  name          String
+  slug          String            @unique
+  game          String            // "Street Fighter 6", "Tekken 8", "Guilty Gear -STRIVE-"
+  status        TournamentStatus  @default(DRAFT)
+  startDate     DateTime
+  endDate       DateTime?
+  venue         String?
+  bracketSource String?           // e.g. "start.gg" — provenance of imported bracket
+  bracketExternalId String?       // id in the source system, for re-sync
+
+  organizerId   String
+  organizer     User              @relation("TournamentOrganizer", fields: [organizerId], references: [id])
+
+  createdAt     DateTime          @default(now())
+  updatedAt     DateTime          @updatedAt
+
+  entrants      TournamentEntrant[]
+  stations      Station[]
+  matches       Match[]
+  brackets      Bracket[]
+
+  @@index([status])
+  @@index([slug])
+  @@map("tournaments")
+}
+
+model TournamentEntrant {
+  id            String     @id @default(cuid())
+  tournamentId  String
+  playerId      String
+  seed          Int?
+  eliminated    Boolean    @default(false)
+
+  tournament    Tournament @relation(fields: [tournamentId], references: [id], onDelete: Cascade)
+  player        Player     @relation(fields: [playerId], references: [id])
+
+  @@unique([tournamentId, playerId])
+  @@map("tournament_entrants")
+}
+
+// A Bracket is deliberately a thin wrapper: full bracket topology (pools,
+// double-elim trees, seeding lines) is stored as JSON imported from the
+// source (e.g. start.gg's GraphQL bracket export), and re-derived on sync
+// rather than modeled relationally. Match rows are still first-class/relational
+// because streaming, station-assignment, and live score updates all key off Match.
+model Bracket {
+  id            String     @id @default(cuid())
+  tournamentId  String
+  name          String     // "Winners Bracket", "Losers Bracket", "Pools A"
+  format        String     // "double_elimination" | "single_elimination" | "round_robin" | "swiss"
+  structure     Json       // raw imported bracket tree/positions
+
+  tournament    Tournament @relation(fields: [tournamentId], references: [id], onDelete: Cascade)
+  matches       Match[]
+
+  @@map("brackets")
+}
+
+// ----------------------------------------------------------------------------
+// Stations & Streaming
+// A Station = one physical PS5 + capture/encoder rig at the venue.
+// Its live status is driven by the RTMP/WHIP ingest heartbeat, not just DB
+// state — see src/server/streaming for the reconciliation loop.
+// ----------------------------------------------------------------------------
+
+model Station {
+  id              String         @id @default(cuid())
+  tournamentId    String
+  label           String         // "Station 12", "Pool A - Setup 3"
+  status          StationStatus  @default(OFFLINE)
+
+  streamKey       String         @unique @default(cuid()) // LiveKit-issued RTMP stream key once an ingress is created
+  ingressId       String?        // LiveKit Ingress resource id
+  ingestUrl       String?        // RTMP/WHIP ingest endpoint assigned to this station
+  playbackIdHls   String?        // CloudFront path prefix for this station's live HLS output
+  playbackIdWebrtc String?       // LiveKit room name (also used for the WebRTC subscribe path)
+
+  lastHeartbeatAt DateTime?
+  currentBitrateKbps Int?
+  droppedFrames   Int?           @default(0)
+
+  tournament      Tournament     @relation(fields: [tournamentId], references: [id], onDelete: Cascade)
+  matches         Match[]
+
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+
+  @@unique([tournamentId, label])
+  @@index([status])
+  @@map("stations")
+}
+
+model Match {
+  id            String       @id @default(cuid())
+  tournamentId  String
+  bracketId     String?
+  stationId     String?
+
+  playerOneId   String
+  playerTwoId   String
+  playerOneScore Int         @default(0)
+  playerTwoScore Int         @default(0)
+  winnerId      String?
+
+  round         String?      // "Winners Semis", "Pool A Round 2"
+  status        MatchStatus  @default(QUEUED)
+
+  startedAt     DateTime?
+  endedAt       DateTime?
+
+  // Denormalized "hype" score, updated by the AI highlight pipeline (Phase 4+).
+  // Kept here rather than a separate table so the live grid can sort/filter
+  // on it with a single indexed query.
+  hypeScore     Float?       @default(0)
+
+  tournament    Tournament   @relation(fields: [tournamentId], references: [id], onDelete: Cascade)
+  bracket       Bracket?     @relation(fields: [bracketId], references: [id])
+  station       Station?     @relation(fields: [stationId], references: [id])
+  playerOne     Player       @relation("MatchPlayerOne", fields: [playerOneId], references: [id])
+  playerTwo     Player       @relation("MatchPlayerTwo", fields: [playerTwoId], references: [id])
+
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
+
+  watchHistory  WatchHistoryEntry[]
+  recording     Recording?
+  clips         Clip[]
+  events        MatchEvent[]
+
+  @@index([tournamentId, status])
+  @@index([stationId])
+  @@index([status, hypeScore])
+  @@map("matches")
+}
+
+enum RecordingStatus {
+  RECORDING
+  PROCESSING
+  READY
+  FAILED
+}
+
+enum ClipStatus {
+  QUEUED
+  PROCESSING
+  READY
+  FAILED
+}
+
+// One per Match. Egress writes continuously to S3 while status=RECORDING
+// (both an MP4 and a live-growing HLS playlist, from the same egress job —
+// see STREAMING_ARCHITECTURE.md); READY once the LiveKit `egress_ended`
+// webhook fires and the MP4 is finalized. hlsPlaylistKey stays populated
+// even mid-match so the DVR-style "watch from a bit ago" scrubbing works
+// on a live match, not just after it ends.
+model Recording {
+  id              String          @id @default(cuid())
+  matchId         String          @unique
+  egressId        String?         // LiveKit egress job id, for status polling/cancellation
+  status          RecordingStatus @default(RECORDING)
+  mp4S3Key        String?
+  hlsPlaylistKey  String?
+  durationSeconds Int?
+  startedAt       DateTime        @default(now())
+  endedAt         DateTime?
+
+  match           Match           @relation(fields: [matchId], references: [id], onDelete: Cascade)
+
+  @@map("recordings")
+}
+
+// A user-triggered (or AI-triggered, Phase 4) cut of a match's recording.
+// Cutting happens against the *live* HLS segments already in S3 while a
+// match is in progress — that's what makes "instant replay" instant
+// instead of waiting for the full match recording to finalize.
+model Clip {
+  id           String     @id @default(cuid())
+  matchId      String
+  createdById  String?    // null = system-generated (Phase 4 AI highlights)
+  title        String?
+  startSeconds Int
+  endSeconds   Int
+  status       ClipStatus @default(QUEUED)
+  s3Key        String?
+  thumbnailKey String?
+  createdAt    DateTime   @default(now())
+
+  match        Match      @relation(fields: [matchId], references: [id], onDelete: Cascade)
+  createdBy    User?      @relation(fields: [createdById], references: [id])
+
+  @@index([matchId, status])
+  @@map("clips")
+}
+
+model WatchHistoryEntry {
+  id        String   @id @default(cuid())
+  durationSeconds Int @default(0)
+
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  match     Match    @relation(fields: [matchId], references: [id], onDelete: Cascade)
+
+  @@index([userId, watchedAt])
+  @@map("watch_history_entries")
+}

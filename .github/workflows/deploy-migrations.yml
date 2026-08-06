@@ -1,0 +1,29 @@
+name: Deploy database migrations
+
+# Deliberately separate from Vercel's own build/deploy (which happens
+# automatically via Vercel's GitHub integration on push to main) — this
+# runs first, as its own visible, loggable step, and can be gated with a
+# GitHub Environment protection rule (Settings → Environments →
+# "production" → required reviewers) if you want a human to confirm
+# before a schema change hits the real database. Folding `prisma migrate
+# deploy` into Vercel's build command works too but makes migration
+# failures harder to see separately from build failures.
+on:
+  push:
+    branches: [main]
+    paths:
+      - "prisma/schema.prisma"
+      - "prisma/migrations/**"
+
+jobs:
+  migrate:
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: "20", cache: "npm" }
+      - run: npm ci
+      - run: npx prisma migrate deploy
+        env:
+          DATABASE_URL: ${{ secrets.PRODUCTION_DATABASE_URL }}
