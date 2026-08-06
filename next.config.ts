@@ -2,21 +2,13 @@ import type { NextConfig } from "next";
 
 const CONTENT_SECURITY_POLICY = [
   "default-src 'self'",
-  // unsafe-inline/eval on scripts is Next.js's own dev/runtime requirement,
-  // not a wildcard for third-party scripts — no third-party ad/analytics
-  // domains are added here, consistent with Anthropic's own ad-free stance
-  // on Claude products and this platform's parallel choice not to run ads.
-  "script-src 'self' 'unsafe-inline' 'unsafe-eval'",
+  "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://*.clerk.accounts.dev https://*.clerk.com",
   "style-src 'self' 'unsafe-inline'",
-  // media-src covers HLS segments and clip playback from CloudFront;
-  // connect-src covers the Socket.IO server and the LiveKit WebRTC
-  // signaling/media endpoints — both are separate origins from the app
-  // itself, so they have to be explicitly allow-listed or every video
-  // feature silently breaks under this policy.
   `media-src 'self' https://*.cloudfront.net`,
-  `connect-src 'self' https://*.cloudfront.net wss://*.onrender.com wss://*.fly.dev wss://media.fgcstream.com https://media.fgcstream.com`,
+  `connect-src 'self' https://*.cloudfront.net wss://*.onrender.com wss://*.fly.dev wss://media.fgcstream.com https://media.fgcstream.com https://*.clerk.accounts.dev https://*.clerk.com`,
   "img-src 'self' data: https:",
   "font-src 'self' data:",
+  "frame-src https://*.clerk.accounts.dev https://*.clerk.com",
   "frame-ancestors 'none'",
   "base-uri 'self'",
   "form-action 'self'",
