@@ -59,7 +59,7 @@ export async function POST(req: Request) {
   return NextResponse.json({ received: true });
 }
 
-export function mapStripeStatus(status: Stripe.Subscription.Status): "ACTIVE" | "PAST_DUE" | "CANCELED" | "NONE" {
+function mapStripeStatus(status: Stripe.Subscription.Status): "ACTIVE" | "PAST_DUE" | "CANCELED" | "NONE" {
   switch (status) {
     case "active":
     case "trialing":
