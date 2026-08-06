@@ -77,20 +77,16 @@ export async function startRoomEgress(roomName: string, matchId: string, station
   const segmentPrefix = `recordings/${stationId}/${matchId}`;
 
   const info = await egressClient.startRoomCompositeEgress(roomName, {
-    fileOutputs: [
-      {
-        fileType: 2, // MP4
-        filepath: `${filePrefix}/full.mp4`,
-      },
-    ],
-    segmentOutputs: [
-      {
-        filenamePrefix: `${segmentPrefix}/segment`,
-        playlistName: `${segmentPrefix}/index.m3u8`,
-        segmentDuration: 4,
-      },
-    ],
-  });
+  file: {
+    fileType: 2, // MP4
+    filepath: `${filePrefix}/full.mp4`,
+  },
+  segments: {
+    filenamePrefix: `${segmentPrefix}/segment`,
+    playlistName: `${segmentPrefix}/index.m3u8`,
+    segmentDuration: 4,
+  },
+});
 
   return { egressId: info.egressId, hlsPlaylistKey: `${segmentPrefix}/index.m3u8`, mp4Key: `${filePrefix}/full.mp4` };
 }
