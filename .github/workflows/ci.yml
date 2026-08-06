@@ -10,7 +10,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with: { node-version: "20", cache: "npm" }
       - run: npm ci
       - run: npm run lint
@@ -20,7 +20,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with: { node-version: "20", cache: "npm" }
       - run: npm ci
       - run: npx vitest run tests/unit
@@ -46,7 +46,7 @@ jobs:
       DATABASE_URL: postgresql://postgres:test@localhost:5432/fgc_test
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with: { node-version: "20", cache: "npm" }
       - run: npm ci
       - run: npx prisma migrate deploy
@@ -57,7 +57,7 @@ jobs:
     needs: [lint-and-typecheck, unit-tests, integration-tests]
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with: { node-version: "20", cache: "npm" }
       - run: npm ci
       - run: npx prisma generate
