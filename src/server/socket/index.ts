@@ -20,7 +20,23 @@ import { EVENTS_CHANNEL, type AppEvent } from "@/lib/events";
 const PORT = Number(process.env.PORT ?? process.env.SOCKET_SERVER_PORT ?? 4000);
 const REDIS_URL = process.env.REDIS_URL ?? "redis://localhost:6379";
 
-const httpServer = createServer();
+const httpServer = createServer((req, res) => {
+  // Socket.IO only intercepts requests under its own path (/socket.io/*
+  // by default) — everything else, including Render's health-check probe
+  // hitting plain GET /, would otherwise fall through to nothing and
+  // hang with no response. Render reports that as "no open HTTP ports"
+  // even though the process is up and the port is genuinely bound, since
+  // a TCP handshake succeeding isn't the same as an HTTP response coming
+  // back. This handler only needs to cover paths Socket.IO won't already
+  // claim.
+  if (req.url === "/" || req.url === "/healthz") {
+    res.writeHead(200, { "Content-Type": "text/plain" });
+    res.end("ok");
+    return;
+  }
+  res.writeHead(404);
+  res.end();
+});
 const io = new Server(httpServer, {
   cors: { origin: process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000" },
 });
