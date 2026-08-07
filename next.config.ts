@@ -11,16 +11,25 @@ const CONTENT_SECURITY_POLICY = [
   // choice not to run ads.
   "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://*.clerk.accounts.dev https://*.clerk.com https://challenges.cloudflare.com",
   "style-src 'self' 'unsafe-inline'",
-  // media-src covers HLS segments and clip playback from CloudFront;
+  // media-src covers HLS/clip playback. hls.js buffers into a
+  // MediaSource-backed blob: URL rather than handing the <video> element
+  // a direct network URL, so blob: has to be explicitly allowed here or
+  // playback is blocked even when the manifest itself loaded fine.
+  `media-src 'self' blob: https://*.cloudfront.net https://*.supabase.co`,
   // connect-src covers the Socket.IO server, the LiveKit WebRTC
-  // signaling/media endpoints, and Clerk's API — all separate origins from
-  // the app itself, so they have to be explicitly allow-listed or every
-  // video feature (or auth) silently breaks under this policy.
-  `media-src 'self' https://*.cloudfront.net`,
-  `connect-src 'self' https://*.cloudfront.net wss://*.onrender.com wss://*.fly.dev wss://media.fgcstream.com https://media.fgcstream.com https://*.clerk.accounts.dev https://*.clerk.com https://challenges.cloudflare.com`,
+  // signaling/media endpoints, Clerk's API, and Supabase Storage (hls.js
+  // fetches the manifest/segments via XHR, a separate origin from the
+  // app itself) — all have to be explicitly allow-listed or the
+  // corresponding feature silently breaks under this policy.
+  `connect-src 'self' https://*.cloudfront.net https://*.supabase.co wss://*.onrender.com wss://*.fly.dev wss://media.fgcstream.com https://media.fgcstream.com https://*.clerk.accounts.dev https://*.clerk.com https://challenges.cloudflare.com`,
   "img-src 'self' data: https:",
   "font-src 'self' data:",
   "frame-src https://*.clerk.accounts.dev https://*.clerk.com https://challenges.cloudflare.com",
+  // Clerk spins up blob:-sourced web workers for background token
+  // refresh. With no worker-src set, browsers fall back to script-src,
+  // which doesn't include blob: — this line stops that fallback from
+  // blocking Clerk's workers.
+  "worker-src 'self' blob:",
   "frame-ancestors 'none'",
   "base-uri 'self'",
   "form-action 'self'",
