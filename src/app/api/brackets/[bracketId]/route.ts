@@ -27,7 +27,10 @@ export async function GET(_req: Request, { params }: { params: Promise<{ bracket
           stationId: true,
           playerOne: { select: { gamertag: true } },
           playerTwo: { select: { gamertag: true } },
-          station: { select: { label: true } },
+          // Bracket UI plays matches inline (see BracketWatchDock) rather
+          // than only linking out to /watch/:matchId, so it needs enough
+          // of Station to actually mount a player — not just the label.
+          station: { select: { id: true, label: true, playbackIdHls: true } },
         },
       },
     },

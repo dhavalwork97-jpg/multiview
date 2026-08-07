@@ -15,7 +15,7 @@ type BracketMatch = {
   stationId: string | null;
   playerOne: { gamertag: string };
   playerTwo: { gamertag: string };
-  station: { label: string } | null;
+  station: { id: string; label: string; playbackIdHls: string | null } | null;
 };
 
 type StructureSlot = {
@@ -26,7 +26,20 @@ type StructureSlot = {
 
 type StructureRound = { name: string; matches: StructureSlot[] };
 
-export function InteractiveBracket({ bracketId }: { bracketId: string }) {
+export function InteractiveBracket({
+  bracketId,
+  onWatch,
+  selectedMatchId,
+}: {
+  bracketId: string;
+  // Viewer-facing bracket pages pass this to keep the click local (opens
+  // the match in the small watch dock instead of navigating away, so
+  // browsing the rest of the bracket doesn't lose your place). Omit it
+  // (as the admin/organizer bracket view does) to keep the original
+  // navigate-straight-to-/watch/:matchId behavior.
+  onWatch?: (match: BracketMatch) => void;
+  selectedMatchId?: string | null;
+}) {
   const router = useRouter();
   const [rounds, setRounds] = useState<StructureRound[]>([]);
   const [matches, setMatches] = useState<BracketMatch[]>([]);
@@ -63,10 +76,21 @@ export function InteractiveBracket({ bracketId }: { bracketId: string }) {
     );
   }
 
-  function goToPlayerIfLive(playerId: string | null) {
+  function openMatch(match: BracketMatch | undefined) {
+    if (!match) return;
+    if (onWatch) {
+      onWatch(match);
+    } else {
+      router.push(`/watch/${match.id}`);
+    }
+  }
+
+  function openIfLive(playerId: string | null) {
     if (!playerId) return;
     const liveMatchId = liveMatchByPlayerId[playerId];
-    if (liveMatchId) router.push(`/watch/${liveMatchId}`);
+    if (!liveMatchId) return;
+    const match = matches.find((m) => m.id === liveMatchId);
+    openMatch(match);
   }
 
   return (
@@ -79,17 +103,20 @@ export function InteractiveBracket({ bracketId }: { bracketId: string }) {
           {round.matches.map((slot, i) => {
             const match = findMatch(slot);
             const isLive = match?.status === "LIVE";
+            const isSelected = !!match && match.id === selectedMatchId;
             const p1Name = match?.playerOne.gamertag ?? (slot.playerOneId ? slot.playerOneId : "TBD");
             const p2Name = match?.playerTwo.gamertag ?? (slot.playerTwoId ? slot.playerTwoId : "TBD");
 
             return (
               <div
                 key={`${round.name}-${i}`}
-                className="rounded-card border border-arena-600 bg-arena-800 text-sm"
+                className={`rounded-card border bg-arena-800 text-sm transition-colors ${
+                  isSelected ? "border-signal-live" : "border-arena-600"
+                }`}
               >
                 <button
                   type="button"
-                  onClick={() => goToPlayerIfLive(slot.playerOneId)}
+                  onClick={() => openIfLive(slot.playerOneId)}
                   disabled={!slot.playerOneId || !liveMatchByPlayerId[slot.playerOneId]}
                   className="flex w-full items-center justify-between border-b border-arena-700 border-l-2 border-l-corner-p1 px-3 py-2 text-left disabled:cursor-default enabled:hover:bg-arena-700"
                 >
@@ -98,7 +125,7 @@ export function InteractiveBracket({ bracketId }: { bracketId: string }) {
                 </button>
                 <button
                   type="button"
-                  onClick={() => goToPlayerIfLive(slot.playerTwoId)}
+                  onClick={() => openIfLive(slot.playerTwoId)}
                   disabled={!slot.playerTwoId || !liveMatchByPlayerId[slot.playerTwoId]}
                   className="flex w-full items-center justify-between border-l-2 border-l-corner-p2 px-3 py-2 text-left disabled:cursor-default enabled:hover:bg-arena-700"
                 >
@@ -109,7 +136,7 @@ export function InteractiveBracket({ bracketId }: { bracketId: string }) {
                 {match?.station && (
                   <button
                     type="button"
-                    onClick={() => router.push(`/watch/${match.id}`)}
+                    onClick={() => openMatch(match)}
                     className="flex w-full items-center gap-1.5 border-t border-arena-700 px-3 py-1.5 text-xs text-ink-faint hover:text-signal-live"
                   >
                     {isLive && (
