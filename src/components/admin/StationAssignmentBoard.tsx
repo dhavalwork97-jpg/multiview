@@ -22,11 +22,23 @@ type StationHealth = {
   matches: { id: string; playerOne: { gamertag: string }; playerTwo: { gamertag: string } }[];
 };
 
+type StreamCredentials = { ingestUrl: string; streamKey: string };
+type CredentialsState =
+  | { status: "idle" }
+  | { status: "loading" }
+  | { status: "ready"; credentials: StreamCredentials }
+  | { status: "error"; message: string };
+
 export function StationAssignmentBoard({ tournamentId }: { tournamentId: string }) {
   const [queued, setQueued] = useState<QueuedMatch[]>([]);
   const [stations, setStations] = useState<StationHealth[]>([]);
   const [assigning, setAssigning] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // Keyed by stationId. Credentials only ever live in component state —
+  // never written to the URL, localStorage, or anywhere else a stream
+  // key (which is bearer-token-equivalent, per src/lib/livekit.ts) could
+  // leak beyond this session.
+  const [credentials, setCredentials] = useState<Record<string, CredentialsState>>({});
   const socket = useSocket({ tournamentId });
 
   async function refresh() {
@@ -75,6 +87,32 @@ export function StationAssignmentBoard({ tournamentId }: { tournamentId: string 
       setError(err instanceof Error ? err.message : "Failed to assign");
     } finally {
       setAssigning(null);
+    }
+  }
+
+  // Re-calling this is safe (and sometimes necessary — e.g. a box got
+  // swapped): POST /api/stations/:id/ingress tears down any existing
+  // ingress for the station first, so an old stream key can't be used to
+  // impersonate it afterward. That does mean re-fetching invalidates
+  // whatever key was issued before, not just adds a new one.
+  async function getStreamingCredentials(stationId: string) {
+    setCredentials((prev) => ({ ...prev, [stationId]: { status: "loading" } }));
+    try {
+      const res = await fetch(`/api/stations/${stationId}/ingress`, { method: "POST" });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error ?? "Failed to get streaming credentials");
+      }
+      const data = (await res.json()) as StreamCredentials;
+      setCredentials((prev) => ({ ...prev, [stationId]: { status: "ready", credentials: data } }));
+    } catch (err) {
+      setCredentials((prev) => ({
+        ...prev,
+        [stationId]: {
+          status: "error",
+          message: err instanceof Error ? err.message : "Failed to get streaming credentials",
+        },
+      }));
     }
   }
 
@@ -147,6 +185,11 @@ export function StationAssignmentBoard({ tournamentId }: { tournamentId: string 
                   {s.currentBitrateKbps ?? "—"} kbps · {s.droppedFrames ?? 0} dropped frames
                 </p>
               )}
+
+              <StreamingCredentialsPanel
+                state={credentials[s.id] ?? { status: "idle" }}
+                onFetch={() => getStreamingCredentials(s.id)}
+              />
             </li>
           ))}
         </ul>
@@ -166,5 +209,126 @@ function StatusPill({ status }: { status: StationHealth["status"] }) {
     <span className={`font-mono text-[10px] uppercase tracking-widest ${styles[status]}`}>
       {status}
     </span>
+  );
+}
+
+function StreamingCredentialsPanel({
+  state,
+  onFetch,
+}: {
+  state: CredentialsState;
+  onFetch: () => void;
+}) {
+  const [revealed, setRevealed] = useState(false);
+  const [justCopied, setJustCopied] = useState<"url" | "key" | null>(null);
+
+  async function copy(value: string, which: "url" | "key") {
+    await navigator.clipboard.writeText(value);
+    setJustCopied(which);
+    setTimeout(() => setJustCopied((cur) => (cur === which ? null : cur)), 1500);
+  }
+
+  if (state.status === "idle" || state.status === "error") {
+    return (
+      <div className="mt-2">
+        <button
+          type="button"
+          onClick={onFetch}
+          className="rounded border border-arena-600 px-2 py-1 font-mono text-[11px] uppercase tracking-wide text-ink-muted hover:border-signal-live hover:text-signal-live"
+        >
+          Get streaming credentials
+        </button>
+        {state.status === "error" && (
+          <p className="mt-1 text-xs text-signal-error">{state.message}</p>
+        )}
+      </div>
+    );
+  }
+
+  if (state.status === "loading") {
+    return <p className="mt-2 text-xs text-ink-faint">Requesting credentials…</p>;
+  }
+
+  const { ingestUrl, streamKey } = state.credentials;
+
+  return (
+    <div className="mt-2 space-y-1.5 rounded border border-arena-600 bg-arena-900 p-2">
+      <p className="text-[10px] uppercase tracking-wide text-ink-faint">
+        Paste these into OBS (Settings → Stream → Custom) — treat the stream key like a
+        password.
+      </p>
+
+      <CredentialRow
+        label="Server (RTMP URL)"
+        value={ingestUrl}
+        masked={false}
+        copied={justCopied === "url"}
+        onCopy={() => copy(ingestUrl, "url")}
+      />
+      <CredentialRow
+        label="Stream key"
+        value={streamKey}
+        masked={!revealed}
+        copied={justCopied === "key"}
+        onCopy={() => copy(streamKey, "key")}
+        onToggleReveal={() => setRevealed((r) => !r)}
+        revealed={revealed}
+      />
+
+      <button
+        type="button"
+        onClick={onFetch}
+        className="pt-1 font-mono text-[10px] uppercase tracking-wide text-ink-faint underline hover:text-ink"
+      >
+        Regenerate (invalidates the key above)
+      </button>
+    </div>
+  );
+}
+
+function CredentialRow({
+  label,
+  value,
+  masked,
+  copied,
+  onCopy,
+  onToggleReveal,
+  revealed,
+}: {
+  label: string;
+  value: string;
+  masked: boolean;
+  copied: boolean;
+  onCopy: () => void;
+  onToggleReveal?: () => void;
+  revealed?: boolean;
+}) {
+  const displayValue = masked ? "•".repeat(Math.min(value.length, 28)) : value;
+
+  return (
+    <div>
+      <p className="text-[10px] uppercase tracking-wide text-ink-faint">{label}</p>
+      <div className="flex items-center gap-1.5">
+        <code className="flex-1 truncate rounded bg-arena-950 px-2 py-1 font-mono text-xs text-ink">
+          {displayValue}
+        </code>
+        {onToggleReveal && (
+          <button
+            type="button"
+            onClick={onToggleReveal}
+            className="shrink-0 rounded border border-arena-600 px-1.5 py-1 text-[10px] uppercase text-ink-faint hover:text-ink"
+          >
+            {revealed ? "Hide" : "Show"}
+          </button>
+        )}
+        <button
+          type="button"
+          onClick={onCopy}
+          className="shrink-0 rounded border border-arena-600 px-1.5 py-1 text-[10px] uppercase text-ink-faint hover:border-signal-live hover:text-signal-live"
+        >
+          {copied ? "Copied" : "Copy"}
+        </button>
+      </div>
+    </div>
   );
 }
