@@ -89,6 +89,7 @@ export async function startRoomEgress(roomName: string, matchId: string, station
     region: process.env.AWS_REGION!,
     bucket: process.env.S3_BUCKET_CLIPS!,
     endpoint: process.env.S3_ENDPOINT ?? "",
+    forcePathStyle: true,
   });
 
   const info = await egressClient.startRoomCompositeEgress(roomName, {
