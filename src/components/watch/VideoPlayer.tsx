@@ -19,7 +19,7 @@ export function VideoPlayer({
   return (
     <div>
       {mode === "hls" && hlsPlaylistKey ? (
-        <HlsPlayer src={cdnUrl(hlsPlaylistKey)} />
+        <HlsPlayer src={cdnUrl(`${hlsPlaylistKey}/index.m3u8`)} />
       ) : mode === "webrtc" ? (
         <LiveKitPlayer stationId={stationId} />
       ) : (

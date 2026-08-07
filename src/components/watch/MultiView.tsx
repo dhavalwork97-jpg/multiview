@@ -26,7 +26,7 @@ export function MultiView({
       {visible.map((s, i) =>
         s.hlsPlaylistKey ? (
           <div key={s.id} className="relative">
-            <HlsPlayer src={cdnUrl(s.hlsPlaylistKey)} muted={i !== 0} />
+            <HlsPlayer src={cdnUrl(`${s.hlsPlaylistKey}/index.m3u8`)} muted={i !== 0} />
             <span className="absolute left-2 top-2 rounded bg-arena-950/80 px-1.5 py-0.5 font-mono text-[10px] uppercase text-ink-muted">
               {s.label}
             </span>
