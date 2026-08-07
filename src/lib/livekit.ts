@@ -7,7 +7,7 @@ import {
   type IngressAudioOptions,
   type IngressVideoOptions,
 } from "livekit-server-sdk";
-import { EncodedFileOutput, EncodedFileType, SegmentedFileOutput } from "@livekit/protocol";
+import { EncodedFileOutput, EncodedFileType, SegmentedFileOutput, S3Upload } from "@livekit/protocol";
 
 const LIVEKIT_HTTP_URL = process.env.LIVEKIT_HTTP_URL!;
 const API_KEY = process.env.LIVEKIT_API_KEY!;
@@ -72,20 +72,36 @@ export async function mintViewerToken(roomName: string, identity: string) {
  * playlist (for the CloudFront viewing path AND the clip worker's source
  * material — see src/server/streaming/clip-worker.ts). One job, two
  * outputs, so encoding only happens once.
+ *
+ * LiveKit Cloud runs egress for you, but still needs to be told WHERE to
+ * upload — with no destination, room-composite egress has nothing valid
+ * to write to and rejects the request with a 400. S3Upload also works
+ * against any S3-compatible provider (Backblaze B2, Cloudflare R2,
+ * etc.) — S3_ENDPOINT is required whenever the bucket isn't real AWS S3.
  */
 export async function startRoomEgress(roomName: string, matchId: string, stationId: string) {
   const filePrefix = `vods/${stationId}/${matchId}`;
   const segmentPrefix = `recordings/${stationId}/${matchId}`;
 
+  const s3 = new S3Upload({
+    accessKey: process.env.AWS_ACCESS_KEY_ID!,
+    secret: process.env.AWS_SECRET_ACCESS_KEY!,
+    region: process.env.AWS_REGION!,
+    bucket: process.env.S3_BUCKET_CLIPS!,
+    endpoint: process.env.S3_ENDPOINT ?? "",
+  });
+
   const info = await egressClient.startRoomCompositeEgress(roomName, {
     file: new EncodedFileOutput({
       fileType: EncodedFileType.MP4,
       filepath: `${filePrefix}/full.mp4`,
+      output: { case: "s3", value: s3 },
     }),
     segments: new SegmentedFileOutput({
       filenamePrefix: `${segmentPrefix}/segment`,
       playlistName: `${segmentPrefix}/index.m3u8`,
       segmentDuration: 4,
+      output: { case: "s3", value: s3 },
     }),
   });
 
