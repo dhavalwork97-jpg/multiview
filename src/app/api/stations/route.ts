@@ -42,11 +42,14 @@ export async function GET(req: Request) {
   });
 
   // A station is considered stale (likely crashed encoder) if no heartbeat
-  // in 15s — heartbeats are pushed every 5s from the ingest service via
-  // Socket.IO, cached in Redis, and flushed to Postgres every few seconds.
-  // Flagging staleness here (vs. only relying on a cron) keeps this endpoint
-  // accurate even between flush cycles.
-  const STALE_THRESHOLD_MS = 15_000;
+  // for this long. NOTE: today only room_started sets lastHeartbeatAt —
+  // nothing refreshes it while a stream is actively running (the ingest
+  // service → Socket.IO → Redis → Postgres refresh pipeline this comment
+  // used to describe was never actually built). Until it is, a short
+  // threshold flips every station to ERROR shortly after going live
+  // regardless of actual health, so this is deliberately generous rather
+  // than tuned to catch real crashes.
+  const STALE_THRESHOLD_MS = 5 * 60_000;
   const now = Date.now();
 
   const withHealth = stations.map((s) => ({

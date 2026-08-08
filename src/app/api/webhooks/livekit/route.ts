@@ -30,7 +30,12 @@ export async function POST(req: Request) {
   if (!roomName) return NextResponse.json({ received: true });
 
   const station = await db.station.findFirst({ where: { playbackIdWebrtc: roomName } });
-  if (!station) return NextResponse.json({ received: true });
+  if (!station) {
+    console.warn(`[livekit webhook] ${event.event} for room "${roomName}" — no matching Station.playbackIdWebrtc`);
+    return NextResponse.json({ received: true });
+  }
+
+  console.log(`[livekit webhook] ${event.event} — room=${roomName} station=${station.id}`);
 
   switch (event.event) {
     case "room_started": {
@@ -47,45 +52,61 @@ export async function POST(req: Request) {
         orderBy: { createdAt: "desc" },
       });
 
+      console.log(
+        `[livekit webhook] room_started station=${station.id} liveMatch=${liveMatch?.id ?? "NONE — egress will not start"}`
+      );
+
       if (liveMatch) {
-        const { egressId, hlsPlaylistKey, mp4Key } = await startRoomEgress(
-          roomName,
-          liveMatch.id,
-          station.id
-        );
+        try {
+          const { egressId, hlsPlaylistKey, mp4Key } = await startRoomEgress(
+            roomName,
+            liveMatch.id,
+            station.id
+          );
 
-        await db.$transaction([
-          db.match.update({
-            where: { id: liveMatch.id },
-            data: { status: "LIVE", startedAt: liveMatch.startedAt ?? new Date() },
-          }),
-          db.recording.upsert({
-            where: { matchId: liveMatch.id },
-            create: {
-              matchId: liveMatch.id,
-              egressId,
-              status: "RECORDING",
-              hlsPlaylistKey,
-              mp4S3Key: mp4Key,
-            },
-            update: { egressId, status: "RECORDING", hlsPlaylistKey, mp4S3Key: mp4Key },
-          }),
-          db.station.update({
-            where: { id: station.id },
-            data: { playbackIdHls: hlsPlaylistKey.replace(/\/index\.m3u8$/, "") },
-          }),
-        ]);
+          console.log(`[livekit webhook] egress started station=${station.id} egressId=${egressId} hls=${hlsPlaylistKey}`);
 
-        await publishEvent({
-          type: "match:updated",
-          tournamentId: liveMatch.tournamentId,
-          matchId: liveMatch.id,
-          status: "LIVE",
-          playerOneScore: liveMatch.playerOneScore,
-          playerTwoScore: liveMatch.playerTwoScore,
-          winnerId: liveMatch.winnerId,
-          stationId: station.id,
-        });
+          await db.$transaction([
+            db.match.update({
+              where: { id: liveMatch.id },
+              data: { status: "LIVE", startedAt: liveMatch.startedAt ?? new Date() },
+            }),
+            db.recording.upsert({
+              where: { matchId: liveMatch.id },
+              create: {
+                matchId: liveMatch.id,
+                egressId,
+                status: "RECORDING",
+                hlsPlaylistKey,
+                mp4S3Key: mp4Key,
+              },
+              update: { egressId, status: "RECORDING", hlsPlaylistKey, mp4S3Key: mp4Key },
+            }),
+            db.station.update({
+              where: { id: station.id },
+              data: { playbackIdHls: hlsPlaylistKey.replace(/\/index\.m3u8$/, "") },
+            }),
+          ]);
+
+          await publishEvent({
+            type: "match:updated",
+            tournamentId: liveMatch.tournamentId,
+            matchId: liveMatch.id,
+            status: "LIVE",
+            playerOneScore: liveMatch.playerOneScore,
+            playerTwoScore: liveMatch.playerTwoScore,
+            winnerId: liveMatch.winnerId,
+            stationId: station.id,
+          });
+        } catch (err) {
+          // This used to fail silently (an uncaught throw here previously
+          // just bubbled up as a generic 500 with no context on *why*
+          // egress didn't start — usually S3/bucket credentials or an
+          // unreachable egress service). Logging it explicitly, and
+          // still returning 200, so LiveKit doesn't treat this as a
+          // delivery failure and start retrying the same webhook.
+          console.error(`[livekit webhook] egress failed to start for station=${station.id}:`, err);
+        }
       }
 
       await publishEvent({
@@ -99,6 +120,8 @@ export async function POST(req: Request) {
     }
 
     case "room_finished": {
+      console.log(`[livekit webhook] room_finished station=${station.id} — encoder disconnected or room closed by LiveKit`);
+
       await db.station.update({ where: { id: station.id }, data: { status: "IDLE" } });
 
       const recording = await db.recording.findFirst({
