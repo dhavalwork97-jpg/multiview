@@ -1,4 +1,5 @@
 import { redirect } from "next/navigation";
+import Link from "next/link";
 import { getCurrentUser } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { LiveGrid } from "@/components/dashboard/LiveGrid";
@@ -55,8 +56,31 @@ export default async function DashboardPage() {
           <ul className="divide-y divide-arena-700 rounded-card border border-arena-700">
             {tournaments.map((t) => (
               <li key={t.id} className="flex items-center justify-between px-4 py-3">
-                <span className="font-medium">{t.name}</span>
-                <span className="font-mono text-xs uppercase text-ink-faint">{t.status}</span>
+                <div>
+                  <Link
+                    href={`/admin/tournaments/${t.id}`}
+                    className="font-medium hover:text-signal-live"
+                  >
+                    {t.name}
+                  </Link>
+                  <p className="mt-0.5 font-mono text-[10px] uppercase tracking-widest text-ink-faint">
+                    {t.status}
+                  </p>
+                </div>
+                <div className="flex items-center gap-3">
+                  <Link
+                    href={`/tournaments/${t.id}`}
+                    className="font-mono text-xs uppercase tracking-wide text-ink-faint hover:text-ink"
+                  >
+                    View public page
+                  </Link>
+                  <Link
+                    href={`/admin/tournaments/${t.id}`}
+                    className="rounded-card border border-arena-600 px-3 py-1.5 font-mono text-xs uppercase tracking-wide text-ink hover:border-signal-live hover:text-signal-live"
+                  >
+                    Manage stations
+                  </Link>
+                </div>
               </li>
             ))}
           </ul>
