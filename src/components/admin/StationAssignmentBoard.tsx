@@ -116,6 +116,25 @@ export function StationAssignmentBoard({ tournamentId }: { tournamentId: string 
     }
   }
 
+  const [resettingRoom, setResettingRoom] = useState<string | null>(null);
+
+  // A flappy encoder (rapid connect/reconnect) can leave a station's
+  // LiveKit room stuck "active" without a clean room_finished — the next
+  // real connection then just joins the stale room instead of firing a
+  // fresh room_started, and egress only starts on room_started (see
+  // api/webhooks/livekit/route.ts), so nothing streams until it's
+  // cleared. This forces that from the UI instead of needing LiveKit's
+  // own dashboard.
+  async function resetRoom(stationId: string) {
+    setResettingRoom(stationId);
+    try {
+      await fetch(`/api/stations/${stationId}/room`, { method: "POST" });
+      await refresh();
+    } finally {
+      setResettingRoom(null);
+    }
+  }
+
   return (
     <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
       <div>
@@ -190,6 +209,15 @@ export function StationAssignmentBoard({ tournamentId }: { tournamentId: string 
                 state={credentials[s.id] ?? { status: "idle" }}
                 onFetch={() => getStreamingCredentials(s.id)}
               />
+
+              <button
+                type="button"
+                onClick={() => resetRoom(s.id)}
+                disabled={resettingRoom === s.id}
+                className="mt-2 rounded border border-arena-600 px-2 py-1 font-mono text-[11px] uppercase tracking-wide text-ink-faint hover:border-signal-warn hover:text-signal-warn disabled:opacity-50"
+              >
+                {resettingRoom === s.id ? "Closing room…" : "Force-close stuck room"}
+              </button>
             </li>
           ))}
         </ul>
