@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { WebhookReceiver } from "livekit-server-sdk";
 import { db } from "@/lib/db";
 import { publishEvent } from "@/lib/events";
-import { startRoomEgress, stopEgress } from "@/lib/livekit";
+import { startRoomEgress, stopEgress, egressClient } from "@/lib/livekit";
 
 const receiver = new WebhookReceiver(
   process.env.LIVEKIT_API_KEY!,
@@ -57,18 +57,18 @@ export async function POST(req: Request) {
       );
 
       if (liveMatch) {
-        const existingRecording = await db.recording.findUnique({
-          where: { matchId: liveMatch.id },
-        });
+        // Ask LiveKit itself whether an egress is actually active for
+        // this room, rather than trusting our own Recording row — a
+        // previous attempt that hit the 429 rate limit (or any other
+        // failure) could leave that row saying "RECORDING" from an
+        // egress that never really started or has since died, which
+        // would make this check skip starting a real one forever.
+        const activeEgresses = await egressClient.listEgress({ roomName, active: true });
+        const stillActive = activeEgresses.length > 0;
 
-        if (existingRecording?.status === "RECORDING" && existingRecording.egressId) {
-          // Room flapped (briefly disconnected/reconnected) and fired
-          // another room_started before the previous egress actually
-          // ended — starting a second one wouldn't just be redundant, it
-          // burns another request against LiveKit's egress rate limit
-          // for no benefit, since the original egress is still running.
+        if (stillActive) {
           console.log(
-            `[livekit webhook] skipping egress start — already RECORDING for match=${liveMatch.id} egressId=${existingRecording.egressId}`
+            `[livekit webhook] skipping egress start — LiveKit reports ${activeEgresses.length} active egress already for room=${roomName}`
           );
         } else {
           try {
