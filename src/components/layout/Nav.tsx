@@ -30,6 +30,14 @@ export async function Nav() {
             Dashboard
           </Link>
         )}
+        {user && (user.role === "ORGANIZER" || user.role === "ADMIN") && (
+          <Link
+            href="/dashboard"
+            className="rounded-card border border-arena-600 px-3 py-1.5 font-mono text-xs uppercase tracking-wide text-ink-muted transition-colors hover:border-signal-live hover:text-signal-live"
+          >
+            Admin
+          </Link>
+        )}
 
         <SignedIn>
           <UserButton afterSignOutUrl="/" />
