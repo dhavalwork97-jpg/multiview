@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { HlsPlayer } from "./HlsPlayer";
+import { LiveKitPlayer } from "./LiveKitPlayer";
 import { cdnUrl } from "@/lib/cdn";
 
 const DOCK_MARGIN = 16; // matches the default bottom-4/right-4 offset
@@ -15,7 +16,12 @@ export type DockMatch = {
   playerTwoScore: number;
   playerOne: { gamertag: string };
   playerTwo: { gamertag: string };
-  station: { id: string; label: string; playbackIdHls: string | null } | null;
+  station: {
+    id: string;
+    label: string;
+    playbackIdHls: string | null;
+    playbackIdWebrtc: string | null;
+  } | null;
 };
 
 // The "watch whichever bracket match you clicked" surface. Deliberately a
@@ -95,7 +101,13 @@ export function BracketWatchDock({
   if (!match) return null;
 
   const isLive = match.status === "LIVE";
-  const hasStream = !!match.station?.playbackIdHls;
+  const hasHls = !!match.station?.playbackIdHls;
+  // WebRTC is a fallback specifically for when the room is live but HLS
+  // isn't ready — e.g. LiveKit's egress quota is exhausted (see
+  // STREAMING_ARCHITECTURE.md), or egress just hasn't produced its first
+  // segment yet. It needs no egress at all, just a direct room
+  // subscription, so it works whenever OBS is actually connected.
+  const canFallBackToWebrtc = isLive && !!match.station?.playbackIdWebrtc;
 
   return (
     <div
@@ -153,11 +165,13 @@ export function BracketWatchDock({
 
       {!minimized && (
         <>
-          {hasStream ? (
+          {hasHls ? (
             // Keying on match.id forces a clean unmount/remount of the
             // hls.js instance when the viewer clicks a different bracket
             // match, instead of trying to redirect an in-flight instance.
             <HlsPlayer key={match.id} src={cdnUrl(`${match.station!.playbackIdHls}/index.m3u8`)} />
+          ) : canFallBackToWebrtc ? (
+            <LiveKitPlayer key={match.id} stationId={match.station!.id} />
           ) : (
             <div className="flex aspect-video w-full items-center justify-center bg-arena-950 text-xs text-ink-faint">
               {isLive ? "Stream connecting…" : "Not live yet"}

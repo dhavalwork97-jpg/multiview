@@ -30,7 +30,11 @@ export async function GET(_req: Request, { params }: { params: Promise<{ bracket
           // Bracket UI plays matches inline (see BracketWatchDock) rather
           // than only linking out to /watch/:matchId, so it needs enough
           // of Station to actually mount a player — not just the label.
-          station: { select: { id: true, label: true, playbackIdHls: true } },
+          // playbackIdWebrtc doubles as a fallback: if HLS/egress isn't
+          // ready yet (or, e.g., LiveKit's egress quota is exhausted —
+          // see STREAMING_ARCHITECTURE.md), the dock can still subscribe
+          // directly to the WebRTC room, which needs no egress at all.
+          station: { select: { id: true, label: true, playbackIdHls: true, playbackIdWebrtc: true } },
         },
       },
     },

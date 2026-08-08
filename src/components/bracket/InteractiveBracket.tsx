@@ -15,7 +15,7 @@ type BracketMatch = {
   stationId: string | null;
   playerOne: { gamertag: string };
   playerTwo: { gamertag: string };
-  station: { id: string; label: string; playbackIdHls: string | null } | null;
+  station: { id: string; label: string; playbackIdHls: string | null; playbackIdWebrtc: string | null } | null;
 };
 
 type StructureSlot = {
