@@ -3,6 +3,7 @@ import { z } from "zod";
 import { db } from "@/lib/db";
 import { requireRole } from "@/lib/auth";
 import { publishEvent } from "@/lib/events";
+import { advanceBracket } from "@/lib/bracket-progression";
 
 const updateSchema = z.object({
   playerOneScore: z.number().int().min(0).optional(),
@@ -62,6 +63,39 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ matchI
     winnerId: updated.winnerId,
     stationId: updated.stationId,
   });
+
+  // A match going COMPLETED with a winner is the trigger for bracket
+  // progression — see src/lib/bracket-progression.ts for why this is the
+  // single write path for that (score-keeper/organizer PATCH is already
+  // the single write path for match state generally).
+  if (updated.status === "COMPLETED" && updated.winnerId && updated.bracketId) {
+    const advanced = await db.$transaction((tx) => advanceBracket(tx, updated));
+    if (advanced) {
+      await publishEvent({
+        type: "bracket:advanced",
+        tournamentId: updated.tournamentId,
+        bracketId: updated.bracketId,
+        matchId: advanced.id,
+      });
+      // The newly-instantiated (or updated) next-round match needs its own
+      // match:updated so the live grid and any open bracket view pick up
+      // a real match existing in that slot now, not just the structure
+      // JSON having changed.
+      const nextMatch = await db.match.findUnique({ where: { id: advanced.id } });
+      if (nextMatch) {
+        await publishEvent({
+          type: "match:updated",
+          tournamentId: nextMatch.tournamentId,
+          matchId: nextMatch.id,
+          status: nextMatch.status,
+          playerOneScore: nextMatch.playerOneScore,
+          playerTwoScore: nextMatch.playerTwoScore,
+          winnerId: nextMatch.winnerId,
+          stationId: nextMatch.stationId,
+        });
+      }
+    }
+  }
 
   return NextResponse.json({ match: updated });
 }

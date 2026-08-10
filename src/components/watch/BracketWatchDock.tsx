@@ -114,7 +114,7 @@ export function BracketWatchDock({
       ref={dockRef}
       style={position ? { left: position.x, top: position.y, right: "auto", bottom: "auto" } : undefined}
       className={`fixed bottom-4 right-4 z-50 overflow-hidden rounded-card border border-arena-600 bg-arena-900 shadow-2xl transition-[width] ${
-        minimized ? "w-64" : "w-[360px]"
+        minimized ? "w-[min(16rem,calc(100vw-2rem))]" : "w-[min(360px,calc(100vw-2rem))]"
       }`}
     >
       <div
@@ -173,8 +173,15 @@ export function BracketWatchDock({
           ) : canFallBackToWebrtc ? (
             <LiveKitPlayer key={match.id} stationId={match.station!.id} />
           ) : (
-            <div className="flex aspect-video w-full items-center justify-center bg-arena-950 text-xs text-ink-faint">
-              {isLive ? "Stream connecting…" : "Not live yet"}
+            <div className="flex aspect-video w-full flex-col items-center justify-center gap-1 bg-arena-950 px-4 text-center text-xs text-ink-faint">
+              {isLive ? (
+                <>
+                  <span>Station is live but no playback source yet.</span>
+                  <span>Waiting on the encoder or the first HLS segment…</span>
+                </>
+              ) : (
+                <span>Not live yet</span>
+              )}
             </div>
           )}
 

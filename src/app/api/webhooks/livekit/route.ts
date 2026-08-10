@@ -1,8 +1,10 @@
 import { NextResponse } from "next/server";
 import { WebhookReceiver } from "livekit-server-sdk";
+import { TrackType } from "@livekit/protocol";
 import { db } from "@/lib/db";
 import { publishEvent } from "@/lib/events";
-import { startRoomEgress, stopEgress, egressClient } from "@/lib/livekit";
+import { stopEgress, ingressParticipantIdentity } from "@/lib/livekit";
+import { tryStartEgressForStation } from "@/lib/egress-orchestration";
 
 const receiver = new WebhookReceiver(
   process.env.LIVEKIT_API_KEY!,
@@ -26,6 +28,25 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Invalid webhook signature" }, { status: 401 });
   }
 
+  // Dedupe on LiveKit's own event id before doing anything else. Previously
+  // the only guard was re-checking LiveKit's *current* egress state right
+  // before starting one, which stops a duplicate egress but not a
+  // duplicate re-run of everything else in this handler (Match/Recording
+  // writes, publishEvent) if the same webhook gets redelivered — which
+  // LiveKit does on anything but a fast 2xx, and a flappy connection or a
+  // slow response is exactly the kind of thing that triggers a retry.
+  if (event.id) {
+    try {
+      await db.webhookEvent.create({ data: { source: "livekit", eventId: event.id } });
+    } catch {
+      // Unique constraint violation = we've already processed this exact
+      // event id. Ack it again (LiveKit doesn't need a distinct response)
+      // without repeating any of the side effects below.
+      console.log(`[livekit webhook] duplicate delivery of event=${event.id} — skipping`);
+      return NextResponse.json({ received: true, duplicate: true });
+    }
+  }
+
   const roomName = event.room?.name;
   if (!roomName) return NextResponse.json({ received: true });
 
@@ -47,82 +68,19 @@ export async function POST(req: Request) {
       // Auto-start recording the instant a station's room goes live —
       // this is what "auto recording" and DVR mean in practice: no
       // organizer has to remember to click "record" on 100+ stations.
-      const liveMatch = await db.match.findFirst({
-        where: { stationId: station.id, status: { in: ["QUEUED", "LIVE"] } },
-        orderBy: { createdAt: "desc" },
-      });
-
-      console.log(
-        `[livekit webhook] room_started station=${station.id} liveMatch=${liveMatch?.id ?? "NONE — egress will not start"}`
-      );
-
-      if (liveMatch) {
-        // Ask LiveKit itself whether an egress is actually active for
-        // this room, rather than trusting our own Recording row — a
-        // previous attempt that hit the 429 rate limit (or any other
-        // failure) could leave that row saying "RECORDING" from an
-        // egress that never really started or has since died, which
-        // would make this check skip starting a real one forever.
-        const activeEgresses = await egressClient.listEgress({ roomName, active: true });
-        const stillActive = activeEgresses.length > 0;
-
-        if (stillActive) {
-          console.log(
-            `[livekit webhook] skipping egress start — LiveKit reports ${activeEgresses.length} active egress already for room=${roomName}`
-          );
-        } else {
-          try {
-            const { egressId, hlsPlaylistKey, mp4Key } = await startRoomEgress(
-              roomName,
-              liveMatch.id,
-              station.id
-            );
-
-            console.log(`[livekit webhook] egress started station=${station.id} egressId=${egressId} hls=${hlsPlaylistKey}`);
-
-            await db.$transaction([
-              db.match.update({
-                where: { id: liveMatch.id },
-                data: { status: "LIVE", startedAt: liveMatch.startedAt ?? new Date() },
-              }),
-              db.recording.upsert({
-                where: { matchId: liveMatch.id },
-                create: {
-                  matchId: liveMatch.id,
-                  egressId,
-                  status: "RECORDING",
-                  hlsPlaylistKey,
-                  mp4S3Key: mp4Key,
-                },
-                update: { egressId, status: "RECORDING", hlsPlaylistKey, mp4S3Key: mp4Key },
-              }),
-              db.station.update({
-                where: { id: station.id },
-                data: { playbackIdHls: hlsPlaylistKey.replace(/\/index\.m3u8$/, "") },
-              }),
-            ]);
-
-            await publishEvent({
-              type: "match:updated",
-              tournamentId: liveMatch.tournamentId,
-              matchId: liveMatch.id,
-              status: "LIVE",
-              playerOneScore: liveMatch.playerOneScore,
-              playerTwoScore: liveMatch.playerTwoScore,
-              winnerId: liveMatch.winnerId,
-              stationId: station.id,
-            });
-          } catch (err) {
-            // This used to fail silently (an uncaught throw here previously
-            // just bubbled up as a generic 500 with no context on *why*
-            // egress didn't start — usually S3/bucket credentials or an
-            // unreachable egress service). Logging it explicitly, and
-            // still returning 200, so LiveKit doesn't treat this as a
-            // delivery failure and start retrying the same webhook.
-            console.error(`[livekit webhook] egress failed to start for station=${station.id}:`, err);
-          }
-        }
-      }
+      //
+      // NOTE: this is the *first* attempt, not the only one. room_started
+      // fires the moment the room is created, which can be a second or
+      // two before the RTMP ingress has actually finished its handshake
+      // and published a video track — startRoomEgress needs a real track
+      // id to hand Track Composite egress, so it throws if none exists
+      // yet. That's expected and fine here: the track_published case
+      // below retries the exact same start attempt the moment a video
+      // track actually shows up. Room Composite egress never had this
+      // gap (LiveKit resolved participants/tracks server-side, tolerant
+      // of the same timing), so this retry path only exists because of
+      // the Track Composite switch.
+      await tryStartEgressForStation(station, roomName);
 
       await publishEvent({
         type: "station:status",
@@ -131,6 +89,22 @@ export async function POST(req: Request) {
         status: "LIVE",
         lastHeartbeatAt: updated.lastHeartbeatAt?.toISOString() ?? null,
       });
+      break;
+    }
+
+    case "track_published": {
+      // Retry path for the race described above. Only worth attempting
+      // for a video track from the station's own ingress — an audio-only
+      // publish, or a track from anyone else, isn't what egress is
+      // waiting on. listEgress inside tryStartEgressForStation already
+      // no-ops this if egress is somehow already running (e.g. this fires
+      // after a video track that room_started's attempt already caught).
+      const isIngressVideo =
+        event.track?.type === TrackType.VIDEO &&
+        event.participant?.identity === ingressParticipantIdentity(station.id);
+      if (isIngressVideo) {
+        await tryStartEgressForStation(station, roomName);
+      }
       break;
     }
 

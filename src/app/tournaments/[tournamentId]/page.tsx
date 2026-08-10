@@ -37,7 +37,7 @@ export default async function TournamentPage({
         <h1 className="font-display text-3xl uppercase tracking-wide">{tournament.name}</h1>
       </header>
 
-      <BracketExplorer brackets={tournament.brackets} />
+      <BracketExplorer brackets={tournament.brackets} tournamentId={tournament.id} />
     </main>
   );
 }

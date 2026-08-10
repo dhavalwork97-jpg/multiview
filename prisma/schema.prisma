@@ -277,6 +277,17 @@ model Match {
   // on it with a single indexed query.
   hypeScore     Float?       @default(0)
 
+  // Position within Bracket.structure (round index, then index within that
+  // round's matches array), 0-based. Set at creation — either at bracket
+  // import time (see POST /api/brackets) or when a later round's Match row
+  // gets instantiated by advanceBracket() in src/lib/bracket-progression.ts
+  // once both of its feeder matches are decided. Null for matches not tied
+  // to a Bracket (nothing to advance into). This is what lets a completed
+  // match find "the next match, right slot" without re-parsing the whole
+  // structure JSON on a string/name match.
+  roundIndex    Int?
+  matchIndex    Int?
+
   tournament    Tournament   @relation(fields: [tournamentId], references: [id], onDelete: Cascade)
   bracket       Bracket?     @relation(fields: [bracketId], references: [id])
   station       Station?     @relation(fields: [stationId], references: [id])
@@ -354,6 +365,26 @@ model Clip {
 
   @@index([matchId, status])
   @@map("clips")
+}
+
+// Dedupe table for POST /api/webhooks/livekit. LiveKit (like most webhook
+// senders) retries on anything but a fast 2xx, and a flappy connection or a
+// slow response can easily cause the same event to be delivered twice.
+// Previously the only guard was re-checking LiveKit's *current* egress
+// state, which prevents a duplicate egress start but doesn't stop a
+// duplicate from re-running everything else in the handler (Match/Recording
+// writes, publishEvent). Every LiveKit webhook payload carries a stable
+// `id` — recording it here and checking it first makes the whole handler
+// idempotent per event, not just the egress-start branch.
+model WebhookEvent {
+  id          String   @id @default(cuid())
+  source      String   // "livekit" | "clerk" | "stripe" — scoped per-source in case IDs collide across providers
+  eventId     String   // the sender's own event id (LiveKit WebhookEvent.id, svix-id, Stripe event.id)
+  receivedAt  DateTime @default(now())
+
+  @@unique([source, eventId])
+  @@index([receivedAt])
+  @@map("webhook_events")
 }
 
 model WatchHistoryEntry {

@@ -62,9 +62,12 @@ export async function POST(req: Request) {
 
     // Only create a Match row where both players are already known —
     // slots that are still "winner of match X" (playerId === null) get
-    // populated by a future advance-the-bracket action, not at import time.
-    for (const round of rounds) {
-      for (const slot of round.matches) {
+    // populated by advanceBracket() (src/lib/bracket-progression.ts) once
+    // that earlier match actually completes, not at import time.
+    for (let roundIndex = 0; roundIndex < rounds.length; roundIndex++) {
+      const round = rounds[roundIndex];
+      for (let matchIndex = 0; matchIndex < round.matches.length; matchIndex++) {
+        const slot = round.matches[matchIndex];
         if (slot.playerOneId && slot.playerTwoId) {
           const match = await tx.match.create({
             data: {
@@ -74,6 +77,8 @@ export async function POST(req: Request) {
               playerTwoId: slot.playerTwoId,
               round: slot.round,
               status: "QUEUED",
+              roundIndex,
+              matchIndex,
             },
           });
           createdMatchIds.push(match.id);

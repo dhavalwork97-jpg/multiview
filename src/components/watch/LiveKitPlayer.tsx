@@ -10,12 +10,18 @@ import { Room, RoomEvent, Track, type RemoteTrack } from "livekit-client";
 export function LiveKitPlayer({ stationId }: { stationId: string }) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const [status, setStatus] = useState<"connecting" | "connected" | "error">("connecting");
+  // Bumping this re-runs the connect effect below — the retry affordance
+  // for "token request failed" / "room disconnected unexpectedly", neither
+  // of which previously had any way to recover short of navigating away
+  // and back.
+  const [retryNonce, setRetryNonce] = useState(0);
 
   useEffect(() => {
     let room: Room | null = null;
     let cancelled = false;
 
     async function connect() {
+      setStatus("connecting");
       try {
         const res = await fetch(`/api/stations/${stationId}/token`);
         if (!res.ok) throw new Error("Could not get a playback token");
@@ -26,6 +32,13 @@ export function LiveKitPlayer({ stationId }: { stationId: string }) {
           if (track.kind === Track.Kind.Video || track.kind === Track.Kind.Audio) {
             if (videoRef.current) track.attach(videoRef.current);
           }
+        });
+        // The room can drop after a successful connect (encoder crash,
+        // network blip) — this used to leave `status` stuck at
+        // "connected" showing a frozen last frame with no indication the
+        // stream had actually died.
+        room.on(RoomEvent.Disconnected, () => {
+          if (!cancelled) setStatus("error");
         });
 
         await room.connect(wsUrl, token);
@@ -40,7 +53,7 @@ export function LiveKitPlayer({ stationId }: { stationId: string }) {
       cancelled = true;
       room?.disconnect();
     };
-  }, [stationId]);
+  }, [stationId, retryNonce]);
 
   return (
     <div className="relative aspect-video w-full overflow-hidden rounded-card bg-arena-900">
@@ -51,9 +64,16 @@ export function LiveKitPlayer({ stationId }: { stationId: string }) {
         </p>
       )}
       {status === "error" && (
-        <p className="absolute inset-0 flex items-center justify-center text-sm text-signal-error">
-          Couldn't connect to the low-latency stream.
-        </p>
+        <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-arena-900/95 text-center text-sm text-signal-error">
+          <p>Couldn't connect to the low-latency stream.</p>
+          <button
+            type="button"
+            onClick={() => setRetryNonce((n) => n + 1)}
+            className="rounded-card border border-arena-600 px-3 py-1 font-mono text-xs uppercase tracking-wide text-ink-muted hover:border-signal-live hover:text-signal-live"
+          >
+            Retry
+          </button>
+        </div>
       )}
     </div>
   );

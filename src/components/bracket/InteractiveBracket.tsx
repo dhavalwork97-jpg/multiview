@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import { useSocket } from "@/hooks/useSocket";
 
 type BracketMatch = {
   id: string;
@@ -28,10 +29,17 @@ type StructureRound = { name: string; matches: StructureSlot[] };
 
 export function InteractiveBracket({
   bracketId,
+  tournamentId,
   onWatch,
   selectedMatchId,
 }: {
   bracketId: string;
+  // Optional: when present, the bracket re-fetches itself whenever a
+  // match in this tournament updates, so a reported winner visibly
+  // advances into the next round's slot without a page refresh — see
+  // advanceBracket() in src/lib/bracket-progression.ts for the write
+  // side of this.
+  tournamentId?: string;
   // Viewer-facing bracket pages pass this to keep the click local (opens
   // the match in the small watch dock instead of navigating away, so
   // browsing the rest of the bracket doesn't lose your place). Omit it
@@ -44,23 +52,39 @@ export function InteractiveBracket({
   const [rounds, setRounds] = useState<StructureRound[]>([]);
   const [matches, setMatches] = useState<BracketMatch[]>([]);
   const [liveMatchByPlayerId, setLiveMatchByPlayerId] = useState<Record<string, string>>({});
+  const [gamertagByPlayerId, setGamertagByPlayerId] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(true);
+  const socket = useSocket({ tournamentId });
 
   useEffect(() => {
     let cancelled = false;
-    fetch(`/api/brackets/${bracketId}`)
-      .then((r) => r.json())
-      .then((data) => {
-        if (cancelled) return;
-        setRounds(data.bracket.structure);
-        setMatches(data.matches);
-        setLiveMatchByPlayerId(data.liveMatchByPlayerId);
-      })
-      .finally(() => !cancelled && setLoading(false));
+    function load() {
+      return fetch(`/api/brackets/${bracketId}`)
+        .then((r) => r.json())
+        .then((data) => {
+          if (cancelled) return;
+          setRounds(data.bracket.structure);
+          setMatches(data.matches);
+          setLiveMatchByPlayerId(data.liveMatchByPlayerId);
+          setGamertagByPlayerId(data.gamertagByPlayerId ?? {});
+        })
+        .finally(() => !cancelled && setLoading(false));
+    }
+    load();
+
+    // A winner reported on any match in this tournament can advance this
+    // bracket (new Match row instantiated, structure JSON updated) — cheap
+    // enough to just refetch the whole bracket rather than diff the event
+    // payload against local state.
+    if (tournamentId) {
+      socket.on("match:updated", load);
+    }
     return () => {
       cancelled = true;
+      if (tournamentId) socket.off("match:updated", load);
     };
-  }, [bracketId]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [bracketId, tournamentId, socket]);
 
   if (loading) return <p className="text-sm text-ink-muted">Loading bracket…</p>;
 
@@ -104,8 +128,12 @@ export function InteractiveBracket({
             const match = findMatch(slot);
             const isLive = match?.status === "LIVE";
             const isSelected = !!match && match.id === selectedMatchId;
-            const p1Name = match?.playerOne.gamertag ?? (slot.playerOneId ? slot.playerOneId : "TBD");
-            const p2Name = match?.playerTwo.gamertag ?? (slot.playerTwoId ? slot.playerTwoId : "TBD");
+            const p1Name =
+              match?.playerOne.gamertag ??
+              (slot.playerOneId ? gamertagByPlayerId[slot.playerOneId] ?? "…" : "TBD");
+            const p2Name =
+              match?.playerTwo.gamertag ??
+              (slot.playerTwoId ? gamertagByPlayerId[slot.playerTwoId] ?? "…" : "TBD");
 
             return (
               <div

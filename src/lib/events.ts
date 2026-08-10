@@ -30,6 +30,19 @@ export type AppEvent =
       tournamentId: string;
       matchId: string;
       stationId: string;
+    }
+  | {
+      // Fired alongside match:updated when advanceBracket() (see
+      // src/lib/bracket-progression.ts) instantiates or updates the next
+      // round's Match row. InteractiveBracket already refetches on
+      // match:updated, so no client currently needs to handle this
+      // separately — it exists so a future consumer (e.g. a toast, or an
+      // analytics hook) doesn't have to infer "the bracket changed" from
+      // match:updated's shape.
+      type: "bracket:advanced";
+      tournamentId: string;
+      bracketId: string;
+      matchId: string;
     };
 
 let connected = false;

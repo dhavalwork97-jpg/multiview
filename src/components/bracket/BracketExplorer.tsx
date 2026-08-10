@@ -13,7 +13,17 @@ type BracketSummary = { id: string; name: string };
 // With N players in a single-elim bracket that's N/2 simultaneous games;
 // clicking a different bracket node just swaps the dock's source, same as
 // clicking a different tile would in a channel guide.
-export function BracketExplorer({ brackets }: { brackets: BracketSummary[] }) {
+export function BracketExplorer({
+  brackets,
+  tournamentId,
+}: {
+  brackets: BracketSummary[];
+  // Optional so nothing breaks if a future caller doesn't have it handy —
+  // but without it, InteractiveBracket has no room to listen on and a
+  // completed match won't visibly advance the bracket until the page is
+  // refreshed.
+  tournamentId?: string;
+}) {
   const [activeBracketId, setActiveBracketId] = useState<string | null>(brackets[0]?.id ?? null);
   const [selectedMatch, setSelectedMatch] = useState<DockMatch | null>(null);
 
@@ -49,6 +59,7 @@ export function BracketExplorer({ brackets }: { brackets: BracketSummary[] }) {
 
       <InteractiveBracket
         bracketId={activeBracketId}
+        tournamentId={tournamentId}
         selectedMatchId={selectedMatch?.id ?? null}
         onWatch={setSelectedMatch}
       />

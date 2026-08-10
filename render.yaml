@@ -32,6 +32,18 @@ services:
         sync: false
       - key: SOCKET_SERVER_PORT
         value: 4000
+      # Added for the heartbeat poller (src/server/socket/heartbeat.ts) —
+      # it queries Postgres for LIVE stations and LiveKit for their actual
+      # room/participant state, so this service now needs both sets of
+      # credentials it previously had no reason to hold.
+      - key: DATABASE_URL
+        sync: false
+      - key: LIVEKIT_HTTP_URL
+        sync: false
+      - key: LIVEKIT_API_KEY
+        sync: false
+      - key: LIVEKIT_API_SECRET
+        sync: false
 
   - type: web
     name: fgc-stream-clip-worker

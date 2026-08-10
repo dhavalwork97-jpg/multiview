@@ -13,15 +13,17 @@ export async function Nav() {
   const user = await getCurrentUser();
 
   return (
-    <header className="sticky top-0 z-40 flex items-center justify-between border-b border-arena-700 bg-arena-950/95 px-6 py-3 backdrop-blur">
-      <div className="flex items-center gap-6">
-        <Link href="/" className="font-display text-lg uppercase tracking-wide">
+    <header className="sticky top-0 z-40 flex flex-wrap items-center justify-between gap-y-2 border-b border-arena-700 bg-arena-950/95 px-4 py-3 backdrop-blur sm:px-6">
+      <div className="flex min-w-0 items-center gap-3 sm:gap-6">
+        <Link href="/" className="shrink-0 font-display text-lg uppercase tracking-wide">
           FGC<span className="text-signal-live">Stream</span>
         </Link>
-        <NavLinks />
+        <div className="min-w-0 overflow-x-auto">
+          <NavLinks />
+        </div>
       </div>
 
-      <div className="flex items-center gap-3">
+      <div className="flex flex-wrap items-center justify-end gap-2 sm:gap-3">
         {user && (
           <Link
             href="/dashboard"
@@ -36,6 +38,14 @@ export async function Nav() {
             className="rounded-card border border-arena-600 px-3 py-1.5 font-mono text-xs uppercase tracking-wide text-ink-muted transition-colors hover:border-signal-live hover:text-signal-live"
           >
             Admin
+          </Link>
+        )}
+        {user && user.role === "ADMIN" && (
+          <Link
+            href="/admin/users"
+            className="rounded-card border border-arena-600 px-3 py-1.5 font-mono text-xs uppercase tracking-wide text-ink-muted transition-colors hover:border-signal-live hover:text-signal-live"
+          >
+            Users
           </Link>
         )}
 

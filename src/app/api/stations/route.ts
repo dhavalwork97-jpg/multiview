@@ -29,6 +29,7 @@ export async function GET(req: Request) {
       lastHeartbeatAt: true,
       currentBitrateKbps: true,
       droppedFrames: true,
+      playbackIdHls: true,
       matches: {
         where: { status: "LIVE" },
         take: 1,
@@ -42,14 +43,16 @@ export async function GET(req: Request) {
   });
 
   // A station is considered stale (likely crashed encoder) if no heartbeat
-  // for this long. NOTE: today only room_started sets lastHeartbeatAt —
-  // nothing refreshes it while a stream is actively running (the ingest
-  // service → Socket.IO → Redis → Postgres refresh pipeline this comment
-  // used to describe was never actually built). Until it is, a short
-  // threshold flips every station to ERROR shortly after going live
-  // regardless of actual health, so this is deliberately generous rather
-  // than tuned to catch real crashes.
-  const STALE_THRESHOLD_MS = 5 * 60_000;
+  // for this long. The socket server's heartbeat poller
+  // (src/server/socket/heartbeat.ts) now actually refreshes
+  // lastHeartbeatAt every ~20s by polling LiveKit's own room/participant
+  // state directly (and flips a station to ERROR immediately once it
+  // detects the publisher is gone, rather than waiting on this check) —
+  // so this threshold is back to being a real staleness check, not the
+  // 5-minute stopgap it was before that poller existed. It mainly catches
+  // the case where the poller itself is down (e.g. the Render socket
+  // service is asleep/restarting).
+  const STALE_THRESHOLD_MS = 60_000;
   const now = Date.now();
 
   const withHealth = stations.map((s) => ({

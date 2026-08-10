@@ -8,6 +8,12 @@ WORKDIR /app
 FROM base AS deps
 COPY package.json package-lock.json* ./
 RUN npm ci
+# The heartbeat poller (src/server/socket/heartbeat.ts) now imports
+# @/lib/db, which needs the Prisma Client actually generated — it wasn't
+# before, since this image never used Postgres. schema.prisma has to be
+# present for `prisma generate` to find it.
+COPY prisma ./prisma
+RUN npx prisma generate
 
 FROM base AS runner
 ENV NODE_ENV=production

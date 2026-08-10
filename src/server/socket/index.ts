@@ -3,6 +3,7 @@ import { Server } from "socket.io";
 import { createAdapter } from "@socket.io/redis-adapter";
 import Redis from "ioredis";
 import { EVENTS_CHANNEL, type AppEvent } from "@/lib/events";
+import { startHeartbeatPoller } from "./heartbeat";
 
 // Standalone process (run via `npm run socket:dev`, deployed separately
 // from the Next.js app in Phase 5). Talks to clients over Socket.IO and
@@ -74,6 +75,9 @@ eventsSubscriber.on("message", (_channel, raw) => {
     case "match:assigned":
       io.to(`tournament:${event.tournamentId}`).emit("match:assigned", event);
       break;
+    case "bracket:advanced":
+      io.to(`tournament:${event.tournamentId}`).emit("bracket:advanced", event);
+      break;
   }
 });
 
@@ -121,3 +125,8 @@ io.on("connection", (socket) => {
 httpServer.listen(PORT, () => {
   console.log(`[socket] listening on :${PORT}`);
 });
+
+// This is the one persistent, always-on process in the stack (see
+// src/server/socket/heartbeat.ts for why it lives here rather than a
+// Vercel API route) — station health monitoring runs from here.
+startHeartbeatPoller();

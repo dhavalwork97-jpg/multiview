@@ -48,11 +48,21 @@ export async function GET(_req: Request, { params }: { params: Promise<{ bracket
   // exactly what the bracket UI needs to decide whether clicking a
   // player's name should jump to a live stream or just show a tooltip.
   const liveMatchByPlayerId: Record<string, string> = {};
+  // playerId -> gamertag, for every player known so far. A slot only gets
+  // a real Match row once BOTH its players are decided (see
+  // advanceBracket() in src/lib/bracket-progression.ts) — so a slot with
+  // exactly one known player (waiting on the other semifinal, say) has a
+  // playerOneId/playerTwoId in `structure` but no Match to read a
+  // gamertag off of. Without this map the UI has nothing to show but the
+  // raw player id.
+  const gamertagByPlayerId: Record<string, string> = {};
   for (const m of bracket.matches) {
     if (m.status === "LIVE") {
       liveMatchByPlayerId[m.playerOneId] = m.id;
       liveMatchByPlayerId[m.playerTwoId] = m.id;
     }
+    gamertagByPlayerId[m.playerOneId] = m.playerOne.gamertag;
+    gamertagByPlayerId[m.playerTwoId] = m.playerTwo.gamertag;
   }
 
   return NextResponse.json({
@@ -64,5 +74,6 @@ export async function GET(_req: Request, { params }: { params: Promise<{ bracket
     },
     matches: bracket.matches,
     liveMatchByPlayerId,
+    gamertagByPlayerId,
   });
 }

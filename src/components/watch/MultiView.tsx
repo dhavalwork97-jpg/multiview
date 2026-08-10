@@ -18,11 +18,16 @@ export function MultiView({
   stations: MultiViewStation[];
   layout: 4 | 9;
 }) {
-  const cols = layout === 4 ? 2 : 3;
   const visible = stations.slice(0, layout);
+  // Fixed 2/3-column grids read fine on a desktop monitor but turn into
+  // postage-stamp tiles on a phone (fighting-game viewership skews heavily
+  // mobile) — collapse to a single column below `sm`, then step up to the
+  // full desktop column count.
+  const gridClass =
+    layout === 4 ? "grid-cols-1 sm:grid-cols-2" : "grid-cols-1 sm:grid-cols-2 lg:grid-cols-3";
 
   return (
-    <div className={`grid gap-2`} style={{ gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))` }}>
+    <div className={`grid gap-2 ${gridClass}`}>
       {visible.map((s, i) =>
         s.hlsPlaylistKey ? (
           <div key={s.id} className="relative">

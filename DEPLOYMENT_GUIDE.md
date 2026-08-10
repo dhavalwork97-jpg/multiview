@@ -71,6 +71,7 @@ git push -u origin main
 | `DATABASE_URL` | Neon pooled connection string (Stage 0.1) |
 | `REDIS_URL` | Upstash Redis URL (Stage 0.2) |
 | `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY`, `CLERK_SECRET_KEY` | from your Clerk dashboard → **switch to production keys**, not the `pk_test_`/`sk_test_` ones you used locally |
+| `CLERK_ENCRYPTION_KEY` | a random 32+ byte value, e.g. `openssl rand -hex 32`. Without this Clerk logs `Missing CLERK_ENCRYPTION_KEY` on every request in production and falls back to an in-memory key it regenerates on every cold start — harmless for a single always-warm instance, but on Vercel's serverless functions that means a different key per invocation, which can invalidate anything Clerk encrypted with the previous one. Not needed in local dev (`npm run dev` runs one long-lived process), only set this for the Vercel deploy. |
 | `CLERK_WEBHOOK_SIGNING_SECRET` | placeholder for now — you'll generate the real one in step 1.4, after you have a live URL to point Clerk at |
 | `NEXT_PUBLIC_APP_URL` | leave blank for now; Vercel gives you the URL after first deploy, then come back and set it |
 | `NEXT_PUBLIC_SOCKET_URL` | leave blank for now — filled in after Stage 2 |
