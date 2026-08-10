@@ -38,10 +38,22 @@ export async function POST(req: Request) {
   if (event.id) {
     try {
       await db.webhookEvent.create({ data: { source: "livekit", eventId: event.id } });
-    } catch {
-      // Unique constraint violation = we've already processed this exact
-      // event id. Ack it again (LiveKit doesn't need a distinct response)
-      // without repeating any of the side effects below.
+    } catch (err) {
+      // Only a genuine unique-constraint violation (P2002) means "we've
+      // already processed this exact event id" — safe to skip. Any other
+      // failure (missing table because a migration wasn't applied, a
+      // dropped connection, etc.) is NOT a duplicate, and treating it as
+      // one here used to silently swallow every webhook — room_started,
+      // track_published, all of it — with the handler returning 200 and
+      // never running any of the actual egress-start logic below. Rethrow
+      // so a schema/connection problem stays loud instead of looking
+      // exactly like "nothing to do here."
+      const isDuplicateKey =
+        typeof err === "object" && err !== null && "code" in err && err.code === "P2002";
+      if (!isDuplicateKey) {
+        console.error("[livekit webhook] webhookEvent dedupe write failed (not a duplicate):", err);
+        throw err;
+      }
       console.log(`[livekit webhook] duplicate delivery of event=${event.id} — skipping`);
       return NextResponse.json({ received: true, duplicate: true });
     }
