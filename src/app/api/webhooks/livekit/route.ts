@@ -72,10 +72,43 @@ export async function POST(req: Request) {
 
   switch (event.event) {
     case "room_started": {
+      // IMPORTANT: a LiveKit room becoming live is the source of truth for
+      // the public LIVE state. Do NOT wait for egress/HLS to succeed before
+      // marking the match LIVE. Egress is a separate downstream concern and
+      // can legitimately be delayed by track races, rate limits, or storage
+      // configuration. Waiting for it made the watch page say "Not live yet"
+      // even though OBS was already publishing.
+      const now = new Date();
+      const liveMatch = await db.match.findFirst({
+        where: { stationId: station.id, status: { in: ["QUEUED", "LIVE"] } },
+        orderBy: { createdAt: "desc" },
+      });
+
       const updated = await db.station.update({
         where: { id: station.id },
-        data: { status: "LIVE", lastHeartbeatAt: new Date() },
+        data: { status: "LIVE", lastHeartbeatAt: now },
       });
+
+      let liveMatchForEvent = liveMatch;
+      if (liveMatch && liveMatch.status !== "LIVE") {
+        liveMatchForEvent = await db.match.update({
+          where: { id: liveMatch.id },
+          data: { status: "LIVE", startedAt: liveMatch.startedAt ?? now },
+        });
+      }
+
+      if (liveMatchForEvent) {
+        await publishEvent({
+          type: "match:updated",
+          tournamentId: liveMatchForEvent.tournamentId,
+          matchId: liveMatchForEvent.id,
+          status: "LIVE",
+          playerOneScore: liveMatchForEvent.playerOneScore,
+          playerTwoScore: liveMatchForEvent.playerTwoScore,
+          winnerId: liveMatchForEvent.winnerId,
+          stationId: station.id,
+        });
+      }
 
       // Auto-start recording the instant a station's room goes live —
       // this is what "auto recording" and DVR mean in practice: no
