@@ -15,13 +15,35 @@ import {
   TrackType,
 } from "@livekit/protocol";
 
-const LIVEKIT_HTTP_URL = process.env.LIVEKIT_HTTP_URL!;
-const API_KEY = process.env.LIVEKIT_API_KEY!;
-const API_SECRET = process.env.LIVEKIT_API_SECRET!;
+const LIVEKIT_HTTP_URL = process.env.LIVEKIT_HTTP_URL;
+const API_KEY = process.env.LIVEKIT_API_KEY;
+const API_SECRET = process.env.LIVEKIT_API_SECRET;
 
-export const roomService = new RoomServiceClient(LIVEKIT_HTTP_URL, API_KEY, API_SECRET);
-export const ingressClient = new IngressClient(LIVEKIT_HTTP_URL, API_KEY, API_SECRET);
-export const egressClient = new EgressClient(LIVEKIT_HTTP_URL, API_KEY, API_SECRET);
+// RoomServiceClient/IngressClient/EgressClient are constructed once, at
+// module load — which on the socket server (src/server/socket/index.ts)
+// means process startup, before anything else has a chance to run. A
+// missing env var here used to surface as
+// `TypeError: Cannot read properties of undefined (reading 'startsWith')`
+// three stack frames deep inside the SDK's Twirp client, with nothing
+// pointing at "which env var" or "which service" — this makes that
+// failure say exactly what's missing instead.
+for (const [name, value] of [
+  ["LIVEKIT_HTTP_URL", LIVEKIT_HTTP_URL],
+  ["LIVEKIT_API_KEY", API_KEY],
+  ["LIVEKIT_API_SECRET", API_SECRET],
+] as const) {
+  if (!value) {
+    throw new Error(
+      `Missing required env var ${name} — src/lib/livekit.ts needs this to construct the LiveKit SDK clients. ` +
+        `If this is the socket server (Render), check that service's own Environment tab: ` +
+        `render.yaml declares this var but doesn't ship a value (sync: false), so it has to be entered manually per-service — it isn't inherited from the Next.js app's Vercel env vars.`
+    );
+  }
+}
+
+export const roomService = new RoomServiceClient(LIVEKIT_HTTP_URL!, API_KEY!, API_SECRET!);
+export const ingressClient = new IngressClient(LIVEKIT_HTTP_URL!, API_KEY!, API_SECRET!);
+export const egressClient = new EgressClient(LIVEKIT_HTTP_URL!, API_KEY!, API_SECRET!);
 
 /** One LiveKit room per Station, named by station id — stable for the
  * station's lifetime so re-assigning matches onto it doesn't require
