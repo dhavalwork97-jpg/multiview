@@ -9,14 +9,23 @@ export const metadata: Metadata = {
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
-  return (
-    <ClerkProvider>
-      <html lang="en" className="dark">
-        <body className="min-h-screen bg-arena-950 text-ink">
-          <Nav />
-          {children}
-        </body>
-      </html>
-    </ClerkProvider>
+  const content = (
+    <html lang="en" className="dark">
+      <body className="min-h-screen bg-arena-950 text-ink">
+        <Nav />
+        {children}
+      </body>
+    </html>
+  );
+
+  // Clerk requires a publishable key at render time. Keeping the provider
+  // out when the key is absent lets local production builds succeed without
+  // fake credentials. Production deployments should always configure the
+  // real NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY.
+  const publishableKey = process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY;
+  return publishableKey ? (
+    <ClerkProvider publishableKey={publishableKey}>{content}</ClerkProvider>
+  ) : (
+    content
   );
 }

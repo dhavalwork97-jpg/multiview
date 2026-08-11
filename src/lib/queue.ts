@@ -29,4 +29,11 @@ export type ClipJobData = {
   endSeconds: number;
 };
 
-export const clipQueue = new Queue<ClipJobData>("clip-generation", { connection });
+let queue: Queue<ClipJobData> | undefined;
+
+export function getClipQueue(): Queue<ClipJobData> {
+  if (!queue) {
+    queue = new Queue<ClipJobData>("clip-generation", { connection });
+  }
+  return queue;
+}

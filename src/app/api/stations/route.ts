@@ -31,8 +31,9 @@ export async function GET(req: Request) {
       droppedFrames: true,
       playbackIdHls: true,
       youtubeVideoId: true,
+      youtubeLiveStatus: true,
       matches: {
-        where: { status: "LIVE" },
+        where: { status: { in: ["QUEUED", "LIVE"] } },
         take: 1,
         select: {
           id: true,

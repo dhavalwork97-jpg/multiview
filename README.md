@@ -19,6 +19,11 @@ foundation everything else builds on: project scaffold, data model, auth,
 and a basic organizer dashboard with a live match grid (polling-backed
 placeholder for now — real video and push updates come in later phases).
 
+
+## Tournament Control Room
+
+Organizers now have a dedicated multi-station control room at `/admin/tournaments/<tournamentId>/control-room`. It is the primary operations surface for running multiple OBS → YouTube stations: create stations, assign queued matches, start/end matches, retrieve per-station OBS credentials, open the active YouTube broadcast, and monitor YouTube/heartbeat health.
+
 ## What's in this phase
 
 - **Project setup** — Next.js 15 (App Router) + TypeScript + Tailwind, Prisma, Clerk, package.json with the full Phase-1-relevant dependency set pinned.

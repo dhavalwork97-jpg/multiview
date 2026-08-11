@@ -17,7 +17,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ station
     }
 
     const result = await syncStationYoutubeStatus(stationId);
-    return NextResponse.json({ station: result.station, streamStatus: result.streamStatus, broadcastStatus: result.broadcastStatus, videoId: result.videoId, isLive: result.isLive });
+    return NextResponse.json({ station: result.station, streamStatus: result.streamStatus, broadcastStatus: result.broadcastStatus, videoId: result.videoId, healthStatus: result.healthStatus, configurationIssues: result.configurationIssues, isLive: result.isLive });
   } catch (error) {
     console.error("[youtube status]", error);
     return NextResponse.json({ error: error instanceof Error ? error.message : "Failed to read YouTube status" }, { status: 503 });

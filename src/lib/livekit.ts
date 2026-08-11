@@ -15,35 +15,43 @@ import {
   TrackType,
 } from "@livekit/protocol";
 
-const LIVEKIT_HTTP_URL = process.env.LIVEKIT_HTTP_URL;
-const API_KEY = process.env.LIVEKIT_API_KEY;
-const API_SECRET = process.env.LIVEKIT_API_SECRET;
-
-// RoomServiceClient/IngressClient/EgressClient are constructed once, at
-// module load — which on the socket server (src/server/socket/index.ts)
-// means process startup, before anything else has a chance to run. A
-// missing env var here used to surface as
-// `TypeError: Cannot read properties of undefined (reading 'startsWith')`
-// three stack frames deep inside the SDK's Twirp client, with nothing
-// pointing at "which env var" or "which service" — this makes that
-// failure say exactly what's missing instead.
-for (const [name, value] of [
-  ["LIVEKIT_HTTP_URL", LIVEKIT_HTTP_URL],
-  ["LIVEKIT_API_KEY", API_KEY],
-  ["LIVEKIT_API_SECRET", API_SECRET],
-] as const) {
-  if (!value) {
-    throw new Error(
-      `Missing required env var ${name} — src/lib/livekit.ts needs this to construct the LiveKit SDK clients. ` +
-        `If this is the socket server (Render), check that service's own Environment tab: ` +
-        `render.yaml declares this var but doesn't ship a value (sync: false), so it has to be entered manually per-service — it isn't inherited from the Next.js app's Vercel env vars.`
-    );
+function requireLiveKitConfig() {
+  const url = process.env.LIVEKIT_HTTP_URL;
+  const apiKey = process.env.LIVEKIT_API_KEY;
+  const apiSecret = process.env.LIVEKIT_API_SECRET;
+  for (const [name, value] of [
+    ["LIVEKIT_HTTP_URL", url],
+    ["LIVEKIT_API_KEY", apiKey],
+    ["LIVEKIT_API_SECRET", apiSecret],
+  ] as const) {
+    if (!value) {
+      throw new Error(
+        `Missing required env var ${name} — LiveKit is only required when a LiveKit route is actually used. ` +
+        `Configure it in the Next.js/Vercel service before using LiveKit streaming.`
+      );
+    }
   }
+  return {
+    url: url as string,
+    apiKey: apiKey as string,
+    apiSecret: apiSecret as string,
+  };
 }
 
-export const roomService = new RoomServiceClient(LIVEKIT_HTTP_URL!, API_KEY!, API_SECRET!);
-export const ingressClient = new IngressClient(LIVEKIT_HTTP_URL!, API_KEY!, API_SECRET!);
-export const egressClient = new EgressClient(LIVEKIT_HTTP_URL!, API_KEY!, API_SECRET!);
+export function getRoomService() {
+  const { url, apiKey, apiSecret } = requireLiveKitConfig();
+  return new RoomServiceClient(url, apiKey, apiSecret);
+}
+
+export function getIngressClient() {
+  const { url, apiKey, apiSecret } = requireLiveKitConfig();
+  return new IngressClient(url, apiKey, apiSecret);
+}
+
+export function getEgressClient() {
+  const { url, apiKey, apiSecret } = requireLiveKitConfig();
+  return new EgressClient(url, apiKey, apiSecret);
+}
 
 /** One LiveKit room per Station, named by station id — stable for the
  * station's lifetime so re-assigning matches onto it doesn't require
@@ -67,7 +75,7 @@ export function ingressParticipantIdentity(stationId: string) {
 export async function createStationIngress(stationId: string, label: string) {
   const roomName = roomNameForStation(stationId);
 
-  const ingress = await ingressClient.createIngress(IngressInput.RTMP_INPUT, {
+  const ingress = await getIngressClient().createIngress(IngressInput.RTMP_INPUT, {
     name: label,
     roomName,
     participantIdentity: `station-${stationId}`,
@@ -83,7 +91,7 @@ export async function createStationIngress(stationId: string, label: string) {
 }
 
 export async function deleteStationIngress(ingressId: string) {
-  await ingressClient.deleteIngress(ingressId);
+  await getIngressClient().deleteIngress(ingressId);
 }
 
 /**
@@ -94,7 +102,8 @@ export async function deleteStationIngress(ingressId: string) {
  * publishes into a station's room.
  */
 export async function mintViewerToken(roomName: string, identity: string) {
-  const token = new AccessToken(API_KEY, API_SECRET, { identity, ttl: "6h" });
+  const { apiKey, apiSecret } = requireLiveKitConfig();
+  const token = new AccessToken(apiKey, apiSecret, { identity, ttl: "6h" });
   token.addGrant({ room: roomName, roomJoin: true, canSubscribe: true, canPublish: false });
   return token.toJwt();
 }
@@ -143,7 +152,7 @@ export async function startRoomEgress(roomName: string, matchId: string, station
   // silently introduced this dependency, and it was wrong: track_published
   // kept firing with a real video track in the room while the identity
   // check filtered it out every time, so egress never started.
-  const participants = await roomService.listParticipants(roomName);
+  const participants = await getRoomService().listParticipants(roomName);
   const publisher = participants.find((p) =>
     p.tracks.some((t) => t.type === TrackType.VIDEO)
   );
@@ -172,7 +181,7 @@ export async function startRoomEgress(roomName: string, matchId: string, station
     forcePathStyle: true,
   });
 
-  const info = await egressClient.startTrackCompositeEgress(
+  const info = await getEgressClient().startTrackCompositeEgress(
     roomName,
     {
       file: new EncodedFileOutput({
@@ -194,5 +203,5 @@ export async function startRoomEgress(roomName: string, matchId: string, station
 }
 
 export async function stopEgress(egressId: string) {
-  await egressClient.stopEgress(egressId);
+  await getEgressClient().stopEgress(egressId);
 }

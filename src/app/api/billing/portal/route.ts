@@ -1,17 +1,10 @@
 import { NextResponse } from "next/server";
-import { getCurrentUser } from "@/lib/auth";
-import { stripe } from "@/lib/stripe";
 
+// Paid billing is intentionally disabled until launch. The pricing UI is live,
+// but no checkout or customer portal can charge or modify a subscription yet.
 export async function POST() {
-  const user = await getCurrentUser();
-  if (!user?.stripeCustomerId) {
-    return NextResponse.json({ error: "No billing account found" }, { status: 400 });
-  }
-
-  const session = await stripe.billingPortal.sessions.create({
-    customer: user.stripeCustomerId,
-    return_url: `${process.env.NEXT_PUBLIC_APP_URL}/dashboard`,
-  });
-
-  return NextResponse.json({ url: session.url });
+  return NextResponse.json(
+    { error: "Paid billing is coming soon. No charges are enabled yet." },
+    { status: 503 },
+  );
 }

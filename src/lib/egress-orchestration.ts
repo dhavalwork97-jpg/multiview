@@ -1,6 +1,6 @@
 import { db } from "@/lib/db";
 import { publishEvent } from "@/lib/events";
-import { startRoomEgress, egressClient } from "@/lib/livekit";
+import { startRoomEgress, getEgressClient } from "@/lib/livekit";
 
 /**
  * Shared by three call sites, all of which only ever need the station's id:
@@ -35,7 +35,7 @@ export async function tryStartEgressForStation(station: { id: string }, roomName
   // has since died, which would make this check skip starting a real one
   // forever. This is also what makes it safe to call this function twice
   // (room_started then track_published) for the same room.
-  const activeEgresses = await egressClient.listEgress({ roomName, active: true });
+  const activeEgresses = await getEgressClient().listEgress({ roomName, active: true });
   if (activeEgresses.length > 0) {
     console.log(
       `[livekit webhook] skipping egress start — LiveKit reports ${activeEgresses.length} active egress already for room=${roomName}`

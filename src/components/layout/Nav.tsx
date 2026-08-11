@@ -24,6 +24,12 @@ export async function Nav() {
       </div>
 
       <div className="flex flex-wrap items-center justify-end gap-2 sm:gap-3">
+        <Link
+          href="/pricing"
+          className="rounded-card px-3 py-1.5 font-mono text-xs uppercase tracking-wide text-ink-faint transition-colors hover:bg-arena-800 hover:text-signal-live"
+        >
+          Plans
+        </Link>
         {user && (
           <Link
             href="/dashboard"

@@ -4,7 +4,13 @@ import { publishEvent } from "@/lib/events";
 type YouTubeStream = {
   id: string;
   cdn?: { ingestionInfo?: { ingestionAddress?: string; streamName?: string } };
-  status?: { streamStatus?: string };
+  status?: {
+    streamStatus?: string;
+    healthStatus?: {
+      status?: string;
+      configurationIssues?: Array<{ type?: string; severity?: string; description?: string }>;
+    };
+  };
 };
 
 type YouTubeBroadcast = {
@@ -201,7 +207,10 @@ export async function getStreamAndBroadcastStatus(stationId: string) {
   const streamData = await youtubeRequest<{ items: YouTubeStream[] }>(
     `/liveStreams?part=status&id=${encodeURIComponent(station.youtubeStreamId)}`
   );
-  const streamStatus = streamData.items?.[0]?.status?.streamStatus ?? "inactive";
+  const stream = streamData.items?.[0];
+  const streamStatus = stream?.status?.streamStatus ?? "inactive";
+  const healthStatus = stream?.status?.healthStatus?.status ?? null;
+  const configurationIssues = stream?.status?.healthStatus?.configurationIssues ?? [];
 
   let broadcastStatus: string | null = null;
   let videoId = station.youtubeVideoId;
@@ -214,7 +223,7 @@ export async function getStreamAndBroadcastStatus(stationId: string) {
     videoId = broadcast?.id ?? videoId;
   }
 
-  return { streamStatus, broadcastStatus, videoId };
+  return { streamStatus, broadcastStatus, videoId, healthStatus, configurationIssues };
 }
 
 export async function syncStationYoutubeStatus(stationId: string) {
@@ -227,10 +236,11 @@ export async function syncStationYoutubeStatus(stationId: string) {
   const state = await getStreamAndBroadcastStatus(stationId);
   const isLive = state.streamStatus === "active" && state.broadcastStatus === "live";
   const broadcastEnded = state.broadcastStatus === "complete";
+  const feedHasIssue = state.healthStatus === "bad";
   const now = new Date();
 
-  let stationStatus: "OFFLINE" | "IDLE" | "LIVE" | "ERROR" = isLive ? "LIVE" : "OFFLINE";
-  if (state.streamStatus === "active" && state.broadcastStatus && !isLive && !broadcastEnded) {
+  let stationStatus: "OFFLINE" | "IDLE" | "LIVE" | "ERROR" = feedHasIssue ? "ERROR" : isLive ? "LIVE" : "OFFLINE";
+  if (!feedHasIssue && state.streamStatus === "active" && state.broadcastStatus && !isLive && !broadcastEnded) {
     stationStatus = "IDLE";
   }
 

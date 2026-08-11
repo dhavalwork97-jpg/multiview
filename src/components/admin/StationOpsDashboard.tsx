@@ -10,6 +10,8 @@ type StationHealth = {
   lastHeartbeatAt: string | null;
   currentBitrateKbps: number | null;
   droppedFrames: number | null;
+  youtubeLiveStatus: string | null;
+  youtubeVideoId: string | null;
   isStale: boolean;
   matches: { id: string; playerOne: { gamertag: string }; playerTwo: { gamertag: string } }[];
 };
@@ -88,7 +90,7 @@ export function StationOpsDashboard({ tournamentId }: { tournamentId: string }) 
             {alerting.map((s) => (
               <li key={s.id}>
                 <span className="text-signal-error">{s.label}</span> —{" "}
-                {s.isStale ? "no heartbeat, likely crashed encoder" : "reported ERROR"}
+                {s.isStale ? "no heartbeat, likely crashed encoder" : "reported ERROR / bad ingest health"}
               </li>
             ))}
           </ul>
@@ -162,20 +164,8 @@ function StationCard({ station }: { station: StationHealth }) {
             {heartbeatAge == null ? "—" : `${heartbeatAge}s ago`}
           </dd>
         </div>
-        {station.status === "LIVE" && (
-          <>
-            <div className="flex justify-between">
-              <dt>Bitrate</dt>
-              <dd>{station.currentBitrateKbps ?? "—"} kbps</dd>
-            </div>
-            <div className="flex justify-between">
-              <dt>Dropped</dt>
-              <dd className={(station.droppedFrames ?? 0) > 0 ? "text-signal-warn" : ""}>
-                {station.droppedFrames ?? 0}
-              </dd>
-            </div>
-          </>
-        )}
+        <div className="flex justify-between"><dt>YouTube</dt><dd>{station.youtubeLiveStatus ?? "—"}</dd></div>
+        <div className="flex justify-between"><dt>Video</dt><dd>{station.youtubeVideoId ? "ready" : "—"}</dd></div>
       </dl>
     </div>
   );

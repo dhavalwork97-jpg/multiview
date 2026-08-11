@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { headers } from "next/headers";
 import { db } from "@/lib/db";
-import { stripe } from "@/lib/stripe";
+import { getStripe, mapStripeStatus } from "@/lib/stripe";
 import type Stripe from "stripe";
 
 // The only writer of User.subscriptionStatus — src/lib/billing.ts's
@@ -12,6 +12,7 @@ import type Stripe from "stripe";
 // webhook is the only source of truth for "did the payment actually go
 // through."
 export async function POST(req: Request) {
+  const stripe = getStripe();
   const body = await req.text();
   const signature = (await headers()).get("stripe-signature");
 
@@ -59,18 +60,3 @@ export async function POST(req: Request) {
   return NextResponse.json({ received: true });
 }
 
-function mapStripeStatus(status: Stripe.Subscription.Status): "ACTIVE" | "PAST_DUE" | "CANCELED" | "NONE" {
-  switch (status) {
-    case "active":
-    case "trialing":
-      return "ACTIVE";
-    case "past_due":
-    case "unpaid":
-      return "PAST_DUE";
-    case "canceled":
-    case "incomplete_expired":
-      return "CANCELED";
-    default:
-      return "NONE";
-  }
-}

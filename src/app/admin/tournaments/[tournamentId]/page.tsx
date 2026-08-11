@@ -33,10 +33,10 @@ export default async function AdminTournamentPage({
           <h1 className="font-display text-3xl uppercase tracking-wide">{tournament.name}</h1>
         </div>
         <Link
-          href={`/admin/tournaments/${tournament.id}/ops`}
+          href={`/admin/tournaments/${tournament.id}/control-room`}
           className="rounded-card border border-arena-600 px-3 py-1.5 font-mono text-xs uppercase tracking-wide text-ink-faint transition-colors hover:border-signal-live hover:text-signal-live"
         >
-          Live ops
+          Control room
         </Link>
       </header>
 

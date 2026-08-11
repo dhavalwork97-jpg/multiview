@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { requireRole } from "@/lib/auth";
-import { roomService, roomNameForStation } from "@/lib/livekit";
+import { getRoomService, roomNameForStation } from "@/lib/livekit";
 
 // GET  /api/stations/:stationId/room  — is this station's LiveKit room
 //      currently active, and with how many participants? Exists mainly
@@ -28,7 +28,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ station
   if (!station) return NextResponse.json({ error: "Station not found" }, { status: 404 });
 
   const roomName = roomNameForStation(station.id);
-  const rooms = await roomService.listRooms([roomName]);
+  const rooms = await getRoomService().listRooms([roomName]);
   const room = rooms[0];
 
   return NextResponse.json({
@@ -53,7 +53,7 @@ export async function POST(_req: Request, { params }: { params: Promise<{ statio
 
   // deleteRoom on an already-gone room is a no-op on LiveKit's side, not
   // an error — safe to call even if you're not sure it's actually stuck.
-  await roomService.deleteRoom(roomName);
+  await getRoomService().deleteRoom(roomName);
 
   await db.station.update({ where: { id: station.id }, data: { status: "OFFLINE" } });
 

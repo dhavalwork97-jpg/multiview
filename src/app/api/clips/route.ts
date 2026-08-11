@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { db } from "@/lib/db";
 import { getCurrentUser } from "@/lib/auth";
-import { clipQueue } from "@/lib/queue";
+import { getClipQueue } from "@/lib/queue";
 import { clipCreationRateLimit } from "@/lib/rate-limit";
 
 const createClipSchema = z.object({
@@ -49,7 +49,7 @@ export async function POST(req: Request) {
     data: { matchId, createdById: user.id, title, startSeconds, endSeconds, status: "QUEUED" },
   });
 
-  await clipQueue.add("cut-clip", {
+  await getClipQueue().add("cut-clip", {
     clipId: clip.id,
     matchId,
     hlsPlaylistKey: recording.hlsPlaylistKey,

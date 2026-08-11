@@ -1,7 +1,7 @@
 import { db } from "@/lib/db";
 import { cdnUrl } from "@/lib/cdn";
 import { publishEvent } from "@/lib/events";
-import { clipQueue } from "@/lib/queue";
+import { getClipQueue } from "@/lib/queue";
 import { HUD_CONFIGS } from "./game-hud-config";
 import { readBothHpFractions } from "./hp-bar-reader";
 import { readCrowdLoudness } from "./crowd-signal";
@@ -139,7 +139,7 @@ async function scoreMatch(match: {
           status: "QUEUED",
         },
       });
-      await clipQueue.add("cut-clip", {
+      await getClipQueue().add("cut-clip", {
         clipId: clip.id,
         matchId: match.id,
         hlsPlaylistKey: recording.hlsPlaylistKey,

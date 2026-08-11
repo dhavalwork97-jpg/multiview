@@ -104,6 +104,8 @@ model User {
   stripeCustomerId     String?             @unique
   stripeSubscriptionId String?             @unique
   subscriptionStatus   SubscriptionStatus  @default(NONE)
+  trialStartedAt        DateTime?
+  trialEndsAt           DateTime?
 
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt

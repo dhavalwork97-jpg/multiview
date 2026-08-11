@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { mapStripeStatus } from "@/app/api/webhooks/stripe/route";
+import { mapStripeStatus } from "@/lib/stripe";
 
 describe("mapStripeStatus", () => {
   it("treats active and trialing as ACTIVE", () => {
