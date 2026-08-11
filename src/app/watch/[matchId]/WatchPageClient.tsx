@@ -14,7 +14,7 @@ type InitialMatch = {
   tournamentId: string;
   playerOne: { gamertag: string };
   playerTwo: { gamertag: string };
-  station: { id: string; label: string; playbackIdHls: string | null } | null;
+  station: { id: string; label: string; playbackIdHls: string | null; playbackIdWebrtc: string | null } | null;
   tournament: { name: string };
   startedAt: string | null;
 };
@@ -77,7 +77,12 @@ export function WatchPageClient({
       {/* Real player: HLS by default (scales), WebRTC opt-in (low latency) */}
       <div className="my-4 max-w-4xl">
         {match.station ? (
-          <VideoPlayer stationId={match.station.id} hlsPlaylistKey={match.station.playbackIdHls} isPremium={isPremium} />
+          <VideoPlayer
+            stationId={match.station.id}
+            hlsPlaylistKey={match.station.playbackIdHls}
+            isPremium={isPremium}
+            isLive={match.status === "LIVE"}
+          />
         ) : (
           <div className="flex aspect-video w-full items-center justify-center rounded-card bg-arena-900 text-sm text-ink-muted">
             Not yet assigned to a station
