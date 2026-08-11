@@ -127,25 +127,35 @@ export async function startRoomEgress(roomName: string, matchId: string, station
   const segmentPrefix = `recordings/${stationId}/${matchId}`;
 
   // Track Composite needs explicit track IDs rather than "just the room" —
-  // look up the ingress's own published tracks. There's exactly one
-  // publisher per station room (the RTMP ingress), so the first audio and
-  // first video track found are unambiguously the right ones.
-  const identity = ingressParticipantIdentity(stationId);
-  let participant;
-  try {
-    participant = await roomService.getParticipant(roomName, identity);
-  } catch {
-    // Same race as the "no video track" case below, just earlier — the
-    // ingress hasn't even joined the room yet (RTMP handshake still in
-    // progress). Normalize to the same "No published video track found"
-    // message so callers (the LiveKit webhook route) can treat both as
-    // one benign, retry-on-track_published condition instead of two.
+  // look up whoever's actually publishing. A station's room only ever has
+  // one publisher (the RTMP ingress) by design, so rather than assuming a
+  // predicted identity (station-${stationId}) and looking that participant
+  // up directly, just scan every participant in the room for one with a
+  // published video track.
+  //
+  // This used to call roomService.getParticipant(roomName, predictedIdentity)
+  // instead — but that predicted identity is only a request, not a
+  // guarantee: LiveKit Cloud's hosted RTMP ingress doesn't necessarily
+  // preserve participantIdentity exactly the way self-hosted LiveKit does,
+  // and Room Composite egress (the original approach here) never
+  // exercised this assumption at all, since it recorded whatever was in
+  // the room regardless of who published it. Switching to Track Composite
+  // silently introduced this dependency, and it was wrong: track_published
+  // kept firing with a real video track in the room while the identity
+  // check filtered it out every time, so egress never started.
+  const participants = await roomService.listParticipants(roomName);
+  const publisher = participants.find((p) =>
+    p.tracks.some((t) => t.type === TrackType.VIDEO)
+  );
+
+  if (!publisher) {
     throw new Error(
-      `No published video track found for station=${stationId} room=${roomName} — ingress participant hasn't joined the room yet`
+      `No published video track found for station=${stationId} room=${roomName} — encoder may not have finished connecting yet`
     );
   }
-  const videoTrackId = participant.tracks.find((t) => t.type === TrackType.VIDEO)?.sid;
-  const audioTrackId = participant.tracks.find((t) => t.type === TrackType.AUDIO)?.sid;
+
+  const videoTrackId = publisher.tracks.find((t) => t.type === TrackType.VIDEO)?.sid;
+  const audioTrackId = publisher.tracks.find((t) => t.type === TrackType.AUDIO)?.sid;
 
   if (!videoTrackId) {
     throw new Error(

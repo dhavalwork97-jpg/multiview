@@ -3,7 +3,7 @@ import { WebhookReceiver } from "livekit-server-sdk";
 import { TrackType } from "@livekit/protocol";
 import { db } from "@/lib/db";
 import { publishEvent } from "@/lib/events";
-import { stopEgress, ingressParticipantIdentity } from "@/lib/livekit";
+import { stopEgress } from "@/lib/livekit";
 import { tryStartEgressForStation } from "@/lib/egress-orchestration";
 
 const receiver = new WebhookReceiver(
@@ -105,16 +105,21 @@ export async function POST(req: Request) {
     }
 
     case "track_published": {
-      // Retry path for the race described above. Only worth attempting
-      // for a video track from the station's own ingress — an audio-only
-      // publish, or a track from anyone else, isn't what egress is
-      // waiting on. listEgress inside tryStartEgressForStation already
-      // no-ops this if egress is somehow already running (e.g. this fires
-      // after a video track that room_started's attempt already caught).
-      const isIngressVideo =
-        event.track?.type === TrackType.VIDEO &&
-        event.participant?.identity === ingressParticipantIdentity(station.id);
-      if (isIngressVideo) {
+      // Retry path for the race described in room_started above. Only
+      // worth attempting for a video track — an audio-only publish isn't
+      // what egress is waiting on. Deliberately NOT filtering by which
+      // participant published it: a station's room only ever has one
+      // publisher (the RTMP ingress) by design, so any video track
+      // published here is the right one. An earlier version of this
+      // check also required event.participant.identity to match a
+      // predicted "station-${stationId}" string — that assumption was
+      // wrong (see the comment on startRoomEgress in src/lib/livekit.ts)
+      // and silently filtered out every real video track, so egress
+      // never actually retried despite track_published firing correctly.
+      // listEgress inside tryStartEgressForStation already no-ops this if
+      // egress is somehow already running (e.g. this fires after a video
+      // track that room_started's attempt already caught).
+      if (event.track?.type === TrackType.VIDEO) {
         await tryStartEgressForStation(station, roomName);
       }
       break;

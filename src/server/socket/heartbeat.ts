@@ -1,5 +1,5 @@
 import { db } from "@/lib/db";
-import { roomService, ingressParticipantIdentity } from "@/lib/livekit";
+import { roomService } from "@/lib/livekit";
 import { publishEvent } from "@/lib/events";
 import { tryStartEgressForStation } from "@/lib/egress-orchestration";
 
@@ -60,17 +60,17 @@ async function checkStation(station: {
 
   let isPublishing = false;
   try {
-    const participant = await roomService.getParticipant(
-      roomName,
-      ingressParticipantIdentity(station.id)
-    );
-    // A participant can still be joined but not actually sending video
-    // (e.g. OBS froze but the TCP connection is technically alive) — only
-    // count it healthy if at least one track is actually publishing.
-    isPublishing = participant.tracks.some((t) => !t.muted);
+    // Not looking up by a predicted identity (station-${station.id}) —
+    // see the comment on startRoomEgress in src/lib/livekit.ts for why
+    // that assumption doesn't hold against LiveKit Cloud's hosted RTMP
+    // ingress. A station's room only ever has one publisher by design, so
+    // just check whether anyone in the room has an actively-publishing
+    // (unmuted) track.
+    const participants = await roomService.listParticipants(roomName);
+    isPublishing = participants.some((p) => p.tracks.some((t) => !t.muted));
   } catch {
-    // getParticipant throws (404-equivalent) when the ingress participant
-    // isn't in the room at all — encoder disconnected without a clean
+    // listParticipants throwing here means the room itself doesn't exist
+    // on LiveKit's side at all — encoder disconnected without a clean
     // room_finished webhook (the exact "flappy encoder" case
     // StationAssignmentBoard's force-close-room button exists for).
     isPublishing = false;
