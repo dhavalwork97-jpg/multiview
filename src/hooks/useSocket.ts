@@ -3,8 +3,24 @@
 import { useEffect, useRef } from "react";
 import { io, type Socket } from "socket.io-client";
 
-const SOCKET_URL =
-  process.env.NEXT_PUBLIC_SOCKET_URL ?? "http://localhost:4000";
+const SOCKET_URL = process.env.NEXT_PUBLIC_SOCKET_URL ?? "http://localhost:4000";
+
+if (!process.env.NEXT_PUBLIC_SOCKET_URL && process.env.NODE_ENV === "production") {
+  // Falling back silently here means the socket just reconnect-loops
+  // forever against a localhost address the production CSP correctly
+  // blocks (see connect-src in next.config.ts) — every attempt shows up
+  // as a CSP violation in the console with nothing pointing at "you
+  // forgot to set an env var on Vercel." This is that pointer.
+  console.error(
+    "[socket] NEXT_PUBLIC_SOCKET_URL is not set — falling back to " +
+      "http://localhost:4000, which the production Content-Security-Policy " +
+      "blocks. Set NEXT_PUBLIC_SOCKET_URL in Vercel (Project Settings → " +
+      "Environment Variables) to your Render socket URL, e.g. " +
+      "wss://fgc-stream-socket-xxxx.onrender.com, then redeploy — " +
+      "NEXT_PUBLIC_* vars are baked in at build time, so a save alone " +
+      "won't apply to the current deployment."
+  );
+}
 
 // One shared connection per browser tab, reused across every component
 // that calls this hook, rather than one socket per component instance.
