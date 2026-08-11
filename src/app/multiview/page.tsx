@@ -24,7 +24,7 @@ export default async function MultiViewPage({
     },
     orderBy: { label: "asc" },
     take: tiles,
-    select: { id: true, label: true, playbackIdHls: true },
+    select: { id: true, label: true, youtubeVideoId: true },
   });
 
   return (
@@ -43,7 +43,7 @@ export default async function MultiViewPage({
         <p className="text-sm text-ink-faint">No stations are live right now.</p>
       ) : (
         <MultiView
-          stations={stations.map((s) => ({ id: s.id, label: s.label, hlsPlaylistKey: s.playbackIdHls }))}
+          stations={stations.map((s) => ({ id: s.id, label: s.label, youtubeVideoId: s.youtubeVideoId }))}
           layout={tiles}
         />
       )}

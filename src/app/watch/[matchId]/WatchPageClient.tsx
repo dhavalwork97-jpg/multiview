@@ -14,7 +14,7 @@ type InitialMatch = {
   tournamentId: string;
   playerOne: { gamertag: string };
   playerTwo: { gamertag: string };
-  station: { id: string; label: string; playbackIdHls: string | null; playbackIdWebrtc: string | null } | null;
+  station: { id: string; label: string; youtubeVideoId: string | null } | null;
   tournament: { name: string };
   startedAt: string | null;
 };
@@ -30,6 +30,26 @@ export function WatchPageClient({
   const [viewerCount, setViewerCount] = useState<number | null>(null);
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
   const socket = useSocket({ matchId: initialMatch.id });
+
+  useEffect(() => {
+    if (!match.station) return;
+    let cancelled = false;
+    async function sync() {
+      try {
+        const res = await fetch(`/api/stations/${match.station!.id}/youtube-status`, { cache: "no-store" });
+        if (!res.ok || cancelled) return;
+        const data = await res.json();
+        if (cancelled) return;
+        setMatch((prev) => ({ ...prev, status: data.isLive ? "LIVE" : prev.status === "LIVE" && data.broadcastStatus === "complete" ? "COMPLETED" : prev.status }));
+      } catch {
+        // The player performs its own status polling; this is only to keep the
+        // score/status header synchronized with the media state.
+      }
+    }
+    sync();
+    const timer = setInterval(sync, 5000);
+    return () => { cancelled = true; clearInterval(timer); };
+  }, [match.station]);
 
   useEffect(() => {
     if (!match.startedAt) return;
@@ -79,7 +99,7 @@ export function WatchPageClient({
         {match.station ? (
           <VideoPlayer
             stationId={match.station.id}
-            hlsPlaylistKey={match.station.playbackIdHls}
+            youtubeVideoId={match.station.youtubeVideoId}
             isPremium={isPremium}
             isLive={match.status === "LIVE"}
           />

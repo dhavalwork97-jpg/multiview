@@ -24,7 +24,7 @@ export default async function WatchPage({ params }: { params: Promise<{ matchId:
       startedAt: true,
       playerOne: { select: { gamertag: true } },
       playerTwo: { select: { gamertag: true } },
-      station: { select: { id: true, label: true, playbackIdHls: true, playbackIdWebrtc: true } },
+      station: { select: { id: true, label: true, youtubeVideoId: true } },
       tournament: { select: { name: true } },
     },
   });

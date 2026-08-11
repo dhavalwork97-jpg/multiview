@@ -43,7 +43,7 @@ export async function GET(req: Request) {
       playerOne: { select: { id: true, gamertag: true, avatarUrl: true, country: true } },
       playerTwo: { select: { id: true, gamertag: true, avatarUrl: true, country: true } },
       station: {
-        select: { id: true, label: true, playbackIdHls: true, playbackIdWebrtc: true, status: true },
+        select: { id: true, label: true, youtubeVideoId: true, status: true },
       },
       tournament: { select: { id: true, name: true, slug: true, game: true } },
     },

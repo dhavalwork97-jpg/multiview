@@ -30,6 +30,7 @@ export async function GET(req: Request) {
       currentBitrateKbps: true,
       droppedFrames: true,
       playbackIdHls: true,
+      youtubeVideoId: true,
       matches: {
         where: { status: "LIVE" },
         take: 1,

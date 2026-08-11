@@ -237,7 +237,13 @@ model Station {
   ingressId       String?        // LiveKit Ingress resource id
   ingestUrl       String?        // RTMP/WHIP ingest endpoint assigned to this station
   playbackIdHls   String?        // CloudFront path prefix for this station's live HLS output
-  playbackIdWebrtc String?       // LiveKit room name (also used for the WebRTC subscribe path)
+  playbackIdWebrtc String?       // Legacy LiveKit room name; retained during migration
+  youtubeStreamId String?       // Persistent YouTube Live Stream resource for this station
+  youtubeBroadcastId String?    // Current YouTube Live Broadcast resource
+  youtubeVideoId String?        // Current YouTube video/live playback id
+  youtubeIngestUrl String?      // YouTube RTMP ingest URL
+  youtubeLiveStatus String?     // created|ready|liveStarting|live|complete|...
+  youtubeLastStatusAt DateTime?
 
   lastHeartbeatAt DateTime?
   currentBitrateKbps Int?

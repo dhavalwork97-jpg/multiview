@@ -2,9 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { HlsPlayer } from "./HlsPlayer";
-import { LiveKitPlayer } from "./LiveKitPlayer";
-import { cdnUrl } from "@/lib/cdn";
+import { YouTubePlayer } from "./YouTubePlayer";
 
 const DOCK_MARGIN = 16; // matches the default bottom-4/right-4 offset
 
@@ -19,8 +17,7 @@ export type DockMatch = {
   station: {
     id: string;
     label: string;
-    playbackIdHls: string | null;
-    playbackIdWebrtc: string | null;
+    youtubeVideoId: string | null;
   } | null;
 };
 
@@ -101,13 +98,7 @@ export function BracketWatchDock({
   if (!match) return null;
 
   const isLive = match.status === "LIVE";
-  const hasHls = !!match.station?.playbackIdHls;
-  // WebRTC is a fallback specifically for when the room is live but HLS
-  // isn't ready — e.g. LiveKit's egress quota is exhausted (see
-  // STREAMING_ARCHITECTURE.md), or egress just hasn't produced its first
-  // segment yet. It needs no egress at all, just a direct room
-  // subscription, so it works whenever OBS is actually connected.
-  const canFallBackToWebrtc = isLive && !!match.station?.playbackIdWebrtc;
+  const videoId = match.station?.youtubeVideoId ?? null;
 
   return (
     <div
@@ -165,23 +156,11 @@ export function BracketWatchDock({
 
       {!minimized && (
         <>
-          {hasHls ? (
-            // Keying on match.id forces a clean unmount/remount of the
-            // hls.js instance when the viewer clicks a different bracket
-            // match, instead of trying to redirect an in-flight instance.
-            <HlsPlayer key={match.id} src={cdnUrl(`${match.station!.playbackIdHls}/index.m3u8`)} />
-          ) : canFallBackToWebrtc ? (
-            <LiveKitPlayer key={match.id} stationId={match.station!.id} />
+          {match.station ? (
+            <YouTubePlayer key={match.id} stationId={match.station.id} videoId={videoId} isLive={isLive} />
           ) : (
             <div className="flex aspect-video w-full flex-col items-center justify-center gap-1 bg-arena-950 px-4 text-center text-xs text-ink-faint">
-              {isLive ? (
-                <>
-                  <span>Station is live but no playback source yet.</span>
-                  <span>Waiting on the encoder or the first HLS segment…</span>
-                </>
-              ) : (
-                <span>Not live yet</span>
-              )}
+              <span>{isLive ? "Waiting for YouTube Live…" : "Not live yet"}</span>
             </div>
           )}
 

@@ -3,7 +3,7 @@ import { Server } from "socket.io";
 import { createAdapter } from "@socket.io/redis-adapter";
 import Redis from "ioredis";
 import { EVENTS_CHANNEL, type AppEvent } from "@/lib/events";
-import { startHeartbeatPoller } from "./heartbeat";
+import { startStationHeartbeat } from "./heartbeat";
 
 // Standalone process (run via `npm run socket:dev`, deployed separately
 // from the Next.js app in Phase 5). Talks to clients over Socket.IO and
@@ -129,4 +129,4 @@ httpServer.listen(PORT, () => {
 // This is the one persistent, always-on process in the stack (see
 // src/server/socket/heartbeat.ts for why it lives here rather than a
 // Vercel API route) — station health monitoring runs from here.
-startHeartbeatPoller();
+startStationHeartbeat();

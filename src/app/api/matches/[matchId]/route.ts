@@ -4,6 +4,7 @@ import { db } from "@/lib/db";
 import { requireRole } from "@/lib/auth";
 import { publishEvent } from "@/lib/events";
 import { advanceBracket } from "@/lib/bracket-progression";
+import { createBroadcastForMatch } from "@/lib/youtube";
 
 const updateSchema = z.object({
   playerOneScore: z.number().int().min(0).optional(),
@@ -52,6 +53,25 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ matchI
   }
 
   const updated = await db.match.update({ where: { id: matchId }, data });
+
+  // YouTube replaces the old LiveKit room-start webhook. Creating the
+  // broadcast here keeps match state as the single source of truth while
+  // YouTube owns the actual media transport.
+  if (parsed.data.status === "LIVE" && updated.stationId && !existing.startedAt) {
+    try {
+      const broadcast = await createBroadcastForMatch(matchId);
+      await db.station.update({
+        where: { id: updated.stationId },
+        data: { youtubeBroadcastId: broadcast.broadcastId, youtubeVideoId: broadcast.videoId },
+      });
+    } catch (error) {
+      console.error("[youtube broadcast] failed to create broadcast", error);
+      // Roll back the visible match state rather than advertising LIVE when
+      // YouTube has not been prepared. The organizer gets a clear error.
+      await db.match.update({ where: { id: matchId }, data: { status: "QUEUED", startedAt: null } });
+      return NextResponse.json({ error: error instanceof Error ? error.message : "Failed to prepare YouTube Live" }, { status: 503 });
+    }
+  }
 
   await publishEvent({
     type: "match:updated",

@@ -24,7 +24,7 @@ const CONTENT_SECURITY_POLICY = [
   `connect-src 'self' https://*.cloudfront.net https://*.supabase.co wss://*.onrender.com wss://*.fly.dev wss://media.fgcstream.com https://media.fgcstream.com https://*.clerk.accounts.dev https://*.clerk.com https://challenges.cloudflare.com`,
   "img-src 'self' data: https:",
   "font-src 'self' data:",
-  "frame-src https://*.clerk.accounts.dev https://*.clerk.com https://challenges.cloudflare.com",
+  "frame-src https://*.clerk.accounts.dev https://*.clerk.com https://challenges.cloudflare.com https://www.youtube-nocookie.com https://www.youtube.com",
   // Clerk spins up blob:-sourced web workers for background token
   // refresh. With no worker-src set, browsers fall back to script-src,
   // which doesn't include blob: — this line stops that fallback from

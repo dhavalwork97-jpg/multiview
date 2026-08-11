@@ -34,7 +34,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ bracket
           // ready yet (or, e.g., LiveKit's egress quota is exhausted —
           // see STREAMING_ARCHITECTURE.md), the dock can still subscribe
           // directly to the WebRTC room, which needs no egress at all.
-          station: { select: { id: true, label: true, playbackIdHls: true, playbackIdWebrtc: true } },
+          station: { select: { id: true, label: true, youtubeVideoId: true } },
         },
       },
     },

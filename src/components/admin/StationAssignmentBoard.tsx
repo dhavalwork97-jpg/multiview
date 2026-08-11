@@ -19,6 +19,7 @@ type StationHealth = {
   currentBitrateKbps: number | null;
   droppedFrames: number | null;
   isStale: boolean;
+  youtubeVideoId: string | null;
   matches: { id: string; playerOne: { gamertag: string }; playerTwo: { gamertag: string } }[];
 };
 
@@ -58,11 +59,13 @@ export function StationAssignmentBoard({ tournamentId }: { tournamentId: string 
 
   useEffect(() => {
     refresh();
-    // Station health (heartbeat, bitrate, dropped frames) changes
-    // frequently — refresh on the station:status push rather than polling.
+    // YouTube has no per-station webhook in this app, so the socket server
+    // heartbeat and this dashboard refresh provide the near-real-time UI.
     socket.on("station:status", refresh);
     socket.on("match:assigned", refresh);
+    const timer = setInterval(refresh, 5000);
     return () => {
+      clearInterval(timer);
       socket.off("station:status", refresh);
       socket.off("match:assigned", refresh);
     };
@@ -116,24 +119,7 @@ export function StationAssignmentBoard({ tournamentId }: { tournamentId: string 
     }
   }
 
-  const [resettingRoom, setResettingRoom] = useState<string | null>(null);
 
-  // A flappy encoder (rapid connect/reconnect) can leave a station's
-  // LiveKit room stuck "active" without a clean room_finished — the next
-  // real connection then just joins the stale room instead of firing a
-  // fresh room_started, and egress only starts on room_started (see
-  // api/webhooks/livekit/route.ts), so nothing streams until it's
-  // cleared. This forces that from the UI instead of needing LiveKit's
-  // own dashboard.
-  async function resetRoom(stationId: string) {
-    setResettingRoom(stationId);
-    try {
-      await fetch(`/api/stations/${stationId}/room`, { method: "POST" });
-      await refresh();
-    } finally {
-      setResettingRoom(null);
-    }
-  }
 
   return (
     <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
@@ -210,14 +196,6 @@ export function StationAssignmentBoard({ tournamentId }: { tournamentId: string 
                 onFetch={() => getStreamingCredentials(s.id)}
               />
 
-              <button
-                type="button"
-                onClick={() => resetRoom(s.id)}
-                disabled={resettingRoom === s.id}
-                className="mt-2 rounded border border-arena-600 px-2 py-1 font-mono text-[11px] uppercase tracking-wide text-ink-faint hover:border-signal-warn hover:text-signal-warn disabled:opacity-50"
-              >
-                {resettingRoom === s.id ? "Closing room…" : "Force-close stuck room"}
-              </button>
             </li>
           ))}
         </ul>
@@ -282,12 +260,11 @@ function StreamingCredentialsPanel({
   return (
     <div className="mt-2 space-y-1.5 rounded border border-arena-600 bg-arena-900 p-2">
       <p className="text-[10px] uppercase tracking-wide text-ink-faint">
-        Paste these into OBS (Settings → Stream → Custom) — treat the stream key like a
-        password.
+        Paste these into OBS (Settings → Stream → Custom). This is the YouTube RTMP input for this station; treat the stream key like a password.
       </p>
 
       <CredentialRow
-        label="Server (RTMP URL)"
+        label="Server (YouTube RTMP URL)"
         value={ingestUrl}
         masked={false}
         copied={justCopied === "url"}
@@ -308,7 +285,7 @@ function StreamingCredentialsPanel({
         onClick={onFetch}
         className="pt-1 font-mono text-[10px] uppercase tracking-wide text-ink-faint underline hover:text-ink"
       >
-        Regenerate (invalidates the key above)
+        Get / reuse station key
       </button>
     </div>
   );

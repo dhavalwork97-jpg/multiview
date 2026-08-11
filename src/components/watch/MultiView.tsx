@@ -1,9 +1,8 @@
 "use client";
 
-import { HlsPlayer } from "./HlsPlayer";
-import { cdnUrl } from "@/lib/cdn";
+import { YouTubePlayer } from "./YouTubePlayer";
 
-type MultiViewStation = { id: string; label: string; hlsPlaylistKey: string | null };
+type MultiViewStation = { id: string; label: string; youtubeVideoId: string | null };
 
 // Multi-view is HLS-only, deliberately — 9 simultaneous WebRTC
 // subscriptions is 9x the SFU load per viewer, which is exactly the
@@ -29,9 +28,9 @@ export function MultiView({
   return (
     <div className={`grid gap-2 ${gridClass}`}>
       {visible.map((s, i) =>
-        s.hlsPlaylistKey ? (
+        s.youtubeVideoId ? (
           <div key={s.id} className="relative">
-            <HlsPlayer src={cdnUrl(`${s.hlsPlaylistKey}/index.m3u8`)} muted={i !== 0} />
+            <YouTubePlayer stationId={s.id} videoId={s.youtubeVideoId} isLive={true} muted={i !== 0} />
             <span className="absolute left-2 top-2 rounded bg-arena-950/80 px-1.5 py-0.5 font-mono text-[10px] uppercase text-ink-muted">
               {s.label}
             </span>
