@@ -1,6 +1,7 @@
 import { db } from "@/lib/db";
 import { roomService, ingressParticipantIdentity } from "@/lib/livekit";
 import { publishEvent } from "@/lib/events";
+import { tryStartEgressForStation } from "@/lib/egress-orchestration";
 
 // Real heartbeat monitoring. `lastHeartbeatAt` used to be set exactly once,
 // at `room_started`, and never refreshed — every station reads as "stale"
@@ -34,7 +35,13 @@ export function startHeartbeatPoller() {
 async function pollLiveStations() {
   const liveStations = await db.station.findMany({
     where: { status: "LIVE" },
-    select: { id: true, tournamentId: true, playbackIdWebrtc: true, status: true },
+    select: {
+      id: true,
+      tournamentId: true,
+      playbackIdWebrtc: true,
+      playbackIdHls: true,
+      status: true,
+    },
   });
 
   if (liveStations.length === 0) return;
@@ -46,6 +53,7 @@ async function checkStation(station: {
   id: string;
   tournamentId: string;
   playbackIdWebrtc: string | null;
+  playbackIdHls: string | null;
 }) {
   if (!station.playbackIdWebrtc) return;
   const roomName = station.playbackIdWebrtc;
@@ -80,6 +88,20 @@ async function checkStation(station: {
       status: "LIVE",
       lastHeartbeatAt: updated.lastHeartbeatAt?.toISOString() ?? null,
     });
+
+    // Genuinely publishing, but egress never actually started — either
+    // the initial room_started attempt lost the race with OBS's RTMP
+    // handshake AND the track_published retry also failed (most likely:
+    // LiveKit's egress endpoint rate-limited both attempts, see
+    // src/lib/egress-orchestration.ts), or a webhook delivery was lost
+    // outright. This poller runs every 20s, which is a far safer retry
+    // cadence against a rate limit than hammering the webhook's own
+    // retry would be — so just try again here. Cheap when it's already
+    // succeeded: tryStartEgressForStation checks LiveKit's own active
+    // egress list first and no-ops if one's already running.
+    if (!station.playbackIdHls) {
+      await tryStartEgressForStation(station, roomName);
+    }
   } else {
     // Don't refresh the heartbeat, and flip to ERROR immediately rather
     // than waiting out the stale-check window — we just asked LiveKit

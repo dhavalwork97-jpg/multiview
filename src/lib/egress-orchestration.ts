@@ -1,17 +1,23 @@
 import { db } from "@/lib/db";
 import { publishEvent } from "@/lib/events";
 import { startRoomEgress, egressClient } from "@/lib/livekit";
-import type { Station } from "@prisma/client";
 
 /**
- * Shared by both room_started (fast path — the track may already be
- * published by the time this fires) and track_published (retry path — see
- * the comment on the room_started case for why this is needed at all).
- * Idempotent: the listEgress check means calling this twice for the same
- * room once egress is already running is a safe no-op, not a duplicate
- * start.
+ * Shared by three call sites, all of which only ever need the station's id:
+ * room_started (fast path — the track may already be published by the
+ * time this fires), track_published (retry path — see the comment on the
+ * room_started case in the webhook route for why this is needed at all),
+ * and the heartbeat poller (src/server/socket/heartbeat.ts — retries a
+ * LIVE-but-no-playback station on its own ~20s cadence, which matters
+ * because LiveKit's egress endpoint rate-limits how many jobs can start in
+ * a short window, and neither of the webhook-triggered attempts above gets
+ * a second try if they land in that window).
+ *
+ * Idempotent: the listEgress check means calling this twice (or three
+ * times) for the same room once egress is already running is a safe
+ * no-op, not a duplicate start.
  */
-export async function tryStartEgressForStation(station: Station, roomName: string) {
+export async function tryStartEgressForStation(station: { id: string }, roomName: string) {
   const liveMatch = await db.match.findFirst({
     where: { stationId: station.id, status: { in: ["QUEUED", "LIVE"] } },
     orderBy: { createdAt: "desc" },
@@ -82,16 +88,28 @@ export async function tryStartEgressForStation(station: Station, roomName: strin
     // "No published video track found" here is the expected, benign
     // outcome of the room_started fast-path attempt losing the race with
     // OBS's RTMP handshake — track_published will retry this exact call
-    // moments later once the track exists. Anything else (S3 credentials,
-    // an unreachable egress service, a real LiveKit error) is a genuine
-    // failure and stays loud rather than getting swallowed. Either way,
-    // still return 200 to the caller so LiveKit doesn't treat this as a
-    // delivery failure and start retrying the whole webhook.
-    const benign = err instanceof Error && err.message.includes("No published video track found");
-    if (benign) {
-      console.log(`[livekit webhook] station=${station.id} — video track not published yet, will retry on track_published`);
+    // moments later once the track exists. A 429 from LiveKit's egress
+    // endpoint is also expected/retriable, not a config problem — LiveKit
+    // Cloud's free tier rate-limits how many egress jobs can start in a
+    // short window, and repeated OBS reconnects while testing are enough
+    // to trip it. track_published only fires once per track though, so
+    // there's nothing left in THIS code path to retry a 429 against —
+    // the heartbeat poller (src/server/socket/heartbeat.ts) is what
+    // actually retries a LIVE-but-no-playback station on its own ~20s
+    // cadence, which is a much safer retry spacing against a rate limit
+    // than hammering the same request again immediately would be.
+    // Anything else (bad S3 credentials, an unreachable egress service,
+    // a real LiveKit error) is a genuine failure and stays loud.
+    const message = err instanceof Error ? err.message : String(err);
+    const isMissingTrack = message.includes("No published video track found");
+    const isRateLimited = message.includes("429");
+
+    if (isMissingTrack) {
+      console.log(`[egress] station=${station.id} — video track not published yet, will retry on track_published`);
+    } else if (isRateLimited) {
+      console.log(`[egress] station=${station.id} — LiveKit egress rate-limited (429), heartbeat poller will retry`);
     } else {
-      console.error(`[livekit webhook] egress failed to start for station=${station.id}:`, err);
+      console.error(`[egress] failed to start for station=${station.id}:`, err);
     }
   }
 }
