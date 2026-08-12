@@ -230,25 +230,48 @@ export async function getStreamAndBroadcastStatus(stationId: string) {
 
   let broadcastStatus: string | null = null;
   let videoId = station.youtubeVideoId;
+  let broadcast: YouTubeBroadcast | undefined;
+
   if (station.youtubeBroadcastId) {
     const broadcastData = await youtubeRequest<{ items: YouTubeBroadcast[] }>(
       `/liveBroadcasts?part=status,contentDetails&id=${encodeURIComponent(station.youtubeBroadcastId)}`
     );
-    const broadcast = broadcastData.items?.[0];
-    broadcastStatus = broadcast?.status?.lifeCycleStatus ?? null;
-    videoId = broadcast?.id ?? videoId;
+    broadcast = broadcastData.items?.[0];
+  }
+
+  // If the stored broadcast id is missing/stale, recover the active broadcast
+  // by matching YouTube's boundStreamId to this station's reusable stream.
+  // This is important when the organizer starts OBS/YouTube from a previously
+  // created station stream or when the database missed the broadcast update.
+  if (!broadcast && station.youtubeStreamId) {
+    const active = await youtubeRequest<{ items: YouTubeBroadcast[] }>(
+      `/liveBroadcasts?part=status,contentDetails&broadcastStatus=active&mine=true`
+    );
+    broadcast = active.items?.find(
+      (candidate) => candidate.contentDetails?.boundStreamId === station.youtubeStreamId
+    );
+
+    if (broadcast?.id) {
+      await db.station.update({
+        where: { id: stationId },
+        data: { youtubeBroadcastId: broadcast.id, youtubeVideoId: broadcast.id },
+      });
+    }
+  }
+
+  if (broadcast) {
+    broadcastStatus = broadcast.status?.lifeCycleStatus ?? null;
+    videoId = broadcast.id ?? videoId;
 
     // OBS can be sending a healthy RTMP feed while the YouTube broadcast is
-    // still in READY/TESTING. The website player intentionally waits for the
-    // broadcast to be LIVE, so promote it as soon as YouTube confirms that
-    // the bound stream is active. This removes the manual "Go Live" step and
-    // prevents the viewer from being stuck on "Connecting to live stream".
-    if (broadcast?.id && streamStatus === "active" && (broadcastStatus === "ready" || broadcastStatus === "testing")) {
+    // still in READY/TESTING. Promote it when possible; if YouTube has already
+    // made it LIVE, simply use that state.
+    if (broadcast.id && streamStatus === "active" && (broadcastStatus === "ready" || broadcastStatus === "testing")) {
       try {
-        await transitionBroadcastLive(broadcast.id);
-        broadcastStatus = "live";
+        const transitioned = await transitionBroadcastLive(broadcast.id);
+        broadcastStatus = transitioned.items?.[0]?.status?.lifeCycleStatus ?? "live";
       } catch (error) {
-        console.warn("[youtube] broadcast is not ready to transition yet", error);
+        console.warn("[youtube] broadcast transition not available yet", error);
       }
     }
   }

@@ -25,7 +25,12 @@ export function YouTubePlayer({ stationId, videoId, isLive, muted = false }: { s
     return () => { cancelled = true; clearInterval(timer); };
   }, [stationId, isLive]);
 
-  if (status === "live" && currentVideoId) {
+  // The YouTube video id is the authoritative playback source. Do not gate
+  // the iframe on our cached DB status: YouTube can already be LIVE while the
+  // status poll is a few seconds behind (or the station row was not updated).
+  // Showing the embed as soon as an id exists makes the viewer resilient to
+  // status-sync delays while YouTube itself handles the actual playback state.
+  if (currentVideoId) {
     return (
       <div className="relative aspect-video w-full overflow-hidden rounded-card bg-arena-900">
         <iframe
