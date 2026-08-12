@@ -234,22 +234,50 @@ export async function getStreamAndBroadcastStatus(stationId: string) {
 
   if (station.youtubeBroadcastId) {
     const broadcastData = await youtubeRequest<{ items: YouTubeBroadcast[] }>(
-      `/liveBroadcasts?part=status,contentDetails&id=${encodeURIComponent(station.youtubeBroadcastId)}`
+      `/liveBroadcasts?part=status,contentDetails,snippet&id=${encodeURIComponent(station.youtubeBroadcastId)}`
     );
     broadcast = broadcastData.items?.[0];
+
+    // A station reuses its YouTube stream, so the saved broadcast can be an
+    // older/completed event. Treat that as stale and recover the broadcast
+    // currently bound to this station's stream.
+    if (broadcast?.contentDetails?.boundStreamId !== station.youtubeStreamId ||
+        broadcast.status?.lifeCycleStatus === "complete") {
+      broadcast = undefined;
+    }
   }
 
-  // If the stored broadcast id is missing/stale, recover the active broadcast
-  // by matching YouTube's boundStreamId to this station's reusable stream.
-  // This is important when the organizer starts OBS/YouTube from a previously
-  // created station stream or when the database missed the broadcast update.
+  // Recover a broadcast when the station row has no usable broadcast id.
+  // IMPORTANT: YouTube does NOT allow broadcastStatus and mine in the same
+  // liveBroadcasts.list request. The previous request used both and caused
+  // the exact 400 incompatibleParameters error seen in production.
+  //
+  // First ask for currently-live broadcasts. This is the fastest path when
+  // OBS is already live. If that does not find the station, fall back to the
+  // authenticated user's broadcasts and filter locally so READY/TESTING
+  // broadcasts can also be recovered before they go live.
   if (!broadcast && station.youtubeStreamId) {
     const active = await youtubeRequest<{ items: YouTubeBroadcast[] }>(
-      `/liveBroadcasts?part=status,contentDetails&broadcastStatus=active&mine=true`
+      `/liveBroadcasts?part=status,contentDetails,snippet&broadcastStatus=active&maxResults=50`
     );
     broadcast = active.items?.find(
       (candidate) => candidate.contentDetails?.boundStreamId === station.youtubeStreamId
     );
+
+    if (!broadcast) {
+      const mine = await youtubeRequest<{ items: YouTubeBroadcast[] }>(
+        `/liveBroadcasts?part=status,contentDetails,snippet&mine=true&broadcastType=all&maxResults=50`
+      );
+      const candidates = (mine.items ?? [])
+        .filter((candidate) => candidate.contentDetails?.boundStreamId === station.youtubeStreamId)
+        .filter((candidate) => candidate.status?.lifeCycleStatus !== "complete")
+        .sort((a, b) => {
+          const aTime = Date.parse(a.snippet?.scheduledStartTime ?? "") || 0;
+          const bTime = Date.parse(b.snippet?.scheduledStartTime ?? "") || 0;
+          return bTime - aTime;
+        });
+      broadcast = candidates[0];
+    }
 
     if (broadcast?.id) {
       await db.station.update({
