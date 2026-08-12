@@ -80,7 +80,7 @@ export function youtubeConfigured() {
 }
 
 export async function createReusableStream(title: string) {
-  const data = await youtubeRequest<{ items: YouTubeStream[] }>(
+  const created = await youtubeRequest<YouTubeStream>(
     "/liveStreams?part=snippet,cdn,contentDetails",
     {
       method: "POST",
@@ -97,7 +97,6 @@ export async function createReusableStream(title: string) {
     }
   );
 
-  const created = data.items?.[0];
   if (!created?.id) {
     throw new Error("YouTube returned no live stream id");
   }
@@ -165,7 +164,7 @@ export async function createBroadcastForMatch(matchId: string) {
   const scheduledStartTime = new Date(Date.now() + 60_000).toISOString();
   const title = `${match.tournament.name} — ${match.playerOne.gamertag} vs ${match.playerTwo.gamertag}`;
 
-  const data = await youtubeRequest<{ items: YouTubeBroadcast[] }>(
+  const broadcast = await youtubeRequest<YouTubeBroadcast>(
     "/liveBroadcasts?part=snippet,status,contentDetails",
     {
       method: "POST",
@@ -187,7 +186,6 @@ export async function createBroadcastForMatch(matchId: string) {
     }
   );
 
-  const broadcast = data.items?.[0];
   if (!broadcast?.id) throw new Error("YouTube returned no broadcast id");
 
   await youtubeRequest(
