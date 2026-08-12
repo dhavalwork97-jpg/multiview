@@ -97,11 +97,29 @@ export async function createReusableStream(title: string) {
     }
   );
 
-  const stream = data.items?.[0];
-  if (!stream?.id || !stream.cdn?.ingestionInfo?.ingestionAddress || !stream.cdn.ingestionInfo.streamName) {
-    throw new Error("YouTube returned an incomplete live stream resource");
+  const created = data.items?.[0];
+  if (!created?.id) {
+    throw new Error("YouTube returned no live stream id");
   }
-  return stream;
+
+  // YouTube can return the stream resource before its ingestionInfo has been
+  // populated. Fetch the resource again with the CDN part requested and give
+  // YouTube a few short attempts to finish provisioning it.
+  for (let attempt = 0; attempt < 5; attempt += 1) {
+    const refreshed = await youtubeRequest<{ items: YouTubeStream[] }>(
+      `/liveStreams?part=snippet,cdn,contentDetails&id=${encodeURIComponent(created.id)}`
+    );
+    const stream = refreshed.items?.[0];
+    if (stream?.id && stream.cdn?.ingestionInfo?.ingestionAddress && stream.cdn.ingestionInfo.streamName) {
+      return stream;
+    }
+
+    if (attempt < 4) {
+      await new Promise((resolve) => setTimeout(resolve, 1000));
+    }
+  }
+
+  throw new Error(`YouTube created live stream ${created.id} but did not return ingestion credentials after provisioning`);
 }
 
 export async function ensureStationStream(stationId: string) {
