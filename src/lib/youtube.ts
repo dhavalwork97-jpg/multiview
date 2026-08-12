@@ -237,6 +237,20 @@ export async function getStreamAndBroadcastStatus(stationId: string) {
     const broadcast = broadcastData.items?.[0];
     broadcastStatus = broadcast?.status?.lifeCycleStatus ?? null;
     videoId = broadcast?.id ?? videoId;
+
+    // OBS can be sending a healthy RTMP feed while the YouTube broadcast is
+    // still in READY/TESTING. The website player intentionally waits for the
+    // broadcast to be LIVE, so promote it as soon as YouTube confirms that
+    // the bound stream is active. This removes the manual "Go Live" step and
+    // prevents the viewer from being stuck on "Connecting to live stream".
+    if (broadcast?.id && streamStatus === "active" && (broadcastStatus === "ready" || broadcastStatus === "testing")) {
+      try {
+        await transitionBroadcastLive(broadcast.id);
+        broadcastStatus = "live";
+      } catch (error) {
+        console.warn("[youtube] broadcast is not ready to transition yet", error);
+      }
+    }
   }
 
   return { streamStatus, broadcastStatus, videoId, healthStatus, configurationIssues };
