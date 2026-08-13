@@ -18,10 +18,7 @@ type YouTubeBroadcast = {
   id: string;
   snippet?: { title?: string; scheduledStartTime?: string };
   status?: { lifeCycleStatus?: string; privacyStatus?: string };
-  contentDetails?: {
-    boundStreamId?: string;
-    enableEmbed?: boolean;
-  };
+  contentDetails?: { boundStreamId?: string };
 };
 
 const YOUTUBE_API = "https://www.googleapis.com/youtube/v3";
@@ -172,33 +169,11 @@ export async function createBroadcastForMatch(matchId: string) {
 
   const stream = await ensureStationStream(match.station.id);
 
-  // Idempotency: retries of the same Start action reuse the same broadcast,
-  // but NEVER reuse a broadcast that YouTube marked as non-embeddable.
-  //
-  // A YouTube broadcast with enableEmbed=false produces the exact
-  // "Playback on other websites has been disabled by the video owner" page
-  // seen in FGC Stream. YouTube does not allow enableEmbed to be changed once
-  // a broadcast reaches testing/live, so a bad live broadcast must not be
-  // silently reused.
+  // Idempotency: retries of the same Start action reuse the same broadcast.
   if (match.youtubeBroadcastId) {
     const existing = await getBroadcast(match.youtubeBroadcastId);
-
-    if (existing?.contentDetails?.boundStreamId === stream.streamId &&
-        existing.status?.lifeCycleStatus !== "complete") {
-      if (existing.contentDetails?.enableEmbed !== false) {
-        return { broadcastId: existing.id, videoId: existing.id, station: match.station };
-      }
-
-      const lifecycle = existing.status?.lifeCycleStatus;
-      if (lifecycle === "live" || lifecycle === "liveStarting" || lifecycle === "testing" || lifecycle === "testStarting") {
-        throw new Error(
-          `YouTube broadcast ${existing.id} is not embeddable (enableEmbed=false) and is already ${lifecycle}. ` +
-          "YouTube does not allow changing embed permission after testing/live starts. End this broadcast and start the match again."
-        );
-      }
-
-      // created/ready broadcasts can safely be replaced before they go live.
-      await deleteBroadcast(existing.id);
+    if (existing?.contentDetails?.boundStreamId === stream.streamId && existing.status?.lifeCycleStatus !== "complete") {
+      return { broadcastId: existing.id, videoId: existing.id, station: match.station };
     }
   }
 
@@ -211,7 +186,7 @@ export async function createBroadcastForMatch(matchId: string) {
     body: JSON.stringify({
       snippet: { title, description: `${match.tournament.name} · ${match.station.label}${match.round ? ` · ${match.round}` : ""}`, scheduledStartTime },
       status: { privacyStatus: "unlisted" },
-      contentDetails: { enableAutoStart: true, enableAutoStop: true, enableDvr: true, recordFromStart: true, enableEmbed: true },
+      contentDetails: { enableAutoStart: true, enableAutoStop: true, enableDvr: true, recordFromStart: true },
     }),
   });
   if (!broadcast?.id) throw new Error("YouTube returned no broadcast id");
@@ -261,32 +236,21 @@ export async function getStreamAndBroadcastStatus(stationId: string) {
 
   if (currentMatch?.youtubeBroadcastId) {
     const candidate = await getBroadcast(currentMatch.youtubeBroadcastId);
-    if (candidate?.contentDetails?.boundStreamId === station.youtubeStreamId &&
-        candidate.contentDetails?.enableEmbed !== false) {
-      broadcast = candidate;
-    }
+    if (candidate?.contentDetails?.boundStreamId === station.youtubeStreamId) broadcast = candidate;
   }
 
   // Recovery path: never use broadcastStatus + mine in one request. Find a
-  // broadcast bound to this station stream, but only accept broadcasts that
-  // are actually embeddable by FGC Stream.
+  // broadcast bound to this station stream, then attach it to the current match.
   if (!broadcast) {
     const active = await youtubeRequest<{ items: YouTubeBroadcast[] }>(`/liveBroadcasts?part=status,contentDetails,snippet&broadcastStatus=active&maxResults=50`);
-    broadcast = active.items?.find(
-      (candidate) =>
-        candidate.contentDetails?.boundStreamId === station.youtubeStreamId &&
-        candidate.contentDetails?.enableEmbed !== false
-    );
-
+    broadcast = active.items?.find((candidate) => candidate.contentDetails?.boundStreamId === station.youtubeStreamId);
     if (!broadcast) {
       const mine = await youtubeRequest<{ items: YouTubeBroadcast[] }>(`/liveBroadcasts?part=status,contentDetails,snippet&mine=true&broadcastType=all&maxResults=50`);
       broadcast = (mine.items ?? [])
         .filter((candidate) => candidate.contentDetails?.boundStreamId === station.youtubeStreamId)
-        .filter((candidate) => candidate.contentDetails?.enableEmbed !== false)
         .filter((candidate) => candidate.status?.lifeCycleStatus !== "complete")
         .sort((a, b) => (Date.parse(b.snippet?.scheduledStartTime ?? "") || 0) - (Date.parse(a.snippet?.scheduledStartTime ?? "") || 0))[0];
     }
-
     if (broadcast?.id && currentMatch) {
       await db.match.update({ where: { id: currentMatch.id }, data: { youtubeBroadcastId: broadcast.id, youtubeVideoId: broadcast.id } });
     }

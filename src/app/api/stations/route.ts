@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { db } from "@/lib/db";
 import { requireRole } from "@/lib/auth";
+import { syncStationYoutubeStatus } from "@/lib/youtube";
 
 // GET /api/stations?tournamentId=... — organizer dashboard: every station's
 // current status, current match, and last heartbeat, for the "automatically
@@ -18,6 +19,17 @@ export async function GET(req: Request) {
   if (!tournamentId) {
     return NextResponse.json({ error: "tournamentId is required" }, { status: 400 });
   }
+
+  // The socket heartbeat normally performs this reconciliation, but the
+  // control-room API must also be self-healing when the separate socket
+  // service is asleep/down. Otherwise stopping OBS can leave a match LIVE
+  // forever and bracket progression never runs. Reconcile YouTube-backed
+  // stations before returning the dashboard state.
+  const youtubeStations = await db.station.findMany({
+    where: { tournamentId, youtubeStreamId: { not: null } },
+    select: { id: true },
+  });
+  await Promise.allSettled(youtubeStations.map((station) => syncStationYoutubeStatus(station.id)));
 
   const stations = await db.station.findMany({
     where: { tournamentId },

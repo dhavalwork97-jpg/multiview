@@ -28,7 +28,14 @@ export default async function DashboardPage() {
             Welcome back, {user.displayName ?? user.username}
           </h1>
         </div>
-        <SearchBar />
+        <div className="flex items-center gap-3">
+          <SearchBar />
+          {(user.role === "ADMIN" || user.role === "ORGANIZER") && (
+            <Link href="/admin/tournaments/new" className="rounded-card bg-signal-live px-3 py-1.5 font-mono text-xs uppercase tracking-wide text-arena-950 hover:opacity-90">
+              Create tournament
+            </Link>
+          )}
+        </div>
         <Link href="/pricing" className="rounded-card border border-arena-600 px-3 py-1.5 font-mono text-xs uppercase tracking-wide text-ink-muted hover:border-signal-live hover:text-signal-live">{isPremium(user) ? `Trial / Plans · ${trialDaysRemaining(user)}d` : "Plans & Free Trial"}</Link>
       </header>
 
@@ -57,7 +64,12 @@ export default async function DashboardPage() {
         </h2>
         {tournaments.length === 0 ? (
           <div className="rounded-card border border-dashed border-arena-600 p-6 text-ink-muted">
-            You haven't created a tournament yet.
+            <p>You haven't created a tournament yet.</p>
+            {(user.role === "ADMIN" || user.role === "ORGANIZER") && (
+              <Link href="/admin/tournaments/new" className="mt-3 inline-flex rounded-card border border-signal-live/40 px-3 py-1.5 font-mono text-xs uppercase tracking-wide text-signal-live hover:bg-signal-live/5">
+                Create your first tournament
+              </Link>
+            )}
           </div>
         ) : (
           <ul className="divide-y divide-arena-700 rounded-card border border-arena-700">

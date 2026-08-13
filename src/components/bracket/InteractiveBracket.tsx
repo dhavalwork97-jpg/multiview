@@ -79,8 +79,17 @@ export function InteractiveBracket({
     if (tournamentId) {
       socket.on("match:updated", load);
     }
+
+    // Socket.IO is an enhancement, not the source of truth. In deployments
+    // where the separate socket service is sleeping/unavailable, the bracket
+    // must still reflect a newly-created next-round match. Polling the small
+    // public bracket endpoint keeps the UI correct without requiring a
+    // manual page refresh.
+    const poll = window.setInterval(load, 5000);
+
     return () => {
       cancelled = true;
+      window.clearInterval(poll);
       if (tournamentId) socket.off("match:updated", load);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
