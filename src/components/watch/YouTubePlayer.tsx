@@ -4,32 +4,33 @@ import { useEffect, useState } from "react";
 
 export function YouTubePlayer({ stationId, videoId, isLive, muted = false }: { stationId: string; videoId: string | null; isLive: boolean; muted?: boolean }) {
   const [currentVideoId, setCurrentVideoId] = useState(videoId);
-  const [status, setStatus] = useState(isLive ? "checking" : "offline");
+  const [status, setStatus] = useState(isLive ? "starting" : "offline");
 
+  // This is a DB-only lookup. There is deliberately no polling timer.
+  // Socket.IO carries match state changes; YouTube itself owns playback state.
   useEffect(() => {
     let cancelled = false;
-    async function poll() {
+    async function loadStationState() {
       try {
         const res = await fetch(`/api/stations/${stationId}/youtube-status`, { cache: "no-store" });
         if (!res.ok) throw new Error("status request failed");
         const data = await res.json();
         if (cancelled) return;
         setCurrentVideoId(data.videoId ?? null);
-        setStatus(data.isLive ? "live" : data.broadcastStatus === "liveStarting" || data.streamStatus === "active" ? "starting" : "offline");
+        setStatus(data.isLive ? "live" : data.videoId ? "starting" : "offline");
       } catch {
-        if (!cancelled) setStatus(isLive ? "checking" : "offline");
+        if (!cancelled) setStatus(isLive ? "starting" : "offline");
       }
     }
-    poll();
-    const timer = setInterval(poll, 6000);
-    return () => { cancelled = true; clearInterval(timer); };
+    loadStationState();
+    return () => { cancelled = true; };
   }, [stationId, isLive]);
 
-  // The YouTube video id is the authoritative playback source. Do not gate
-  // the iframe on our cached DB status: YouTube can already be LIVE while the
-  // status poll is a few seconds behind (or the station row was not updated).
-  // Showing the embed as soon as an id exists makes the viewer resilient to
-  // status-sync delays while YouTube itself handles the actual playback state.
+  useEffect(() => {
+    setCurrentVideoId(videoId);
+    if (videoId) setStatus(isLive ? "live" : "starting");
+  }, [videoId, isLive]);
+
   if (currentVideoId) {
     return (
       <div className="relative aspect-video w-full overflow-hidden rounded-card bg-arena-900">
@@ -47,7 +48,7 @@ export function YouTubePlayer({ stationId, videoId, isLive, muted = false }: { s
 
   return (
     <div className="flex aspect-video w-full items-center justify-center rounded-card bg-arena-900 text-sm text-ink-muted">
-      {status === "starting" || status === "checking" ? "Connecting to live stream…" : "Not live yet"}
+      {status === "starting" ? "Connecting to live stream…" : "Not live yet"}
     </div>
   );
 }

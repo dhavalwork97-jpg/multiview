@@ -1,25 +1,23 @@
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
-import { syncStationYoutubeStatus } from "@/lib/youtube";
+import { requireTournamentAccess } from "@/lib/auth";
+import { getStationYoutubeStatus } from "@/lib/youtube";
 
+// DB-only: safe for frequent viewer requests and consumes zero YouTube quota.
 export async function GET(_req: Request, { params }: { params: Promise<{ stationId: string }> }) {
   const { stationId } = await params;
+  const station = await db.station.findUnique({ where: { id: stationId }, select: { tournamentId: true } });
+  if (!station) return NextResponse.json({ error: "Station not found" }, { status: 404 });
   try {
-    const cached = await db.station.findUnique({
-      where: { id: stationId },
-      select: { status: true, youtubeVideoId: true, youtubeLiveStatus: true, youtubeLastStatusAt: true },
-    });
-    if (!cached) return NextResponse.json({ error: "Station not found" }, { status: 404 });
+    await requireTournamentAccess(station.tournamentId);
+  } catch {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
 
-    if (cached.youtubeLastStatusAt && Date.now() - cached.youtubeLastStatusAt.getTime() < 5000) {
-      const live = cached.status === "LIVE" && cached.youtubeLiveStatus === "live";
-      return NextResponse.json({ station: cached, streamStatus: cached.youtubeLiveStatus, broadcastStatus: cached.youtubeLiveStatus, videoId: cached.youtubeVideoId, isLive: live });
-    }
-
-    const result = await syncStationYoutubeStatus(stationId);
-    return NextResponse.json({ station: result.station, streamStatus: result.streamStatus, broadcastStatus: result.broadcastStatus, videoId: result.videoId, healthStatus: result.healthStatus, configurationIssues: result.configurationIssues, isLive: result.isLive });
+  try {
+    return NextResponse.json(await getStationYoutubeStatus(stationId));
   } catch (error) {
     console.error("[youtube status]", error);
-    return NextResponse.json({ error: error instanceof Error ? error.message : "Failed to read YouTube status" }, { status: 503 });
+    return NextResponse.json({ error: error instanceof Error ? error.message : "Failed to read station status" }, { status: 503 });
   }
 }

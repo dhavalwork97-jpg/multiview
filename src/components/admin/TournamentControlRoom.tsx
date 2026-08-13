@@ -147,6 +147,21 @@ export function TournamentControlRoom({ tournamentId }: { tournamentId: string }
     }
   }
 
+  async function endStationStream(stationId: string) {
+    setBusy(`end:${stationId}`);
+    setError(null);
+    try {
+      const res = await fetch(`/api/stations/${stationId}/youtube-session`, { method: "DELETE" });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error ?? "Failed to end station stream");
+      await refresh();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Failed to end station stream");
+    } finally {
+      setBusy(null);
+    }
+  }
+
   async function getCredentials(stationId: string) {
     setBusy(`key:${stationId}`);
     setError(null);
@@ -220,6 +235,7 @@ export function TournamentControlRoom({ tournamentId }: { tournamentId: string }
                 onStart={(matchId) => void setMatchStatus(matchId, "LIVE")}
                 onEnd={(matchId, winnerId) => void setMatchStatus(matchId, "COMPLETED", winnerId)}
                 onCredentials={() => void getCredentials(station.id)}
+                onEndStation={() => void endStationStream(station.id)}
                 onToggleKey={() => setShowKeys((old) => ({ ...old, [station.id]: !old[station.id] }))}
               />
             ))}
@@ -258,7 +274,7 @@ export function TournamentControlRoom({ tournamentId }: { tournamentId: string }
       </section>
 
       <p className="text-[11px] leading-5 text-ink-faint">
-        Health is based on the YouTube ingest/broadcast state reported by the server heartbeat. This deliberately does not pretend to measure private OBS encoder metrics that YouTube does not expose through the current API. A stale LIVE station means the server has not received a fresh YouTube status update within the configured health window.
+        YouTube is used as the station playback transport, but the app does not poll YouTube in the background. Start match creates one unlisted, embeddable station broadcast when needed and later matches reuse it. End a match advances the bracket without touching YouTube; use “End station stream” only when that physical station is finished for the event.
       </p>
     </div>
   );
@@ -279,6 +295,7 @@ function StationCard({
   onStart,
   onEnd,
   onCredentials,
+  onEndStation,
   onToggleKey,
 }: {
   station: Station;
@@ -290,6 +307,7 @@ function StationCard({
   onStart: (matchId: string) => void;
   onEnd: (matchId: string, winnerId: string) => void;
   onCredentials: () => void;
+  onEndStation: () => void;
   onToggleKey: () => void;
 }) {
   const match = station.matches[0];
@@ -335,6 +353,7 @@ function StationCard({
                 </div>
               )}
               {station.youtubeVideoId && <a href={`https://www.youtube.com/watch?v=${station.youtubeVideoId}`} target="_blank" rel="noreferrer" className="rounded-card border border-arena-600 px-3 py-1.5 font-mono text-[10px] uppercase text-ink-muted hover:text-ink">Open stream</a>}
+              {station.youtubeVideoId && <button disabled={busy === `end:${station.id}`} onClick={onEndStation} className="rounded-card border border-signal-error/50 px-3 py-1.5 font-mono text-[10px] uppercase text-signal-error disabled:opacity-40">{busy === `end:${station.id}` ? "Ending…" : "End station stream"}</button>}
             </div>
           </>
         ) : (

@@ -2,7 +2,6 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { db } from "@/lib/db";
 import { requireRole } from "@/lib/auth";
-import { syncStationYoutubeStatus } from "@/lib/youtube";
 
 // GET /api/stations?tournamentId=... — organizer dashboard: every station's
 // current status, current match, and last heartbeat, for the "automatically
@@ -19,17 +18,6 @@ export async function GET(req: Request) {
   if (!tournamentId) {
     return NextResponse.json({ error: "tournamentId is required" }, { status: 400 });
   }
-
-  // The socket heartbeat normally performs this reconciliation, but the
-  // control-room API must also be self-healing when the separate socket
-  // service is asleep/down. Otherwise stopping OBS can leave a match LIVE
-  // forever and bracket progression never runs. Reconcile YouTube-backed
-  // stations before returning the dashboard state.
-  const youtubeStations = await db.station.findMany({
-    where: { tournamentId, youtubeStreamId: { not: null } },
-    select: { id: true },
-  });
-  await Promise.allSettled(youtubeStations.map((station) => syncStationYoutubeStatus(station.id)));
 
   const stations = await db.station.findMany({
     where: { tournamentId },
@@ -61,25 +49,10 @@ export async function GET(req: Request) {
     },
   });
 
-  // A station is considered stale (likely crashed encoder) if no heartbeat
-  // for this long. The socket server's heartbeat poller
-  // (src/server/socket/heartbeat.ts) now actually refreshes
-  // lastHeartbeatAt every ~20s by polling LiveKit's own room/participant
-  // state directly (and flips a station to ERROR immediately once it
-  // detects the publisher is gone, rather than waiting on this check) —
-  // so this threshold is back to being a real staleness check, not the
-  // 5-minute stopgap it was before that poller existed. It mainly catches
-  // the case where the poller itself is down (e.g. the Render socket
-  // service is asleep/restarting).
-  const STALE_THRESHOLD_MS = 60_000;
-  const now = Date.now();
-
-  const withHealth = stations.map((s) => ({
-    ...s,
-    isStale:
-      s.status === "LIVE" &&
-      (!s.lastHeartbeatAt || now - s.lastHeartbeatAt.getTime() > STALE_THRESHOLD_MS),
-  }));
+  // Direct OBS -> YouTube RTMP has no app-side encoder heartbeat. Do not
+  // query YouTube here; doing so on every dashboard refresh was a major quota
+  // drain. Station state is operator-controlled and event-driven.
+  const withHealth = stations.map((s) => ({ ...s, isStale: false }));
 
   return NextResponse.json({ stations: withHealth });
 }

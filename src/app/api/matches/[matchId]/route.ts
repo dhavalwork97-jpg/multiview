@@ -103,6 +103,21 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ matchI
 
   const updated = await db.match.update({ where: { id: matchId }, data });
 
+  if (updated.status === "COMPLETED" && updated.stationId) {
+    const station = await db.station.update({
+      where: { id: updated.stationId },
+      data: { status: "IDLE", lastHeartbeatAt: new Date() },
+      select: { status: true, lastHeartbeatAt: true },
+    });
+    await publishEvent({
+      type: "station:status",
+      tournamentId: updated.tournamentId,
+      stationId: updated.stationId,
+      status: station.status,
+      lastHeartbeatAt: station.lastHeartbeatAt?.toISOString() ?? null,
+    });
+  }
+
   await publishEvent({
     type: "match:updated",
     tournamentId: updated.tournamentId,
@@ -113,6 +128,19 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ matchI
     winnerId: updated.winnerId,
     stationId: updated.stationId,
   });
+
+  if (updated.status === "LIVE" && updated.stationId) {
+    const station = await db.station.findUnique({ where: { id: updated.stationId }, select: { status: true, lastHeartbeatAt: true } });
+    if (station) {
+      await publishEvent({
+        type: "station:status",
+        tournamentId: updated.tournamentId,
+        stationId: updated.stationId,
+        status: station.status,
+        lastHeartbeatAt: station.lastHeartbeatAt?.toISOString() ?? null,
+      });
+    }
+  }
 
   // A match going COMPLETED with a winner is the trigger for bracket
   // progression — see src/lib/bracket-progression.ts for why this is the

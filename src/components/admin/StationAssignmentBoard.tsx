@@ -63,7 +63,7 @@ export function StationAssignmentBoard({ tournamentId }: { tournamentId: string 
     // heartbeat and this dashboard refresh provide the near-real-time UI.
     socket.on("station:status", refresh);
     socket.on("match:assigned", refresh);
-    const timer = setInterval(refresh, 5000);
+    const timer = setInterval(refresh, 30000);
     return () => {
       clearInterval(timer);
       socket.off("station:status", refresh);
@@ -93,11 +93,9 @@ export function StationAssignmentBoard({ tournamentId }: { tournamentId: string 
     }
   }
 
-  // Re-calling this is safe (and sometimes necessary — e.g. a box got
-  // swapped): POST /api/stations/:id/ingress tears down any existing
-  // ingress for the station first, so an old stream key can't be used to
-  // impersonate it afterward. That does mean re-fetching invalidates
-  // whatever key was issued before, not just adds a new one.
+  // The station's YouTube RTMP stream is persistent. Re-calling this endpoint
+  // returns the stored credentials and does not create another stream or
+  // consume additional YouTube quota.
   async function getStreamingCredentials(stationId: string) {
     setCredentials((prev) => ({ ...prev, [stationId]: { status: "loading" } }));
     try {

@@ -44,7 +44,7 @@ export function StationOpsDashboard({ tournamentId }: { tournamentId: string }) 
     // room_started/room_finished — frequent enough that a poll fallback
     // isn't needed on top of it.
     socket.on("station:status", refresh);
-    const timer = setInterval(refresh, 10000);
+    const timer = setInterval(refresh, 30000);
     return () => {
       clearInterval(timer);
       socket.off("station:status", refresh);

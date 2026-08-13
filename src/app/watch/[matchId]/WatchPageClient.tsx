@@ -34,22 +34,20 @@ export function WatchPageClient({
   useEffect(() => {
     if (!match.station) return;
     let cancelled = false;
-    async function sync() {
-      try {
-        const res = await fetch(`/api/stations/${match.station!.id}/youtube-status`, { cache: "no-store" });
-        if (!res.ok || cancelled) return;
-        const data = await res.json();
-        if (cancelled) return;
-        setMatch((prev) => ({ ...prev, status: data.isLive ? "LIVE" : prev.status === "LIVE" && data.broadcastStatus === "complete" ? "COMPLETED" : prev.status }));
-      } catch {
-        // The player performs its own status polling; this is only to keep the
-        // score/status header synchronized with the media state.
-      }
-    }
-    sync();
-    const timer = setInterval(sync, 5000);
-    return () => { cancelled = true; clearInterval(timer); };
-  }, [match.station]);
+    fetch(`/api/stations/${match.station.id}/youtube-status`, { cache: "no-store" })
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (!cancelled && data) {
+          setMatch((prev) => ({
+            ...prev,
+            status: data.isLive ? "LIVE" : prev.status,
+            station: prev.station ? { ...prev.station, youtubeVideoId: data.videoId ?? prev.station.youtubeVideoId } : prev.station,
+          }));
+        }
+      })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [match.station?.id, match.status]);
 
   useEffect(() => {
     if (!match.startedAt) return;

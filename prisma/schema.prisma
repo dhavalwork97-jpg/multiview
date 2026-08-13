@@ -241,7 +241,7 @@ model Station {
   playbackIdHls   String?        // CloudFront path prefix for this station's live HLS output
   playbackIdWebrtc String?       // Legacy LiveKit room name; retained during migration
   youtubeStreamId String?       // Persistent YouTube Live Stream resource for this station
-  youtubeBroadcastId String?    // Current YouTube Live Broadcast resource
+  youtubeBroadcastId String?    // Current YouTube Live Broadcast resource for this station session
   youtubeVideoId String?        // Current YouTube video/live playback id
   youtubeIngestUrl String?      // YouTube RTMP ingest URL
   youtubeLiveStatus String?     // created|ready|liveStarting|live|complete|...
@@ -285,9 +285,9 @@ model Match {
   // on it with a single indexed query.
   hypeScore     Float?       @default(0)
 
-  // YouTube broadcast belongs to the match, not the physical station. A
-  // station reuses one RTMP stream key across many matches, while every
-  // match gets its own YouTube Live Broadcast/video.
+  // Match-scoped reference to the station's current YouTube broadcast.
+  // Multiple matches on one station can share the same unlisted YouTube live
+  // video; bracket/match state is managed by the app.
   youtubeBroadcastId String?
   youtubeVideoId     String?
 
