@@ -185,7 +185,7 @@ export async function createBroadcastForMatch(matchId: string) {
     body: JSON.stringify({
       snippet: { title, description: `${match.tournament.name} · ${match.station.label}${match.round ? ` · ${match.round}` : ""}`, scheduledStartTime },
       status: { privacyStatus: "unlisted" },
-      contentDetails: { enableAutoStart: true, enableAutoStop: true, enableDvr: true, recordFromStart: true, enableEmbed: true },
+      contentDetails: { enableAutoStart: true, enableAutoStop: true, enableDvr: true, recordFromStart: true },
     }),
   });
   if (!broadcast?.id) throw new Error("YouTube returned no broadcast id");
