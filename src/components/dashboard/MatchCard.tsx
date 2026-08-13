@@ -11,7 +11,7 @@ export type MatchCardData = {
   youtubeVideoId?: string | null;
   playerOne: { gamertag: string; country: string | null };
   playerTwo: { gamertag: string; country: string | null };
-  station: { label: string } | null;
+  station: { id: string; label: string } | null;
 };
 
 export function MatchCard({ match }: { match: MatchCardData }) {
