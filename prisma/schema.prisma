@@ -285,6 +285,12 @@ model Match {
   // on it with a single indexed query.
   hypeScore     Float?       @default(0)
 
+  // YouTube broadcast belongs to the match, not the physical station. A
+  // station reuses one RTMP stream key across many matches, while every
+  // match gets its own YouTube Live Broadcast/video.
+  youtubeBroadcastId String?
+  youtubeVideoId     String?
+
   // Position within Bracket.structure (round index, then index within that
   // round's matches array), 0-based. Set at creation — either at bracket
   // import time (see POST /api/brackets) or when a later round's Match row

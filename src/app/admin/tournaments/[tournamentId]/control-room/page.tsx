@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 import Link from "next/link";
-import { getCurrentUser } from "@/lib/auth";
+import { requireTournamentAccess } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { TournamentControlRoom } from "@/components/admin/TournamentControlRoom";
 
@@ -10,10 +10,7 @@ export default async function TournamentControlRoomPage({
   params: Promise<{ tournamentId: string }>;
 }) {
   const { tournamentId } = await params;
-  const user = await getCurrentUser();
-  if (!user || (user.role !== "ORGANIZER" && user.role !== "ADMIN")) {
-    redirect("/dashboard");
-  }
+  try { await requireTournamentAccess(tournamentId); } catch { redirect("/dashboard"); }
 
   const tournament = await db.tournament.findUnique({
     where: { id: tournamentId },

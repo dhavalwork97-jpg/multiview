@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { db } from "@/lib/db";
-import { requireRole } from "@/lib/auth";
+import { requireTournamentAccess } from "@/lib/auth";
 import { publishEvent } from "@/lib/events";
 
 const assignSchema = z.object({ stationId: z.string() });
@@ -13,12 +13,6 @@ const assignSchema = z.object({ stationId: z.string() });
 // already have a different LIVE match on it) that doesn't belong mixed
 // into generic score/status updates.
 export async function POST(req: Request, { params }: { params: Promise<{ matchId: string }> }) {
-  try {
-    await requireRole(["ORGANIZER", "ADMIN"]);
-  } catch {
-    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-  }
-
   const { matchId } = await params;
   const body = await req.json();
   const parsed = assignSchema.safeParse(body);
@@ -28,6 +22,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ matchId
 
   const match = await db.match.findUnique({ where: { id: matchId } });
   if (!match) return NextResponse.json({ error: "Match not found" }, { status: 404 });
+  try { await requireTournamentAccess(match.tournamentId); } catch { return NextResponse.json({ error: "Forbidden" }, { status: 403 }); }
 
   const station = await db.station.findUnique({ where: { id: parsed.data.stationId } });
   if (!station || station.tournamentId !== match.tournamentId) {

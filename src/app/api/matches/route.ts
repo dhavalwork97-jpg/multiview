@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { db } from "@/lib/db";
-import { requireRole } from "@/lib/auth";
+import { requireTournamentAccess } from "@/lib/auth";
 
 const listQuerySchema = z.object({
   tournamentId: z.string().optional(),
@@ -42,6 +42,7 @@ export async function GET(req: Request) {
       hypeScore: true,
       playerOne: { select: { id: true, gamertag: true, avatarUrl: true, country: true } },
       playerTwo: { select: { id: true, gamertag: true, avatarUrl: true, country: true } },
+      youtubeVideoId: true,
       station: {
         select: { id: true, label: true, youtubeVideoId: true, status: true },
       },
@@ -66,17 +67,12 @@ const assignSchema = z.object({
 // onto a station. This is the action the "Assign matches to stations"
 // dashboard feature calls.
 export async function POST(req: Request) {
-  try {
-    await requireRole(["ORGANIZER", "ADMIN"]);
-  } catch (err) {
-    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-  }
-
   const body = await req.json();
   const parsed = assignSchema.safeParse(body);
   if (!parsed.success) {
     return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
   }
+  try { await requireTournamentAccess(parsed.data.tournamentId); } catch { return NextResponse.json({ error: "Forbidden" }, { status: 403 }); }
 
   const match = await db.match.create({
     data: {

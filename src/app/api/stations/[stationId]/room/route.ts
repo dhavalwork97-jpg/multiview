@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
-import { requireRole } from "@/lib/auth";
+import { requireTournamentAccess } from "@/lib/auth";
 import { getRoomService, roomNameForStation } from "@/lib/livekit";
 
 // GET  /api/stations/:stationId/room  — is this station's LiveKit room
@@ -17,15 +17,10 @@ import { getRoomService, roomNameForStation } from "@/lib/livekit";
 //      api/webhooks/livekit/route.ts), so nothing streams until the
 //      stale room is cleared.
 export async function GET(_req: Request, { params }: { params: Promise<{ stationId: string }> }) {
-  try {
-    await requireRole(["ORGANIZER", "ADMIN"]);
-  } catch {
-    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-  }
-
   const { stationId } = await params;
   const station = await db.station.findUnique({ where: { id: stationId } });
   if (!station) return NextResponse.json({ error: "Station not found" }, { status: 404 });
+  try { await requireTournamentAccess(station.tournamentId); } catch { return NextResponse.json({ error: "Forbidden" }, { status: 403 }); }
 
   const roomName = roomNameForStation(station.id);
   const rooms = await getRoomService().listRooms([roomName]);
@@ -39,15 +34,10 @@ export async function GET(_req: Request, { params }: { params: Promise<{ station
 }
 
 export async function POST(_req: Request, { params }: { params: Promise<{ stationId: string }> }) {
-  try {
-    await requireRole(["ORGANIZER", "ADMIN"]);
-  } catch {
-    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-  }
-
   const { stationId } = await params;
   const station = await db.station.findUnique({ where: { id: stationId } });
   if (!station) return NextResponse.json({ error: "Station not found" }, { status: 404 });
+  try { await requireTournamentAccess(station.tournamentId); } catch { return NextResponse.json({ error: "Forbidden" }, { status: 403 }); }
 
   const roomName = roomNameForStation(station.id);
 

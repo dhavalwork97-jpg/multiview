@@ -33,23 +33,14 @@ async function accessToken(): Promise<string> {
   const refreshToken = env("YOUTUBE_REFRESH_TOKEN");
   const clientId = env("YOUTUBE_CLIENT_ID");
   const clientSecret = env("YOUTUBE_CLIENT_SECRET");
-
   const res = await fetch(GOOGLE_TOKEN_URL, {
     method: "POST",
     headers: { "Content-Type": "application/x-www-form-urlencoded" },
-    body: new URLSearchParams({
-      client_id: clientId,
-      client_secret: clientSecret,
-      refresh_token: refreshToken,
-      grant_type: "refresh_token",
-    }),
+    body: new URLSearchParams({ client_id: clientId, client_secret: clientSecret, refresh_token: refreshToken, grant_type: "refresh_token" }),
     cache: "no-store",
   });
-
   const data = await res.json().catch(() => ({}));
-  if (!res.ok || !data.access_token) {
-    throw new Error(`YouTube OAuth refresh failed (${res.status}): ${JSON.stringify(data)}`);
-  }
+  if (!res.ok || !data.access_token) throw new Error(`YouTube OAuth refresh failed (${res.status}): ${JSON.stringify(data)}`);
   return data.access_token as string;
 }
 
@@ -57,372 +48,267 @@ async function youtubeRequest<T>(path: string, init: RequestInit = {}): Promise<
   const token = await accessToken();
   const res = await fetch(`${YOUTUBE_API}${path}`, {
     ...init,
-    headers: {
-      Authorization: `Bearer ${token}`,
-      "Content-Type": "application/json",
-      ...(init.headers ?? {}),
-    },
+    headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json", ...(init.headers ?? {}) },
     cache: "no-store",
   });
   const data = await res.json().catch(() => ({}));
-  if (!res.ok) {
-    throw new Error(`YouTube API ${res.status}: ${JSON.stringify(data)}`);
-  }
+  if (!res.ok) throw new Error(`YouTube API ${res.status}: ${JSON.stringify(data)}`);
   return data as T;
 }
 
 export function youtubeConfigured() {
-  return !!(
-    process.env.YOUTUBE_CLIENT_ID &&
-    process.env.YOUTUBE_CLIENT_SECRET &&
-    process.env.YOUTUBE_REFRESH_TOKEN
-  );
+  return !!(process.env.YOUTUBE_CLIENT_ID && process.env.YOUTUBE_CLIENT_SECRET && process.env.YOUTUBE_REFRESH_TOKEN);
+}
+
+async function getStream(streamId: string, includeStatus = false) {
+  const part = includeStatus ? "snippet,cdn,contentDetails,status" : "snippet,cdn,contentDetails";
+  try {
+    const data = await youtubeRequest<{ items: YouTubeStream[] }>(`/liveStreams?part=${part}&id=${encodeURIComponent(streamId)}`);
+    return data.items?.[0] ?? null;
+  } catch (error) {
+    const message = String(error);
+    if (message.includes("YouTube API 404")) return null;
+    throw error;
+  }
 }
 
 export async function createReusableStream(title: string) {
-  const created = await youtubeRequest<YouTubeStream>(
-    "/liveStreams?part=snippet,cdn,contentDetails",
-    {
-      method: "POST",
-      body: JSON.stringify({
-        snippet: { title },
-        cdn: {
-          format: "1080p",
-          ingestionType: "rtmp",
-          resolution: "variable",
-          frameRate: "variable",
-        },
-        contentDetails: { isReusable: true },
-      }),
-    }
-  );
+  const created = await youtubeRequest<YouTubeStream>("/liveStreams?part=snippet,cdn,contentDetails", {
+    method: "POST",
+    body: JSON.stringify({
+      snippet: { title },
+      cdn: { format: "1080p", ingestionType: "rtmp", resolution: "variable", frameRate: "variable" },
+      contentDetails: { isReusable: true },
+    }),
+  });
+  if (!created?.id) throw new Error("YouTube returned no live stream id");
 
-  if (!created?.id) {
-    throw new Error("YouTube returned no live stream id");
+  for (let attempt = 0; attempt < 8; attempt += 1) {
+    const stream = await getStream(created.id);
+    if (stream?.cdn?.ingestionInfo?.ingestionAddress && stream.cdn.ingestionInfo.streamName) return stream;
+    if (attempt < 7) await new Promise((resolve) => setTimeout(resolve, 1000));
   }
-
-  // YouTube can return the stream resource before its ingestionInfo has been
-  // populated. Fetch the resource again with the CDN part requested and give
-  // YouTube a few short attempts to finish provisioning it.
-  for (let attempt = 0; attempt < 5; attempt += 1) {
-    const refreshed = await youtubeRequest<{ items: YouTubeStream[] }>(
-      `/liveStreams?part=snippet,cdn,contentDetails&id=${encodeURIComponent(created.id)}`
-    );
-    const stream = refreshed.items?.[0];
-    if (stream?.id && stream.cdn?.ingestionInfo?.ingestionAddress && stream.cdn.ingestionInfo.streamName) {
-      return stream;
-    }
-
-    if (attempt < 4) {
-      await new Promise((resolve) => setTimeout(resolve, 1000));
-    }
-  }
-
-  throw new Error(`YouTube created live stream ${created.id} but did not return ingestion credentials after provisioning`);
+  throw new Error(`YouTube created live stream ${created.id} but did not return a usable stream key after provisioning`);
 }
 
+/**
+ * The RTMP key is station-scoped and reusable. It must NEVER be treated as a
+ * YouTube broadcast/video id. Every match gets a fresh broadcast, while the
+ * physical station can keep using the same key.
+ *
+ * Before returning a cached key we verify the YouTube resource still exists
+ * and return the exact ingestion credentials currently stored by YouTube.
+ * This repairs stale DB keys when a stream was deleted/recreated in YouTube.
+ */
 export async function ensureStationStream(stationId: string) {
   const station = await db.station.findUnique({ where: { id: stationId } });
   if (!station) throw new Error("Station not found");
 
-  if (station.youtubeStreamId && station.ingestUrl && station.streamKey) {
-    return {
-      streamId: station.youtubeStreamId,
-      ingestUrl: station.ingestUrl,
-      streamKey: station.streamKey,
-    };
+  if (station.youtubeStreamId) {
+    const existing = await getStream(station.youtubeStreamId);
+    const info = existing?.cdn?.ingestionInfo;
+    if (existing?.id && info?.ingestionAddress && info.streamName) {
+      if (station.ingestUrl !== info.ingestionAddress || station.streamKey !== info.streamName || station.youtubeIngestUrl !== info.ingestionAddress) {
+        await db.station.update({ where: { id: stationId }, data: { youtubeIngestUrl: info.ingestionAddress, ingestUrl: info.ingestionAddress, streamKey: info.streamName, ingressId: existing.id } });
+      }
+      return { streamId: existing.id, ingestUrl: info.ingestionAddress, streamKey: info.streamName };
+    }
   }
 
   const stream = await createReusableStream(`FGC Stream — ${station.label}`);
-  const ingestUrl = stream.cdn!.ingestionInfo!.ingestionAddress!;
-  const streamKey = stream.cdn!.ingestionInfo!.streamName!;
-
+  const info = stream.cdn?.ingestionInfo;
+  if (!info?.ingestionAddress || !info.streamName) throw new Error("YouTube created the stream but did not provide RTMP credentials");
   await db.station.update({
     where: { id: stationId },
-    data: {
-      youtubeStreamId: stream.id,
-      youtubeIngestUrl: ingestUrl,
-      ingestUrl,
-      streamKey,
-      // Keep these populated for older UI/read paths while the migration is
-      // rolled out. playbackIdWebrtc is deliberately no longer used for playback.
-      ingressId: stream.id,
-    },
+    data: { youtubeStreamId: stream.id, youtubeIngestUrl: info.ingestionAddress, ingestUrl: info.ingestionAddress, streamKey: info.streamName, ingressId: stream.id },
   });
+  return { streamId: stream.id, ingestUrl: info.ingestionAddress, streamKey: info.streamName };
+}
 
-  return { streamId: stream.id, ingestUrl, streamKey };
+async function getBroadcast(broadcastId: string) {
+  try {
+    const data = await youtubeRequest<{ items: YouTubeBroadcast[] }>(`/liveBroadcasts?part=status,contentDetails,snippet&id=${encodeURIComponent(broadcastId)}`);
+    return data.items?.[0] ?? null;
+  } catch (error) {
+    if (String(error).includes("YouTube API 404")) return null;
+    throw error;
+  }
+}
+
+async function deleteBroadcast(broadcastId: string) {
+  await youtubeRequest(`/liveBroadcasts?id=${encodeURIComponent(broadcastId)}`, { method: "DELETE" });
+}
+
+async function completeBroadcast(broadcastId: string) {
+  await youtubeRequest(`/liveBroadcasts/transition?id=${encodeURIComponent(broadcastId)}&part=id,status&broadcastStatus=complete`, { method: "POST", body: JSON.stringify({}) });
+}
+
+async function retireConflictingBroadcast(streamId: string, currentMatchId: string) {
+  const active = await youtubeRequest<{ items: YouTubeBroadcast[] }>(`/liveBroadcasts?part=status,contentDetails,snippet&broadcastStatus=active&maxResults=50`);
+  const mine = await youtubeRequest<{ items: YouTubeBroadcast[] }>(`/liveBroadcasts?part=status,contentDetails,snippet&mine=true&broadcastType=all&maxResults=50`);
+  const candidates = [...(active.items ?? []), ...(mine.items ?? [])]
+    .filter((b, i, all) => all.findIndex((x) => x.id === b.id) === i)
+    .filter((b) => b.contentDetails?.boundStreamId === streamId && b.status?.lifeCycleStatus !== "complete");
+
+  for (const candidate of candidates) {
+    const owner = await db.match.findFirst({ where: { youtubeBroadcastId: candidate.id }, select: { id: true, status: true } });
+    if (owner?.id === currentMatchId) return candidate;
+    if (owner?.status === "LIVE" || candidate.status?.lifeCycleStatus === "live") {
+      // Never silently kill another live match. The operator must end it first.
+      throw new Error(`Station is still using YouTube broadcast ${candidate.id}. End the current match before starting another one.`);
+    }
+    await deleteBroadcast(candidate.id);
+  }
+  return null;
 }
 
 export async function createBroadcastForMatch(matchId: string) {
-  const match = await db.match.findUnique({
-    where: { id: matchId },
-    include: { station: true, tournament: true, playerOne: true, playerTwo: true },
-  });
+  const match = await db.match.findUnique({ where: { id: matchId }, include: { station: true, tournament: true, playerOne: true, playerTwo: true } });
   if (!match?.station) throw new Error("Match must be assigned to a station before going LIVE");
 
   const stream = await ensureStationStream(match.station.id);
-  const scheduledStartTime = new Date(Date.now() + 60_000).toISOString();
-  const title = `${match.tournament.name} — ${match.playerOne.gamertag} vs ${match.playerTwo.gamertag}`;
 
-  const broadcast = await youtubeRequest<YouTubeBroadcast>(
-    "/liveBroadcasts?part=snippet,status,contentDetails",
-    {
-      method: "POST",
-      body: JSON.stringify({
-        snippet: {
-          title,
-          description: `${match.tournament.name} · ${match.station.label}${match.round ? ` · ${match.round}` : ""}`,
-          scheduledStartTime,
-        },
-        status: { privacyStatus: "unlisted" },
-        contentDetails: {
-          enableAutoStart: true,
-          enableAutoStop: true,
-          enableDvr: true,
-          recordFromStart: true,
-          enableEmbed: true,
-        },
-      }),
+  // Idempotency: retries of the same Start action reuse the same broadcast.
+  if (match.youtubeBroadcastId) {
+    const existing = await getBroadcast(match.youtubeBroadcastId);
+    if (existing?.contentDetails?.boundStreamId === stream.streamId && existing.status?.lifeCycleStatus !== "complete") {
+      return { broadcastId: existing.id, videoId: existing.id, station: match.station };
     }
-  );
+  }
 
+  await retireConflictingBroadcast(stream.streamId, matchId);
+
+  const scheduledStartTime = new Date(Date.now() + 15_000).toISOString();
+  const title = `${match.tournament.name} — ${match.playerOne.gamertag} vs ${match.playerTwo.gamertag}`;
+  const broadcast = await youtubeRequest<YouTubeBroadcast>("/liveBroadcasts?part=snippet,status,contentDetails", {
+    method: "POST",
+    body: JSON.stringify({
+      snippet: { title, description: `${match.tournament.name} · ${match.station.label}${match.round ? ` · ${match.round}` : ""}`, scheduledStartTime },
+      status: { privacyStatus: "unlisted" },
+      contentDetails: { enableAutoStart: true, enableAutoStop: true, enableDvr: true, recordFromStart: true, enableEmbed: true },
+    }),
+  });
   if (!broadcast?.id) throw new Error("YouTube returned no broadcast id");
 
-  await youtubeRequest(
-    `/liveBroadcasts/bind?id=${encodeURIComponent(broadcast.id)}&part=id,contentDetails&streamId=${encodeURIComponent(stream.streamId)}`,
-    { method: "POST", body: JSON.stringify({}) }
-  );
+  try {
+    await youtubeRequest(`/liveBroadcasts/bind?id=${encodeURIComponent(broadcast.id)}&part=id,contentDetails&streamId=${encodeURIComponent(stream.streamId)}`, { method: "POST", body: JSON.stringify({}) });
+    const bound = await getBroadcast(broadcast.id);
+    if (bound?.contentDetails?.boundStreamId !== stream.streamId) throw new Error("YouTube created the broadcast but did not bind it to this station's stream");
+  } catch (error) {
+    try { await deleteBroadcast(broadcast.id); } catch (cleanupError) { console.error("[youtube] failed to clean up orphan broadcast", cleanupError); }
+    throw new Error(`YouTube broadcast was created but could not be bound to the station: ${error instanceof Error ? error.message : String(error)}`);
+  }
 
-  const updated = await db.station.update({
-    where: { id: match.station.id },
-    data: {
-      youtubeBroadcastId: broadcast.id,
-      youtubeVideoId: broadcast.id,
-      youtubeLiveStatus: "created",
-      youtubeLastStatusAt: new Date(),
-    },
-  });
-
-  return { broadcastId: broadcast.id, videoId: broadcast.id, station: updated };
+  const updatedMatch = await db.match.update({ where: { id: matchId }, data: { youtubeBroadcastId: broadcast.id, youtubeVideoId: broadcast.id } });
+  await db.station.update({ where: { id: match.station.id }, data: { youtubeBroadcastId: broadcast.id, youtubeVideoId: broadcast.id, youtubeLiveStatus: "created", youtubeLastStatusAt: new Date() } });
+  return { broadcastId: broadcast.id, videoId: broadcast.id, station: updatedMatch };
 }
 
 export async function transitionBroadcastLive(broadcastId: string) {
-  return youtubeRequest<{ items: YouTubeBroadcast[] }>(
-    `/liveBroadcasts/transition?id=${encodeURIComponent(broadcastId)}&part=id,status&broadcastStatus=live`,
-    { method: "POST", body: JSON.stringify({}) }
-  );
+  return youtubeRequest<{ items: YouTubeBroadcast[] }>(`/liveBroadcasts/transition?id=${encodeURIComponent(broadcastId)}&part=id,status&broadcastStatus=live`, { method: "POST", body: JSON.stringify({}) });
+}
+
+export async function endBroadcastForMatch(matchId: string) {
+  const match = await db.match.findUnique({ where: { id: matchId }, select: { youtubeBroadcastId: true } });
+  if (!match?.youtubeBroadcastId) return;
+  const broadcast = await getBroadcast(match.youtubeBroadcastId);
+  if (!broadcast || broadcast.status?.lifeCycleStatus === "complete" || broadcast.status?.lifeCycleStatus === "revoked") return;
+  if (broadcast.status?.lifeCycleStatus === "live") await completeBroadcast(broadcast.id);
+  else await deleteBroadcast(broadcast.id);
 }
 
 export async function getStreamAndBroadcastStatus(stationId: string) {
-  const station = await db.station.findUnique({ where: { id: stationId } });
+  const station = await db.station.findUnique({
+    where: { id: stationId },
+    include: { matches: { where: { status: { in: ["QUEUED", "LIVE"] } }, orderBy: { updatedAt: "desc" }, take: 1, select: { id: true, status: true, youtubeBroadcastId: true, youtubeVideoId: true } } },
+  });
   if (!station) throw new Error("Station not found");
-  if (!station.youtubeStreamId) {
-    return { streamStatus: "inactive", broadcastStatus: null, videoId: station.youtubeVideoId };
-  }
+  if (!station.youtubeStreamId) return { streamStatus: "inactive", broadcastStatus: null, videoId: station.youtubeVideoId, healthStatus: null, configurationIssues: [] };
 
-  const streamData = await youtubeRequest<{ items: YouTubeStream[] }>(
-    `/liveStreams?part=status&id=${encodeURIComponent(station.youtubeStreamId)}`
-  );
-  const stream = streamData.items?.[0];
-  const streamStatus = stream?.status?.streamStatus ?? "inactive";
-  const healthStatus = stream?.status?.healthStatus?.status ?? null;
-  const configurationIssues = stream?.status?.healthStatus?.configurationIssues ?? [];
-
-  let broadcastStatus: string | null = null;
-  let videoId = station.youtubeVideoId;
+  const stream = await getStream(station.youtubeStreamId, true);
+  if (!stream) return { streamStatus: "inactive", broadcastStatus: "complete", videoId: null, healthStatus: null, configurationIssues: [] };
+  const streamStatus = stream.status?.streamStatus ?? "inactive";
+  const healthStatus = stream.status?.healthStatus?.status ?? null;
+  const configurationIssues = stream.status?.healthStatus?.configurationIssues ?? [];
+  const currentMatch = station.matches[0];
   let broadcast: YouTubeBroadcast | undefined;
 
-  if (station.youtubeBroadcastId) {
-    const broadcastData = await youtubeRequest<{ items: YouTubeBroadcast[] }>(
-      `/liveBroadcasts?part=status,contentDetails,snippet&id=${encodeURIComponent(station.youtubeBroadcastId)}`
-    );
-    broadcast = broadcastData.items?.[0];
-
-    // A station reuses its YouTube stream, so the saved broadcast can be an
-    // older/completed event. Treat that as stale and recover the broadcast
-    // currently bound to this station's stream.
-    if (broadcast?.contentDetails?.boundStreamId !== station.youtubeStreamId ||
-        broadcast.status?.lifeCycleStatus === "complete") {
-      broadcast = undefined;
-    }
+  if (currentMatch?.youtubeBroadcastId) {
+    const candidate = await getBroadcast(currentMatch.youtubeBroadcastId);
+    if (candidate?.contentDetails?.boundStreamId === station.youtubeStreamId) broadcast = candidate;
   }
 
-  // Recover a broadcast when the station row has no usable broadcast id.
-  // IMPORTANT: YouTube does NOT allow broadcastStatus and mine in the same
-  // liveBroadcasts.list request. The previous request used both and caused
-  // the exact 400 incompatibleParameters error seen in production.
-  //
-  // First ask for currently-live broadcasts. This is the fastest path when
-  // OBS is already live. If that does not find the station, fall back to the
-  // authenticated user's broadcasts and filter locally so READY/TESTING
-  // broadcasts can also be recovered before they go live.
-  if (!broadcast && station.youtubeStreamId) {
-    const active = await youtubeRequest<{ items: YouTubeBroadcast[] }>(
-      `/liveBroadcasts?part=status,contentDetails,snippet&broadcastStatus=active&maxResults=50`
-    );
-    broadcast = active.items?.find(
-      (candidate) => candidate.contentDetails?.boundStreamId === station.youtubeStreamId
-    );
-
+  // Recovery path: never use broadcastStatus + mine in one request. Find a
+  // broadcast bound to this station stream, then attach it to the current match.
+  if (!broadcast) {
+    const active = await youtubeRequest<{ items: YouTubeBroadcast[] }>(`/liveBroadcasts?part=status,contentDetails,snippet&broadcastStatus=active&maxResults=50`);
+    broadcast = active.items?.find((candidate) => candidate.contentDetails?.boundStreamId === station.youtubeStreamId);
     if (!broadcast) {
-      const mine = await youtubeRequest<{ items: YouTubeBroadcast[] }>(
-        `/liveBroadcasts?part=status,contentDetails,snippet&mine=true&broadcastType=all&maxResults=50`
-      );
-      const candidates = (mine.items ?? [])
+      const mine = await youtubeRequest<{ items: YouTubeBroadcast[] }>(`/liveBroadcasts?part=status,contentDetails,snippet&mine=true&broadcastType=all&maxResults=50`);
+      broadcast = (mine.items ?? [])
         .filter((candidate) => candidate.contentDetails?.boundStreamId === station.youtubeStreamId)
         .filter((candidate) => candidate.status?.lifeCycleStatus !== "complete")
-        .sort((a, b) => {
-          const aTime = Date.parse(a.snippet?.scheduledStartTime ?? "") || 0;
-          const bTime = Date.parse(b.snippet?.scheduledStartTime ?? "") || 0;
-          return bTime - aTime;
-        });
-      broadcast = candidates[0];
+        .sort((a, b) => (Date.parse(b.snippet?.scheduledStartTime ?? "") || 0) - (Date.parse(a.snippet?.scheduledStartTime ?? "") || 0))[0];
     }
-
-    if (broadcast?.id) {
-      await db.station.update({
-        where: { id: stationId },
-        data: { youtubeBroadcastId: broadcast.id, youtubeVideoId: broadcast.id },
-      });
+    if (broadcast?.id && currentMatch) {
+      await db.match.update({ where: { id: currentMatch.id }, data: { youtubeBroadcastId: broadcast.id, youtubeVideoId: broadcast.id } });
     }
   }
 
-  if (broadcast) {
-    broadcastStatus = broadcast.status?.lifeCycleStatus ?? null;
-    videoId = broadcast.id ?? videoId;
-
-    // OBS can be sending a healthy RTMP feed while the YouTube broadcast is
-    // still in READY/TESTING. Promote it when possible; if YouTube has already
-    // made it LIVE, simply use that state.
-    if (broadcast.id && streamStatus === "active" && (broadcastStatus === "ready" || broadcastStatus === "testing")) {
-      try {
-        const transitioned = await transitionBroadcastLive(broadcast.id);
-        broadcastStatus = transitioned.items?.[0]?.status?.lifeCycleStatus ?? "live";
-      } catch (error) {
-        console.warn("[youtube] broadcast transition not available yet", error);
-      }
+  const broadcastStatus = broadcast?.status?.lifeCycleStatus ?? null;
+  const videoId = broadcast?.id ?? currentMatch?.youtubeVideoId ?? station.youtubeVideoId;
+  if (broadcast?.id && streamStatus === "active" && (broadcastStatus === "ready" || broadcastStatus === "testing")) {
+    try {
+      const transitioned = await transitionBroadcastLive(broadcast.id);
+      return { streamStatus, broadcastStatus: transitioned.items?.[0]?.status?.lifeCycleStatus ?? "live", videoId, healthStatus, configurationIssues };
+    } catch (error) {
+      console.warn("[youtube] broadcast transition not available yet", error);
     }
   }
-
   return { streamStatus, broadcastStatus, videoId, healthStatus, configurationIssues };
 }
 
 export async function syncStationYoutubeStatus(stationId: string) {
-  const station = await db.station.findUnique({
-    where: { id: stationId },
-    include: { matches: { where: { status: { in: ["QUEUED", "LIVE"] } }, orderBy: { updatedAt: "desc" }, take: 1 } },
-  });
+  const station = await db.station.findUnique({ where: { id: stationId }, include: { matches: { where: { status: { in: ["QUEUED", "LIVE"] } }, orderBy: { updatedAt: "desc" }, take: 1 } } });
   if (!station) throw new Error("Station not found");
-
   const state = await getStreamAndBroadcastStatus(stationId);
   const isLive = state.streamStatus === "active" && state.broadcastStatus === "live";
-  const broadcastEnded = state.broadcastStatus === "complete";
+  const broadcastEnded = state.broadcastStatus === "complete" || state.broadcastStatus === "revoked";
   const feedHasIssue = state.healthStatus === "bad";
   const now = new Date();
+  const stationStatus = feedHasIssue ? "ERROR" : isLive ? "LIVE" : state.streamStatus === "active" ? "IDLE" : "OFFLINE";
 
-  let stationStatus: "OFFLINE" | "IDLE" | "LIVE" | "ERROR" = feedHasIssue ? "ERROR" : isLive ? "LIVE" : "OFFLINE";
-  if (!feedHasIssue && state.streamStatus === "active" && state.broadcastStatus && !isLive && !broadcastEnded) {
-    stationStatus = "IDLE";
-  }
-
-  const updated = await db.station.update({
-    where: { id: stationId },
-    data: {
-      status: stationStatus,
-      lastHeartbeatAt: now,
-      youtubeLiveStatus: state.broadcastStatus ?? state.streamStatus,
-      youtubeVideoId: state.videoId,
-      youtubeLastStatusAt: now,
-    },
-  });
-
+  const updated = await db.station.update({ where: { id: stationId }, data: { status: stationStatus, lastHeartbeatAt: now, youtubeLiveStatus: state.broadcastStatus ?? state.streamStatus, youtubeVideoId: state.videoId, youtubeLastStatusAt: now, youtubeBroadcastId: station.matches[0]?.youtubeBroadcastId ?? undefined } });
   const match = station.matches[0];
-  if (match && !isLive && !broadcastEnded && match.status === "LIVE") {
-    // Match state follows the actual YouTube media state. If an organizer
-    // marked a match LIVE before OBS connected, keep it queued until YouTube
-    // confirms that the broadcast is really live.
-    await db.match.update({ where: { id: match.id }, data: { status: "QUEUED", startedAt: null } });
-    await publishEvent({
-      type: "match:updated",
-      tournamentId: station.tournamentId,
-      matchId: match.id,
-      status: "QUEUED",
-      playerOneScore: match.playerOneScore,
-      playerTwoScore: match.playerTwoScore,
-      winnerId: null,
-      stationId: station.id,
-    });
-  }
 
+  // Do not demote an operator-started match back to QUEUED just because
+  // YouTube needs a few seconds to move READY/TESTING -> LIVE. Once the
+  // broadcast is prepared, the match remains LIVE until it ends.
   if (match && isLive && match.status !== "LIVE") {
     await db.match.update({ where: { id: match.id }, data: { status: "LIVE", startedAt: match.startedAt ?? now } });
-    await publishEvent({
-      type: "match:updated",
-      tournamentId: station.tournamentId,
-      matchId: match.id,
-      status: "LIVE",
-      playerOneScore: match.playerOneScore,
-      playerTwoScore: match.playerTwoScore,
-      winnerId: null,
-      stationId: station.id,
-    });
+    await publishEvent({ type: "match:updated", tournamentId: station.tournamentId, matchId: match.id, status: "LIVE", playerOneScore: match.playerOneScore, playerTwoScore: match.playerTwoScore, winnerId: null, stationId: station.id });
   }
-
   if (match && broadcastEnded && match.status === "LIVE") {
     await db.match.update({ where: { id: match.id }, data: { status: "COMPLETED", endedAt: match.endedAt ?? now } });
-    await publishEvent({
-      type: "match:updated",
-      tournamentId: station.tournamentId,
-      matchId: match.id,
-      status: "COMPLETED",
-      playerOneScore: match.playerOneScore,
-      playerTwoScore: match.playerTwoScore,
-      winnerId: null,
-      stationId: station.id,
-    });
+    await publishEvent({ type: "match:updated", tournamentId: station.tournamentId, matchId: match.id, status: "COMPLETED", playerOneScore: match.playerOneScore, playerTwoScore: match.playerTwoScore, winnerId: null, stationId: station.id });
   }
-
-  await publishEvent({
-    type: "station:status",
-    tournamentId: station.tournamentId,
-    stationId: station.id,
-    status: stationStatus,
-    lastHeartbeatAt: now.toISOString(),
-  });
-
+  await publishEvent({ type: "station:status", tournamentId: station.tournamentId, stationId: station.id, status: stationStatus, lastHeartbeatAt: now.toISOString() });
   return { station: updated, ...state, isLive };
 }
 
 export function youtubeAuthUrl() {
   const clientId = env("YOUTUBE_CLIENT_ID");
   const redirectUri = `${env("NEXT_PUBLIC_APP_URL").replace(/\/$/, "")}/api/youtube/callback`;
-  const params = new URLSearchParams({
-    client_id: clientId,
-    redirect_uri: redirectUri,
-    response_type: "code",
-    access_type: "offline",
-    prompt: "consent",
-    scope: "https://www.googleapis.com/auth/youtube",
-  });
+  const params = new URLSearchParams({ client_id: clientId, redirect_uri: redirectUri, response_type: "code", access_type: "offline", prompt: "consent", scope: "https://www.googleapis.com/auth/youtube" });
   return `https://accounts.google.com/o/oauth2/v2/auth?${params.toString()}`;
 }
 
 export async function exchangeYouTubeCode(code: string) {
   const res = await fetch(GOOGLE_TOKEN_URL, {
-    method: "POST",
-    headers: { "Content-Type": "application/x-www-form-urlencoded" },
-    body: new URLSearchParams({
-      code,
-      client_id: env("YOUTUBE_CLIENT_ID"),
-      client_secret: env("YOUTUBE_CLIENT_SECRET"),
-      redirect_uri: `${env("NEXT_PUBLIC_APP_URL").replace(/\/$/, "")}/api/youtube/callback`,
-      grant_type: "authorization_code",
-    }),
-    cache: "no-store",
+    method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams({ code, client_id: env("YOUTUBE_CLIENT_ID"), client_secret: env("YOUTUBE_CLIENT_SECRET"), redirect_uri: `${env("NEXT_PUBLIC_APP_URL").replace(/\/$/, "")}/api/youtube/callback`, grant_type: "authorization_code" }), cache: "no-store",
   });
   const data = await res.json().catch(() => ({}));
-  if (!res.ok || !data.refresh_token) {
-    throw new Error(`YouTube OAuth exchange failed (${res.status}): ${JSON.stringify(data)}`);
-  }
+  if (!res.ok || !data.refresh_token) throw new Error(`YouTube OAuth exchange failed (${res.status}): ${JSON.stringify(data)}`);
   return data as { refresh_token: string; access_token?: string };
 }

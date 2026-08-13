@@ -1,10 +1,14 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { db } from "@/lib/db";
-import { requireRole } from "@/lib/auth";
+import { requireTournamentAccess } from "@/lib/auth";
 import { publishEvent } from "@/lib/events";
 import { advanceBracket } from "@/lib/bracket-progression";
-import { createBroadcastForMatch } from "@/lib/youtube";
+import { createBroadcastForMatch, endBroadcastForMatch } from "@/lib/youtube";
+
+function updatedNeedsBroadcast(match: { status: string; youtubeBroadcastId: string | null }) {
+  return match.youtubeBroadcastId == null;
+}
 
 const updateSchema = z.object({
   playerOneScore: z.number().int().min(0).optional(),
@@ -19,12 +23,6 @@ const updateSchema = z.object({
 // success it publishes to Redis, which the Socket.IO server fans out to
 // the tournament room and the match's own room — see src/server/socket.
 export async function PATCH(req: Request, { params }: { params: Promise<{ matchId: string }> }) {
-  try {
-    await requireRole(["ORGANIZER", "ADMIN"]);
-  } catch {
-    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-  }
-
   const { matchId } = await params;
   const body = await req.json();
   const parsed = updateSchema.safeParse(body);
@@ -37,41 +35,49 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ matchI
     return NextResponse.json({ error: "Match not found" }, { status: 404 });
   }
 
+  try {
+    await requireTournamentAccess(existing.tournamentId);
+  } catch {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
+
   const data = { ...parsed.data } as typeof parsed.data & {
     startedAt?: Date;
     endedAt?: Date;
+    youtubeBroadcastId?: string;
+    youtubeVideoId?: string;
   };
 
   // Timestamp transitions automatically so callers don't have to remember
   // to set them — a match going LIVE for the first time gets startedAt,
   // one going COMPLETED gets endedAt.
-  if (parsed.data.status === "LIVE" && !existing.startedAt) {
-    data.startedAt = new Date();
-  }
-  if (parsed.data.status === "COMPLETED" && !existing.endedAt) {
-    data.endedAt = new Date();
-  }
-
-  const updated = await db.match.update({ where: { id: matchId }, data });
-
-  // YouTube replaces the old LiveKit room-start webhook. Creating the
-  // broadcast here keeps match state as the single source of truth while
-  // YouTube owns the actual media transport.
-  if (parsed.data.status === "LIVE" && updated.stationId && !existing.startedAt) {
+  // Prepare YouTube BEFORE publishing LIVE. This makes Start idempotent and
+  // prevents a match from becoming visible as LIVE when no broadcast exists.
+  if (parsed.data.status === "LIVE" && updatedNeedsBroadcast(existing)) {
+    if (!existing.stationId) return NextResponse.json({ error: "Match must be assigned to a station before going LIVE" }, { status: 409 });
     try {
       const broadcast = await createBroadcastForMatch(matchId);
-      await db.station.update({
-        where: { id: updated.stationId },
-        data: { youtubeBroadcastId: broadcast.broadcastId, youtubeVideoId: broadcast.videoId },
-      });
+      data.status = "LIVE";
+      data.startedAt = existing.startedAt ?? new Date();
+      data.youtubeBroadcastId = broadcast.broadcastId;
+      data.youtubeVideoId = broadcast.videoId;
     } catch (error) {
       console.error("[youtube broadcast] failed to create broadcast", error);
-      // Roll back the visible match state rather than advertising LIVE when
-      // YouTube has not been prepared. The organizer gets a clear error.
-      await db.match.update({ where: { id: matchId }, data: { status: "QUEUED", startedAt: null } });
       return NextResponse.json({ error: error instanceof Error ? error.message : "Failed to prepare YouTube Live" }, { status: 503 });
     }
   }
+
+  if (parsed.data.status === "COMPLETED") {
+    try {
+      await endBroadcastForMatch(matchId);
+    } catch (error) {
+      console.error("[youtube broadcast] failed to end broadcast", error);
+      return NextResponse.json({ error: error instanceof Error ? error.message : "Failed to end YouTube broadcast" }, { status: 503 });
+    }
+    data.endedAt = existing.endedAt ?? new Date();
+  }
+
+  const updated = await db.match.update({ where: { id: matchId }, data });
 
   await publishEvent({
     type: "match:updated",

@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { YouTubePlayer } from "@/components/watch/YouTubePlayer";
 
 export type MatchCardData = {
   id: string;
@@ -7,6 +8,7 @@ export type MatchCardData = {
   playerOneScore: number;
   playerTwoScore: number;
   hypeScore: number | null;
+  youtubeVideoId?: string | null;
   playerOne: { gamertag: string; country: string | null };
   playerTwo: { gamertag: string; country: string | null };
   station: { label: string } | null;
@@ -31,8 +33,18 @@ export function MatchCard({ match }: { match: MatchCardData }) {
         )}
       </div>
 
-      {/* video placeholder — real player mounts here once WebRTC/HLS wiring lands */}
-      <div className="aspect-video w-full bg-arena-900" />
+      {match.status === "LIVE" ? (
+        <YouTubePlayer
+          stationId={match.station?.id ?? ""}
+          videoId={match.youtubeVideoId ?? null}
+          isLive
+          muted
+        />
+      ) : (
+        <div className="flex aspect-video w-full items-center justify-center bg-arena-900 text-xs font-mono uppercase tracking-wide text-ink-faint">
+          {match.status === "QUEUED" ? "Waiting for stream" : "Stream ended"}
+        </div>
+      )}
 
       {/* player row */}
       <div className="flex items-stretch text-sm">
