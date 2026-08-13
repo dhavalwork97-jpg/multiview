@@ -1,5 +1,6 @@
 import { db } from "@/lib/db";
 import { publishEvent } from "@/lib/events";
+import { advanceBracket } from "@/lib/bracket-progression";
 
 type YouTubeStream = {
   id: string;
@@ -325,8 +326,63 @@ export async function syncStationYoutubeStatus(stationId: string) {
     await publishEvent({ type: "match:updated", tournamentId: station.tournamentId, matchId: match.id, status: "LIVE", playerOneScore: match.playerOneScore, playerTwoScore: match.playerTwoScore, winnerId: null, stationId: station.id });
   }
   if (match && broadcastEnded && match.status === "LIVE") {
-    await db.match.update({ where: { id: match.id }, data: { status: "COMPLETED", endedAt: match.endedAt ?? now } });
-    await publishEvent({ type: "match:updated", tournamentId: station.tournamentId, matchId: match.id, status: "COMPLETED", playerOneScore: match.playerOneScore, playerTwoScore: match.playerTwoScore, winnerId: null, stationId: station.id });
+    // YouTube can end a broadcast independently of the control-room PATCH.
+    // Complete the match through the same bracket-progression path so a
+    // stream ending also advances the tournament bracket.
+    const inferredWinnerId =
+      match.winnerId ??
+      (match.playerOneScore > match.playerTwoScore
+        ? match.playerOneId
+        : match.playerTwoScore > match.playerOneScore
+          ? match.playerTwoId
+          : null);
+
+    const completion = await db.$transaction(async (tx) => {
+      const completed = await tx.match.update({
+        where: { id: match.id },
+        data: {
+          status: "COMPLETED",
+          endedAt: match.endedAt ?? now,
+          ...(inferredWinnerId ? { winnerId: inferredWinnerId } : {}),
+        },
+      });
+      const advanced = inferredWinnerId ? await advanceBracket(tx, completed) : null;
+      return { completed, advanced };
+    });
+
+    await publishEvent({
+      type: "match:updated",
+      tournamentId: station.tournamentId,
+      matchId: match.id,
+      status: "COMPLETED",
+      playerOneScore: completion.completed.playerOneScore,
+      playerTwoScore: completion.completed.playerTwoScore,
+      winnerId: completion.completed.winnerId,
+      stationId: station.id,
+    });
+
+    if (completion.advanced) {
+      await publishEvent({
+        type: "bracket:advanced",
+        tournamentId: station.tournamentId,
+        bracketId: completion.completed.bracketId!,
+        matchId: completion.advanced.id,
+      });
+
+      const nextMatch = await db.match.findUnique({ where: { id: completion.advanced.id } });
+      if (nextMatch) {
+        await publishEvent({
+          type: "match:updated",
+          tournamentId: nextMatch.tournamentId,
+          matchId: nextMatch.id,
+          status: nextMatch.status,
+          playerOneScore: nextMatch.playerOneScore,
+          playerTwoScore: nextMatch.playerTwoScore,
+          winnerId: nextMatch.winnerId,
+          stationId: nextMatch.stationId,
+        });
+      }
+    }
   }
   await publishEvent({ type: "station:status", tournamentId: station.tournamentId, stationId: station.id, status: stationStatus, lastHeartbeatAt: now.toISOString() });
   return { station: updated, ...state, isLive };

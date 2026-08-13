@@ -68,6 +68,30 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ matchI
   }
 
   if (parsed.data.status === "COMPLETED") {
+    const finalPlayerOneScore = parsed.data.playerOneScore ?? existing.playerOneScore;
+    const finalPlayerTwoScore = parsed.data.playerTwoScore ?? existing.playerTwoScore;
+    const suppliedWinnerId = parsed.data.winnerId;
+    const inferredWinnerId =
+      suppliedWinnerId ??
+      (finalPlayerOneScore > finalPlayerTwoScore
+        ? existing.playerOneId
+        : finalPlayerTwoScore > finalPlayerOneScore
+          ? existing.playerTwoId
+          : undefined);
+
+    if (suppliedWinnerId && suppliedWinnerId !== existing.playerOneId && suppliedWinnerId !== existing.playerTwoId) {
+      return NextResponse.json({ error: "winnerId must belong to one of the two players in this match" }, { status: 400 });
+    }
+
+    if (!inferredWinnerId) {
+      return NextResponse.json(
+        { error: "Cannot complete a tied match without winnerId. Set the final score or explicitly select the winner." },
+        { status: 409 }
+      );
+    }
+
+    data.winnerId = inferredWinnerId;
+
     try {
       await endBroadcastForMatch(matchId);
     } catch (error) {

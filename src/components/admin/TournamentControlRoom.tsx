@@ -128,14 +128,14 @@ export function TournamentControlRoom({ tournamentId }: { tournamentId: string }
     }
   }
 
-  async function setMatchStatus(matchId: string, status: "LIVE" | "COMPLETED") {
+  async function setMatchStatus(matchId: string, status: "LIVE" | "COMPLETED", winnerId?: string) {
     setBusy(matchId);
     setError(null);
     try {
       const res = await fetch(`/api/matches/${matchId}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ status }),
+        body: JSON.stringify({ status, ...(winnerId ? { winnerId } : {}) }),
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data.error ?? `Failed to mark match ${status.toLowerCase()}`);
@@ -218,7 +218,7 @@ export function TournamentControlRoom({ tournamentId }: { tournamentId: string }
                 busy={busy}
                 onAssign={(matchId) => void assign(matchId, station.id)}
                 onStart={(matchId) => void setMatchStatus(matchId, "LIVE")}
-                onEnd={(matchId) => void setMatchStatus(matchId, "COMPLETED")}
+                onEnd={(matchId, winnerId) => void setMatchStatus(matchId, "COMPLETED", winnerId)}
                 onCredentials={() => void getCredentials(station.id)}
                 onToggleKey={() => setShowKeys((old) => ({ ...old, [station.id]: !old[station.id] }))}
               />
@@ -288,7 +288,7 @@ function StationCard({
   busy: string | null;
   onAssign: (matchId: string) => void;
   onStart: (matchId: string) => void;
-  onEnd: (matchId: string) => void;
+  onEnd: (matchId: string, winnerId: string) => void;
   onCredentials: () => void;
   onToggleKey: () => void;
 }) {
@@ -316,7 +316,24 @@ function StationCard({
             <p className="mt-1 font-mono text-[10px] text-ink-faint">{match.round ?? "Match"} · {match.status}</p>
             <div className="mt-3 flex gap-2">
               {match.status === "QUEUED" && <button disabled={busy === match.id} onClick={() => onStart(match.id)} className="rounded-card border border-signal-live/50 px-3 py-1.5 font-mono text-[10px] uppercase text-signal-live disabled:opacity-40">Start match</button>}
-              {match.status === "LIVE" && <button disabled={busy === match.id} onClick={() => onEnd(match.id)} className="rounded-card border border-signal-error/50 px-3 py-1.5 font-mono text-[10px] uppercase text-signal-error disabled:opacity-40">End match</button>}
+              {match.status === "LIVE" && (
+                <div className="flex flex-wrap gap-2">
+                  <button
+                    disabled={busy === match.id}
+                    onClick={() => onEnd(match.id, match.playerOne.id)}
+                    className="rounded-card border border-corner-p1/50 px-3 py-1.5 font-mono text-[10px] uppercase text-corner-p1 disabled:opacity-40"
+                  >
+                    End · {match.playerOne.gamertag} wins
+                  </button>
+                  <button
+                    disabled={busy === match.id}
+                    onClick={() => onEnd(match.id, match.playerTwo.id)}
+                    className="rounded-card border border-corner-p2/50 px-3 py-1.5 font-mono text-[10px] uppercase text-corner-p2 disabled:opacity-40"
+                  >
+                    End · {match.playerTwo.gamertag} wins
+                  </button>
+                </div>
+              )}
               {station.youtubeVideoId && <a href={`https://www.youtube.com/watch?v=${station.youtubeVideoId}`} target="_blank" rel="noreferrer" className="rounded-card border border-arena-600 px-3 py-1.5 font-mono text-[10px] uppercase text-ink-muted hover:text-ink">Open stream</a>}
             </div>
           </>
