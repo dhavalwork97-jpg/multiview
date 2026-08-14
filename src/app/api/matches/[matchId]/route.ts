@@ -5,6 +5,7 @@ import { requireTournamentAccess } from "@/lib/auth";
 import { publishEvent } from "@/lib/events";
 import { advanceBracket } from "@/lib/bracket-progression";
 import { createBroadcastForMatch, endBroadcastForMatch } from "@/lib/youtube";
+import { writeAuditLog } from "@/lib/audit";
 
 const updateSchema = z.object({
   playerOneScore: z.number().int().min(0).optional(),
@@ -31,8 +32,9 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ matchI
     return NextResponse.json({ error: "Match not found" }, { status: 404 });
   }
 
+  let actor;
   try {
-    await requireTournamentAccess(existing.tournamentId);
+    actor = await requireTournamentAccess(existing.tournamentId);
   } catch {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
@@ -179,6 +181,21 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ matchI
       }
     }
   }
+
+  await writeAuditLog({
+    tournamentId: updated.tournamentId,
+    actorUserId: actor.id,
+    action: `MATCH_${updated.status}`,
+    entityType: "match",
+    entityId: updated.id,
+    metadata: {
+      stationId: updated.stationId,
+      playerOneScore: updated.playerOneScore,
+      playerTwoScore: updated.playerTwoScore,
+      winnerId: updated.winnerId,
+      youtubeVideoId: updated.youtubeVideoId,
+    },
+  });
 
   return NextResponse.json({ match: updated });
 }

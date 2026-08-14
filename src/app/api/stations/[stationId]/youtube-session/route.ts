@@ -3,6 +3,7 @@ import { db } from "@/lib/db";
 import { requireTournamentAccess } from "@/lib/auth";
 import { endStationBroadcast } from "@/lib/youtube";
 import { publishEvent } from "@/lib/events";
+import { writeAuditLog } from "@/lib/audit";
 
 // Match completion does not call this endpoint. It ends only the physical
 // station's YouTube session when the operator is finished with that station.
@@ -10,8 +11,9 @@ export async function DELETE(_req: Request, { params }: { params: Promise<{ stat
   const { stationId } = await params;
   const station = await db.station.findUnique({ where: { id: stationId }, select: { tournamentId: true, label: true } });
   if (!station) return NextResponse.json({ error: "Station not found" }, { status: 404 });
+  let actor;
   try {
-    await requireTournamentAccess(station.tournamentId);
+    actor = await requireTournamentAccess(station.tournamentId);
   } catch {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
@@ -39,6 +41,14 @@ export async function DELETE(_req: Request, { params }: { params: Promise<{ stat
         lastHeartbeatAt: updated.lastHeartbeatAt?.toISOString() ?? null,
       });
     }
+    await writeAuditLog({
+      tournamentId: station.tournamentId,
+      actorUserId: actor.id,
+      action: "STATION_STREAM_ENDED",
+      entityType: "station",
+      entityId: stationId,
+      metadata: { label: station.label },
+    });
     return NextResponse.json(result);
   } catch (error) {
     console.error("[youtube station session] failed to end", error);

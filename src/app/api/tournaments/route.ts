@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { db } from "@/lib/db";
 import { requireRole } from "@/lib/auth";
+import { writeAuditLog } from "@/lib/audit";
 
 const createTournamentSchema = z.object({
   name: z.string().trim().min(2).max(120),
@@ -156,6 +157,21 @@ export async function POST(req: Request) {
       matchesCreated: firstRoundMatches.length,
       playersCreated: players.length,
     };
+  });
+
+  await writeAuditLog({
+    tournamentId: result.tournament.id,
+    actorUserId: user.id,
+    action: "TOURNAMENT_CREATED",
+    entityType: "tournament",
+    entityId: result.tournament.id,
+    metadata: {
+      name: result.tournament.name,
+      game: parsed.data.game,
+      stationsCreated: result.stationsCreated,
+      matchesCreated: result.matchesCreated,
+      playersCreated: result.playersCreated,
+    },
   });
 
   return NextResponse.json(result, { status: 201 });

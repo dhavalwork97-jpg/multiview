@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { db } from "@/lib/db";
 import { requireRole } from "@/lib/auth";
+import { writeAuditLog } from "@/lib/audit";
 
 // GET /api/stations?tournamentId=... — organizer dashboard: every station's
 // current status, current match, and last heartbeat, for the "automatically
@@ -66,8 +67,9 @@ const createStationSchema = z.object({
 // the generated streamKey the encoder box at that setup will authenticate
 // with against the ingest service.
 export async function POST(req: Request) {
+  let actor;
   try {
-    await requireRole(["ORGANIZER", "ADMIN"]);
+    actor = await requireRole(["ORGANIZER", "ADMIN"]);
   } catch {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
@@ -84,6 +86,15 @@ export async function POST(req: Request) {
       label: parsed.data.label,
       status: "OFFLINE",
     },
+  });
+
+  await writeAuditLog({
+    tournamentId: station.tournamentId,
+    actorUserId: actor.id,
+    action: "STATION_CREATED",
+    entityType: "station",
+    entityId: station.id,
+    metadata: { label: station.label },
   });
 
   return NextResponse.json({ station }, { status: 201 });

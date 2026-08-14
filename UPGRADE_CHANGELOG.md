@@ -68,3 +68,9 @@ Do not add background YouTube polling just to display LIVE status. The applicati
 - Completed matches cannot be accidentally restarted as LIVE.
 - A station YouTube session cannot be ended while a match on that station is still LIVE.
 - These checks prevent stale match IDs and operator clicks from producing a website match that points at an ended or unrelated stream.
+
+### 8. Operator audit trail
+- Added an append-only `audit_logs` table for important organizer/admin actions.
+- Tournament creation, station creation, match transitions, and station YouTube-session shutdowns are recorded.
+- Audit writes are best-effort and never cause a successful operational mutation to fail.
+- Added `GET /api/tournaments/:tournamentId/activity` for the control room and future reporting/incident tooling.

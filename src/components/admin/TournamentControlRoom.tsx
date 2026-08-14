@@ -39,13 +39,15 @@ export function TournamentControlRoom({ tournamentId }: { tournamentId: string }
   const [showKeys, setShowKeys] = useState<Record<string, boolean>>({});
   const [newStation, setNewStation] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [activity, setActivity] = useState<Array<{ id: string; action: string; entityType: string; createdAt: string; metadata?: Record<string, unknown> | null }>>([]);
   const socket = useSocket({ tournamentId });
 
   const refresh = useCallback(async () => {
     try {
-      const [stationsRes, queuedRes] = await Promise.all([
+      const [stationsRes, queuedRes, activityRes] = await Promise.all([
         fetch(`/api/stations?tournamentId=${tournamentId}`, { cache: "no-store" }),
         fetch(`/api/matches?tournamentId=${tournamentId}&status=QUEUED`, { cache: "no-store" }),
+        fetch(`/api/tournaments/${tournamentId}/activity`, { cache: "no-store" }),
       ]);
       if (!stationsRes.ok) throw new Error("Failed to load stations");
       const stationData = await stationsRes.json();
@@ -53,6 +55,10 @@ export function TournamentControlRoom({ tournamentId }: { tournamentId: string }
       if (queuedRes.ok) {
         const data = await queuedRes.json();
         setQueued(data.matches ?? []);
+      }
+      if (activityRes.ok) {
+        const data = await activityRes.json();
+        setActivity(data.events ?? []);
       }
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to refresh control room");
@@ -271,6 +277,33 @@ export function TournamentControlRoom({ tournamentId }: { tournamentId: string }
           ))}
           {queued.filter((m) => !m.station).length === 0 && <p className="text-sm text-ink-faint">No unassigned queued matches.</p>}
         </div>
+      </section>
+
+      <section className="rounded-card border border-arena-600 bg-arena-900 p-4">
+        <div className="mb-3 flex items-center justify-between">
+          <div>
+            <p className="font-mono text-[10px] uppercase tracking-[0.2em] text-ink-faint">Operations log</p>
+            <h2 className="font-display text-xl uppercase tracking-wide">Recent activity</h2>
+          </div>
+          <span className="font-mono text-[10px] uppercase text-ink-faint">Last 30 events</span>
+        </div>
+        {activity.length === 0 ? (
+          <p className="text-sm text-ink-faint">No operator activity recorded yet.</p>
+        ) : (
+          <div className="divide-y divide-arena-700 rounded-card border border-arena-700">
+            {activity.slice(0, 10).map((event) => (
+              <div key={event.id} className="flex flex-wrap items-center justify-between gap-2 px-3 py-2.5">
+                <div>
+                  <p className="font-mono text-[10px] uppercase tracking-wide text-ink">{event.action.replaceAll("_", " ")}</p>
+                  <p className="text-xs text-ink-faint">{event.entityType}{typeof event.metadata?.entityId === "string" ? ` · ${event.metadata.entityId.slice(0, 10)}` : ""}</p>
+                </div>
+                <time className="font-mono text-[10px] text-ink-faint" dateTime={event.createdAt}>
+                  {new Date(event.createdAt).toLocaleString()}
+                </time>
+              </div>
+            ))}
+          </div>
+        )}
       </section>
 
       <p className="text-[11px] leading-5 text-ink-faint">

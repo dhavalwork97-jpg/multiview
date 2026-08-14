@@ -326,6 +326,21 @@ model Match {
 
 
 
+model AuditLog {
+  id           String   @id @default(cuid())
+  tournamentId String
+  actorUserId  String?
+  action       String
+  entityType   String
+  entityId     String?
+  metadata     Json?
+  createdAt    DateTime @default(now())
+
+  @@index([tournamentId, createdAt])
+  @@index([entityType, entityId])
+  @@map("audit_logs")
+}
+
 model YouTubeQuotaLedger {
   // UTC calendar day. One row per day lets us enforce an application-side
   // safety budget before spending YouTube write quota.

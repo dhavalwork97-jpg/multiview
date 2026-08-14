@@ -28,3 +28,6 @@ YOUTUBE_DAILY_QUOTA_BUDGET=3000
 ```
 
 Do not add YouTube background polling simply to determine viewer status. The platform intentionally keeps normal viewer status DB-driven to preserve quota.
+
+## 31. Operator audit trail
+The latest upgrade adds `audit_logs` plus `src/lib/audit.ts`. Important tournament operations are recorded without adding another YouTube API call. The activity endpoint is `GET /api/tournaments/:tournamentId/activity` and is organizer/admin protected. Production must run the new Prisma migration before using this build.
