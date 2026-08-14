@@ -41,32 +41,27 @@ export function TournamentControlRoom({ tournamentId }: { tournamentId: string }
   const [newStation, setNewStation] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [activity, setActivity] = useState<Array<{ id: string; action: string; entityType: string; createdAt: string; metadata?: Record<string, unknown> | null }>>([]);
+  const [canOperate, setCanOperate] = useState(true);
+  const [metrics, setMetrics] = useState<{ views: number; watchSeconds: number; watchHours: number }>({ views: 0, watchSeconds: 0, watchHours: 0 });
+  const [incidentCount, setIncidentCount] = useState(0);
   const [health, setHealth] = useState<{ overall: "ok" | "warning" | "error"; checkedAt: string; checks: Record<string, { status: "ok" | "warning" | "error"; detail: string }>; youtubeQuota: { used: number; budget: number; remaining: number; blockedUntil: string | null } } | null>(null);
   const socket = useSocket({ tournamentId });
 
   const refresh = useCallback(async () => {
     try {
-      const [stationsRes, queuedRes, activityRes, healthRes] = await Promise.all([
-        fetch(`/api/stations?tournamentId=${tournamentId}`, { cache: "no-store" }),
-        fetch(`/api/matches?tournamentId=${tournamentId}&status=QUEUED`, { cache: "no-store" }),
-        fetch(`/api/tournaments/${tournamentId}/activity`, { cache: "no-store" }),
+      const [snapshotRes, healthRes] = await Promise.all([
+        fetch(`/api/tournaments/${tournamentId}/control-room`, { cache: "no-store" }),
         fetch(`/api/tournaments/${tournamentId}/health`, { cache: "no-store" }),
       ]);
-      if (!stationsRes.ok) throw new Error("Failed to load stations");
-      const stationData = await stationsRes.json();
-      setStations(stationData.stations ?? []);
-      if (queuedRes.ok) {
-        const data = await queuedRes.json();
-        setQueued(data.matches ?? []);
-      }
-      if (activityRes.ok) {
-        const data = await activityRes.json();
-        setActivity(data.events ?? []);
-      }
-      if (healthRes.ok) {
-        const data = await healthRes.json();
-        setHealth(data);
-      }
+      if (!snapshotRes.ok) throw new Error("Failed to load control room");
+      const snapshot = await snapshotRes.json();
+      setStations(snapshot.stations ?? []);
+      setQueued(snapshot.queued ?? []);
+      setActivity(snapshot.activity ?? []);
+      setCanOperate(snapshot.canOperate !== false);
+      setMetrics(snapshot.metrics ?? { views: 0, watchSeconds: 0, watchHours: 0 });
+      setIncidentCount((snapshot.incidents ?? []).length);
+      if (healthRes.ok) setHealth(await healthRes.json());
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to refresh control room");
     } finally {
@@ -187,6 +182,17 @@ export function TournamentControlRoom({ tournamentId }: { tournamentId: string }
     finally { setBusy(null); }
   }
 
+  async function verifyYouTube(stationId: string) {
+    setBusy(`verify:${stationId}`); setError(null);
+    try {
+      const res = await fetch(`/api/stations/${stationId}/youtube-status/verify`, { method: "POST" });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error ?? "YouTube verification failed");
+      await refresh();
+    } catch (e) { setError(e instanceof Error ? e.message : "YouTube verification failed"); }
+    finally { setBusy(null); }
+  }
+
   async function getCredentials(stationId: string) {
     setBusy(`key:${stationId}`);
     setError(null);
@@ -213,6 +219,8 @@ export function TournamentControlRoom({ tournamentId }: { tournamentId: string }
         </div>
       )}
 
+      {!canOperate && <div className="rounded-card border border-arena-600 bg-arena-900 px-3 py-2 text-xs text-ink-faint">Read-only operator view. Ask an organization Admin/Owner for operational permissions.</div>}
+
       <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
         <Metric label="Live" value={counts.live} tone="live" />
         <Metric label="Ready" value={counts.ready} />
@@ -229,7 +237,7 @@ export function TournamentControlRoom({ tournamentId }: { tournamentId: string }
             </div>
             <div className="flex items-center gap-2">
               <Link href={`/admin/tournaments/${tournamentId}/report`} className="rounded-card border border-arena-600 px-3 py-2 font-mono text-[10px] uppercase">Event report</Link>
-              <button onClick={() => void reconcile()} disabled={busy === "reconcile"} className="rounded-card border border-arena-600 px-3 py-2 font-mono text-[10px] uppercase disabled:opacity-40">{busy === "reconcile" ? "Checking…" : "Reconcile"}</button>
+              <button onClick={() => void reconcile()} disabled={!canOperate || busy === "reconcile"} className="rounded-card border border-arena-600 px-3 py-2 font-mono text-[10px] uppercase disabled:opacity-40">{busy === "reconcile" ? "Checking…" : "Reconcile"}</button>
               <span className={`font-mono text-[10px] uppercase ${health.overall === "ok" ? "text-signal-live" : health.overall === "warning" ? "text-yellow-300" : "text-signal-error"}`}>{health.overall}</span>
             </div>
           </div>
@@ -262,7 +270,7 @@ export function TournamentControlRoom({ tournamentId }: { tournamentId: string }
               className="w-40 rounded-card border border-arena-600 bg-arena-950 px-3 py-2 text-sm outline-none focus:border-signal-live"
             />
             <button
-              disabled={busy === "create" || !newStation.trim()}
+              disabled={!canOperate || busy === "create" || !newStation.trim()}
               onClick={() => void createStation()}
               className="rounded-card border border-signal-live/50 px-3 py-2 font-mono text-[10px] uppercase tracking-wide text-signal-live disabled:opacity-40"
             >
@@ -289,6 +297,8 @@ export function TournamentControlRoom({ tournamentId }: { tournamentId: string }
                 onCredentials={() => void getCredentials(station.id)}
                 onEndStation={() => void endStationStream(station.id)}
                 onToggleKey={() => setShowKeys((old) => ({ ...old, [station.id]: !old[station.id] }))}
+                canOperate={canOperate}
+                onVerifyYouTube={() => void verifyYouTube(station.id)}
               />
             ))}
           </div>
@@ -312,7 +322,7 @@ export function TournamentControlRoom({ tournamentId }: { tournamentId: string }
               </div>
               <select
                 defaultValue=""
-                disabled={busy === match.id}
+                disabled={!canOperate || busy === match.id}
                 onChange={(e) => e.target.value && void assign(match.id, e.target.value)}
                 className="rounded-card border border-arena-600 bg-arena-950 px-3 py-2 text-xs"
               >
@@ -376,6 +386,8 @@ function StationCard({
   onCredentials,
   onEndStation,
   onToggleKey,
+  canOperate,
+  onVerifyYouTube,
 }: {
   station: Station;
   queued: Match[];
@@ -388,6 +400,8 @@ function StationCard({
   onCredentials: () => void;
   onEndStation: () => void;
   onToggleKey: () => void;
+  canOperate: boolean;
+  onVerifyYouTube: () => void;
 }) {
   const match = station.matches[0];
   const effective = station.isStale ? "ERROR" : station.status;
@@ -412,18 +426,18 @@ function StationCard({
             <p className="mt-1 font-medium"><span className="text-corner-p1">{match.playerOne.gamertag}</span> <span className="text-ink-faint">vs</span> <span className="text-corner-p2">{match.playerTwo.gamertag}</span></p>
             <p className="mt-1 font-mono text-[10px] text-ink-faint">{match.round ?? "Match"} · {match.status}</p>
             <div className="mt-3 flex gap-2">
-              {match.status === "QUEUED" && <button disabled={busy === match.id} onClick={() => onStart(match.id)} className="rounded-card border border-signal-live/50 px-3 py-1.5 font-mono text-[10px] uppercase text-signal-live disabled:opacity-40">Start match</button>}
+              {match.status === "QUEUED" && <button disabled={!canOperate || busy === match.id} onClick={() => onStart(match.id)} className="rounded-card border border-signal-live/50 px-3 py-1.5 font-mono text-[10px] uppercase text-signal-live disabled:opacity-40">Start match</button>}
               {match.status === "LIVE" && (
                 <div className="flex flex-wrap gap-2">
                   <button
-                    disabled={busy === match.id}
+                    disabled={!canOperate || busy === match.id}
                     onClick={() => onEnd(match.id, match.playerOne.id)}
                     className="rounded-card border border-corner-p1/50 px-3 py-1.5 font-mono text-[10px] uppercase text-corner-p1 disabled:opacity-40"
                   >
                     End · {match.playerOne.gamertag} wins
                   </button>
                   <button
-                    disabled={busy === match.id}
+                    disabled={!canOperate || busy === match.id}
                     onClick={() => onEnd(match.id, match.playerTwo.id)}
                     className="rounded-card border border-corner-p2/50 px-3 py-1.5 font-mono text-[10px] uppercase text-corner-p2 disabled:opacity-40"
                   >
@@ -432,13 +446,14 @@ function StationCard({
                 </div>
               )}
               {station.youtubeVideoId && <a href={`https://www.youtube.com/watch?v=${station.youtubeVideoId}`} target="_blank" rel="noreferrer" className="rounded-card border border-arena-600 px-3 py-1.5 font-mono text-[10px] uppercase text-ink-muted hover:text-ink">Open stream</a>}
-              {station.youtubeVideoId && <button disabled={busy === `end:${station.id}`} onClick={onEndStation} className="rounded-card border border-signal-error/50 px-3 py-1.5 font-mono text-[10px] uppercase text-signal-error disabled:opacity-40">{busy === `end:${station.id}` ? "Ending…" : "End station stream"}</button>}
+              {station.youtubeVideoId && <button disabled={!canOperate || busy === `verify:${station.id}`} onClick={onVerifyYouTube} className="rounded-card border border-arena-600 px-3 py-1.5 font-mono text-[10px] uppercase disabled:opacity-40">{busy === `verify:${station.id}` ? "Verifying…" : "Verify YouTube"}</button>}
+              {station.youtubeVideoId && <button disabled={!canOperate || busy === `end:${station.id}`} onClick={onEndStation} className="rounded-card border border-signal-error/50 px-3 py-1.5 font-mono text-[10px] uppercase text-signal-error disabled:opacity-40">{busy === `end:${station.id}` ? "Ending…" : "End station stream"}</button>}
             </div>
           </>
         ) : (
           <>
             <p className="text-sm text-ink-faint">No match on this station.</p>
-            <select defaultValue="" onChange={(e) => e.target.value && onAssign(e.target.value)} className="mt-2 w-full rounded-card border border-arena-600 bg-arena-900 px-3 py-2 text-xs">
+            <select defaultValue="" disabled={!canOperate} onChange={(e) => e.target.value && onAssign(e.target.value)} className="mt-2 w-full rounded-card border border-arena-600 bg-arena-900 px-3 py-2 text-xs">
               <option value="" disabled>Assign next match…</option>
               {queued.map((m) => <option key={m.id} value={m.id}>{m.playerOne.gamertag} vs {m.playerTwo.gamertag}</option>)}
             </select>
@@ -453,7 +468,7 @@ function StationCard({
       </div>
 
       <div className="mt-3 border-t border-arena-600 pt-3">
-        <button disabled={busy === `key:${station.id}`} onClick={onCredentials} className="font-mono text-[10px] uppercase tracking-wide text-ink-faint underline hover:text-signal-live disabled:opacity-40">
+        <button disabled={!canOperate || busy === `key:${station.id}`} onClick={onCredentials} className="font-mono text-[10px] uppercase tracking-wide text-ink-faint underline hover:text-signal-live disabled:opacity-40">
           {busy === `key:${station.id}` ? "Preparing…" : credentials ? "Refresh / reuse OBS credentials" : "Get OBS credentials"}
         </button>
         {credentials && (

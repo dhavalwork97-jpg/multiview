@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { db } from "@/lib/db";
-import { requireTournamentAccess } from "@/lib/auth";
+import { requireTournamentManage } from "@/lib/auth";
 import { publishEvent } from "@/lib/events";
 import { advanceBracket } from "@/lib/bracket-progression";
 import { createBroadcastForMatch, endBroadcastForMatch } from "@/lib/youtube";
@@ -34,7 +34,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ matchI
 
   let actor;
   try {
-    actor = await requireTournamentAccess(existing.tournamentId);
+    actor = (await requireTournamentManage(existing.tournamentId)).user;
   } catch {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
@@ -176,18 +176,14 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ matchI
       playerOneId: existing.playerOneId,
       playerTwoId: existing.playerTwoId,
     }));
-    if (advanced) {
+    for (const downstream of advanced) {
       await publishEvent({
         type: "bracket:advanced",
         tournamentId: updated.tournamentId,
         bracketId: updated.bracketId,
-        matchId: advanced.id,
+        matchId: downstream.id,
       });
-      // The newly-instantiated (or updated) next-round match needs its own
-      // match:updated so the live grid and any open bracket view pick up
-      // a real match existing in that slot now, not just the structure
-      // JSON having changed.
-      const nextMatch = await db.match.findUnique({ where: { id: advanced.id } });
+      const nextMatch = await db.match.findUnique({ where: { id: downstream.id } });
       if (nextMatch) {
         await publishEvent({
           type: "match:updated",

@@ -15,13 +15,15 @@ export default function TournamentOperationsPage() {
   const [title, setTitle] = useState("");
   const [severity, setSeverity] = useState<Incident["severity"]>("WARNING");
   const [error, setError] = useState<string | null>(null);
-  const role: OrganizerRole = "ADMIN";
+  const [role, setRole] = useState<OrganizerRole>("VIEWER");
+  const canOperate = canManageEvent(role);
   const steps = buildEventSetupChecklist();
 
   async function refresh() {
-    const [i, m] = await Promise.all([fetch(`/api/tournaments/${tournamentId}/incidents`, { cache: "no-store" }), fetch(`/api/tournaments/${tournamentId}/metrics`, { cache: "no-store" })]);
+    const [i, m, access] = await Promise.all([fetch(`/api/tournaments/${tournamentId}/incidents`, { cache: "no-store" }), fetch(`/api/tournaments/${tournamentId}/metrics`, { cache: "no-store" }), fetch(`/api/tournaments/${tournamentId}/control-room`, { cache: "no-store" })]);
     if (i.ok) setIncidents((await i.json()).incidents ?? []);
     if (m.ok) setMetrics(await m.json());
+    if (access.ok) { const data = await access.json(); setRole(data.role ?? "VIEWER"); }
   }
   useEffect(() => { void refresh(); }, [tournamentId]);
 
@@ -51,6 +53,6 @@ export default function TournamentOperationsPage() {
 
     <section className="rounded-xl border border-line p-6"><h2 className="text-lg font-semibold text-ink">Event setup</h2><div className="mt-5 grid gap-3 md:grid-cols-2">{steps.map(step => <div key={step.id} className="rounded-lg border border-line p-4"><p className="font-medium text-ink">{step.title}</p><p className="mt-1 text-sm text-ink-faint">{step.description}</p></div>)}</div></section>
 
-    <section className="rounded-xl border border-line p-6"><div className="flex flex-wrap items-end justify-between gap-4"><div><h2 className="text-lg font-semibold text-ink">Incident desk</h2><p className="mt-1 text-sm text-ink-faint">Keep operator issues visible and auditable.</p></div><div className="flex gap-2"><select value={severity} onChange={e => setSeverity(e.target.value as Incident["severity"])} className="rounded-lg border border-line bg-transparent px-3 py-2 text-sm"><option>WARNING</option><option>INFO</option><option>CRITICAL</option></select><input value={title} onChange={e => setTitle(e.target.value)} placeholder="Describe an issue" className="rounded-lg border border-line bg-transparent px-3 py-2 text-sm"/><button onClick={() => void createIncident()} className="rounded-lg bg-signal-live px-4 py-2 text-sm font-semibold text-arena-950">Log</button></div></div><div className="mt-5 space-y-2">{incidents.length === 0 ? <p className="text-sm text-ink-faint">No incidents logged.</p> : incidents.map(i => <div key={i.id} className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-line p-3"><div><p className="font-medium text-ink">{i.title}</p><p className="text-xs text-ink-faint">{i.severity} · {i.status} · {new Date(i.createdAt).toLocaleString()}</p></div>{i.status !== "RESOLVED" && <div className="flex gap-2"><button onClick={() => void updateIncident(i.id, "ACKNOWLEDGED")} className="rounded border border-line px-2 py-1 text-xs">Acknowledge</button><button onClick={() => void updateIncident(i.id, "RESOLVED")} className="rounded border border-line px-2 py-1 text-xs">Resolve</button></div>}</div>)}</div></section>
+    <section className="rounded-xl border border-line p-6"><div className="flex flex-wrap items-end justify-between gap-4"><div><h2 className="text-lg font-semibold text-ink">Incident desk</h2><p className="mt-1 text-sm text-ink-faint">Keep operator issues visible and auditable.</p></div><div className="flex gap-2"><select disabled={!canOperate} value={severity} onChange={e => setSeverity(e.target.value as Incident["severity"])} className="rounded-lg border border-line bg-transparent px-3 py-2 text-sm"><option>WARNING</option><option>INFO</option><option>CRITICAL</option></select><input disabled={!canOperate} value={title} onChange={e => setTitle(e.target.value)} placeholder="Describe an issue" className="rounded-lg border border-line bg-transparent px-3 py-2 text-sm"/><button disabled={!canOperate} onClick={() => void createIncident()} className="rounded-lg bg-signal-live px-4 py-2 text-sm font-semibold text-arena-950">Log</button></div></div><div className="mt-5 space-y-2">{incidents.length === 0 ? <p className="text-sm text-ink-faint">No incidents logged.</p> : incidents.map(i => <div key={i.id} className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-line p-3"><div><p className="font-medium text-ink">{i.title}</p><p className="text-xs text-ink-faint">{i.severity} · {i.status} · {new Date(i.createdAt).toLocaleString()}</p></div>{i.status !== "RESOLVED" && <div className="flex gap-2"><button disabled={!canOperate} onClick={() => void updateIncident(i.id, "ACKNOWLEDGED")} className="rounded border border-line px-2 py-1 text-xs">Acknowledge</button><button disabled={!canOperate} onClick={() => void updateIncident(i.id, "RESOLVED")} className="rounded border border-line px-2 py-1 text-xs">Resolve</button></div>}</div>)}</div></section>
   </main>;
 }

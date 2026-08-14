@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { db } from "@/lib/db";
-import { requireRole } from "@/lib/auth";
+import { requireTournamentManage } from "@/lib/auth";
 
 // Bracket topology is stored as JSON (see prisma/schema.prisma comment on
 // Bracket) rather than a relational tree, because every bracket source
@@ -33,18 +33,15 @@ const importSchema = z.object({
 });
 
 export async function POST(req: Request) {
+  const body = await req.json();
+  const accessCheck = importSchema.safeParse(body);
+  if (!accessCheck.success) return NextResponse.json({ error: accessCheck.error.flatten() }, { status: 400 });
   try {
-    await requireRole(["ORGANIZER", "ADMIN"]);
+    await requireTournamentManage(accessCheck.data.tournamentId);
   } catch {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
-
-  const body = await req.json();
-  const parsed = importSchema.safeParse(body);
-  if (!parsed.success) {
-    return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
-  }
-
+  const parsed = accessCheck;
   const { tournamentId, name, format, rounds } = parsed.data;
 
   const result = await db.$transaction(async (tx) => {

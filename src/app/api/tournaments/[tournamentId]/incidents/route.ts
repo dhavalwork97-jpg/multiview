@@ -1,14 +1,14 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { db } from "@/lib/db";
-import { requireTournamentAccess } from "@/lib/auth";
+import { requireTournamentView, requireTournamentManage } from "@/lib/auth";
 import { writeAuditLog } from "@/lib/audit";
 
 const schema = z.object({ severity: z.enum(["INFO", "WARNING", "CRITICAL"]).default("INFO"), title: z.string().trim().min(2).max(160), details: z.string().trim().max(4000).optional() });
 
 export async function GET(_req: Request, { params }: { params: Promise<{ tournamentId: string }> }) {
   const { tournamentId } = await params;
-  try { await requireTournamentAccess(tournamentId); } catch { return NextResponse.json({ error: "Forbidden" }, { status: 403 }); }
+  try { await requireTournamentView(tournamentId); } catch { return NextResponse.json({ error: "Forbidden" }, { status: 403 }); }
   const incidents = await db.tournamentIncident.findMany({ where: { tournamentId }, orderBy: { createdAt: "desc" }, take: 100 });
   return NextResponse.json({ incidents });
 }
@@ -16,7 +16,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ tournam
 export async function POST(req: Request, { params }: { params: Promise<{ tournamentId: string }> }) {
   const { tournamentId } = await params;
   let user;
-  try { user = await requireTournamentAccess(tournamentId); } catch { return NextResponse.json({ error: "Forbidden" }, { status: 403 }); }
+  try { user = (await requireTournamentManage(tournamentId)).user; } catch { return NextResponse.json({ error: "Forbidden" }, { status: 403 }); }
   const tournament = await db.tournament.findUnique({ where: { id: tournamentId }, select: { organizationId: true } });
   if (!tournament) return NextResponse.json({ error: "Tournament not found" }, { status: 404 });
   const body = schema.safeParse(await req.json().catch(() => null));

@@ -115,22 +115,33 @@ export async function createReusableStream(title: string) {
 export async function ensureStationStream(stationId: string) {
   const station = await db.station.findUnique({ where: { id: stationId } });
   if (!station) throw new Error("Station not found");
-
-  // The station's YouTube stream is persistent. Once credentials are stored
-  // locally, return them directly. Re-validating the resource on every button
-  // click was an unnecessary YouTube API call and was one of the quota drains.
   if (station.youtubeStreamId && station.youtubeIngestUrl && station.streamKey) {
     return { streamId: station.youtubeStreamId, ingestUrl: station.youtubeIngestUrl, streamKey: station.streamKey };
   }
 
-  const stream = await createReusableStream(`FGC Stream — ${station.label}`);
-  const info = stream.cdn?.ingestionInfo;
-  if (!info?.ingestionAddress || !info.streamName) throw new Error("YouTube created the stream but did not provide RTMP credentials");
-  await db.station.update({
-    where: { id: stationId },
-    data: { youtubeStreamId: stream.id, youtubeIngestUrl: info.ingestionAddress, ingestUrl: info.ingestionAddress, streamKey: info.streamName, ingressId: stream.id },
+  const leaseCutoff = new Date(Date.now() - 2 * 60 * 1000);
+  const claimed = await db.station.updateMany({
+    where: { id: stationId, OR: [{ youtubeStreamProvisioningAt: null }, { youtubeStreamProvisioningAt: { lt: leaseCutoff } }] },
+    data: { youtubeStreamProvisioningAt: new Date() },
   });
-  return { streamId: stream.id, ingestUrl: info.ingestionAddress, streamKey: info.streamName };
+  if (claimed.count !== 1) {
+    const current = await db.station.findUnique({ where: { id: stationId }, select: { youtubeStreamId: true, youtubeIngestUrl: true, streamKey: true } });
+    if (current?.youtubeStreamId && current.youtubeIngestUrl && current.streamKey) return { streamId: current.youtubeStreamId, ingestUrl: current.youtubeIngestUrl, streamKey: current.streamKey };
+    throw new Error(`Station ${station.label} is already preparing a YouTube stream. Wait a few seconds and try again.`);
+  }
+
+  try {
+    const stream = await createReusableStream(`FGC Stream — ${station.label}`);
+    const info = stream.cdn?.ingestionInfo;
+    if (!info?.ingestionAddress || !info.streamName) throw new Error("YouTube created the stream but did not provide RTMP credentials");
+    await db.station.update({
+      where: { id: stationId },
+      data: { youtubeStreamId: stream.id, youtubeIngestUrl: info.ingestionAddress, ingestUrl: info.ingestionAddress, streamKey: info.streamName, ingressId: stream.id },
+    });
+    return { streamId: stream.id, ingestUrl: info.ingestionAddress, streamKey: info.streamName };
+  } finally {
+    await db.station.updateMany({ where: { id: stationId }, data: { youtubeStreamProvisioningAt: null } });
+  }
 }
 
 export async function createBroadcastForMatch(matchId: string) {
@@ -281,6 +292,23 @@ export async function endBroadcastForMatch(_matchId: string) {
  * that transitions the station broadcast to complete. It costs one YouTube
  * write and should only be called when that physical station is finished.
  */
+export async function verifyStationYoutubeStatus(stationId: string) {
+  const station = await db.station.findUnique({ where: { id: stationId }, select: { youtubeBroadcastId: true, youtubeStreamId: true, youtubeLastStatusAt: true, status: true, youtubeVideoId: true } });
+  if (!station) throw new Error("Station not found");
+  if (!station.youtubeBroadcastId) return getStationYoutubeStatus(stationId);
+  if (station.youtubeLastStatusAt && Date.now() - station.youtubeLastStatusAt.getTime() < 30_000) return getStationYoutubeStatus(stationId);
+
+  const data = await youtubeRequest<{ items: YouTubeBroadcast[] }>(`/liveBroadcasts?part=status,contentDetails&id=${encodeURIComponent(station.youtubeBroadcastId)}`);
+  const broadcast = data.items?.[0];
+  const lifecycle = broadcast?.status?.lifeCycleStatus ?? "unknown";
+  const isLive = lifecycle === "live" || lifecycle === "liveStarting";
+  await db.station.update({
+    where: { id: stationId },
+    data: { youtubeLiveStatus: lifecycle, youtubeLastStatusAt: new Date(), status: isLive ? "LIVE" : station.status, lastHeartbeatAt: isLive ? new Date() : station.status === "LIVE" ? station.youtubeLastStatusAt : undefined },
+  });
+  return getStationYoutubeStatus(stationId);
+}
+
 export async function endStationBroadcast(stationId: string) {
   const station = await db.station.findUnique({
     where: { id: stationId },

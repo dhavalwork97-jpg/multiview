@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { db } from "@/lib/db";
-import { requireTournamentAccess } from "@/lib/auth";
+import { requireTournamentManage } from "@/lib/auth";
 
 const listQuerySchema = z.object({
   tournamentId: z.string().optional(),
@@ -72,7 +72,7 @@ export async function POST(req: Request) {
   if (!parsed.success) {
     return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
   }
-  try { await requireTournamentAccess(parsed.data.tournamentId); } catch { return NextResponse.json({ error: "Forbidden" }, { status: 403 }); }
+  try { await requireTournamentManage(parsed.data.tournamentId); } catch { return NextResponse.json({ error: "Forbidden" }, { status: 403 }); }
 
   const match = await db.match.create({
     data: {

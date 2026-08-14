@@ -74,3 +74,40 @@ Do not add background YouTube polling just to display LIVE status. The applicati
 - Tournament creation, station creation, match transitions, and station YouTube-session shutdowns are recorded.
 - Audit writes are best-effort and never cause a successful operational mutation to fail.
 - Added `GET /api/tournaments/:tournamentId/activity` for the control room and future reporting/incident tooling.
+
+## Upgrade Batch — #1 to #5 (2026-08-14)
+
+### 1. Production RBAC hardening
+- Added explicit tournament read/manage/admin authorization helpers.
+- Organization VIEWER is read-only; OPERATOR/ADMIN/OWNER can operate.
+- Protected bracket imports and station egress retry with tournament-scoped organization authorization.
+- Read-only control-room/health/report/metrics/activity access now supports organization viewers.
+
+### 2. Control Room 2.0
+- Added consolidated `/api/tournaments/[tournamentId]/control-room` snapshot endpoint.
+- Reduced dashboard refresh fan-out from four data requests to two.
+- Added role-aware read-only control-room UI.
+- Added explicit YouTube verification action with a 30-second per-station read cooldown.
+- Reconciliation now safely auto-assigns queued unassigned matches to idle stations.
+
+### 3. Match + bracket engine
+- Bracket progression now materializes every ready downstream target in one transaction.
+- Double-elimination winner and loser paths can both create/update their next matches.
+- Match-specific station isolation remains enforced: a station can never run two LIVE matches concurrently.
+- Reconciliation can assign newly-created queued matches to idle stations.
+
+### 4. YouTube reliability/quota protection
+- Added a separate station-level YouTube stream provisioning lock.
+- Concurrent credential requests cannot create duplicate reusable YouTube streams.
+- Existing broadcast/session locks remain in place.
+- Normal viewers never call YouTube status APIs.
+- Explicit operator verification is the only normal status read and is cooldown-limited.
+- Write quota remains application-budgeted and blocks further writes after Google reports quota exhaustion.
+- Broadcasts remain unlisted and station-scoped.
+
+### 5. Analytics dashboard
+- Added privacy-preserving anonymous viewer session hashes.
+- Added daily unique-viewer approximation.
+- Added watch hours and top-match audience metrics.
+- Event reports now expose unique viewers, watch hours and top matches.
+- Watch-page analytics now sends a stable session identifier from sessionStorage.

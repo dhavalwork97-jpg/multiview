@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { db } from "@/lib/db";
-import { requireTournamentAccess } from "@/lib/auth";
+import { requireTournamentView, requireTournamentManage } from "@/lib/auth";
 import { writeAuditLog } from "@/lib/audit";
 
 // GET /api/stations?tournamentId=... — organizer dashboard: every station's
@@ -12,7 +12,7 @@ export async function GET(req: Request) {
   const tournamentId = searchParams.get("tournamentId");
   if (!tournamentId) return NextResponse.json({ error: "tournamentId is required" }, { status: 400 });
   try {
-    await requireTournamentAccess(tournamentId);
+    await requireTournamentView(tournamentId);
   } catch {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
@@ -77,7 +77,7 @@ export async function POST(req: Request) {
   }
 
   let actor;
-  try { actor = await requireTournamentAccess(parsed.data.tournamentId); } catch { return NextResponse.json({ error: "Forbidden" }, { status: 403 }); }
+  try { actor = (await requireTournamentManage(parsed.data.tournamentId)).user; } catch { return NextResponse.json({ error: "Forbidden" }, { status: 403 }); }
 
   const station = await db.station.create({
     data: {

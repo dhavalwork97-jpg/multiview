@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
-import { requireTournamentAccess } from "@/lib/auth";
+import { requireTournamentManage } from "@/lib/auth";
 import { ensureStationStream } from "@/lib/youtube";
 
 // POST /api/stations/:stationId/ingress — preserved route name for the
@@ -10,7 +10,7 @@ export async function POST(_req: Request, { params }: { params: Promise<{ statio
   const { stationId } = await params;
   const station = await db.station.findUnique({ where: { id: stationId } });
   if (!station) return NextResponse.json({ error: "Station not found" }, { status: 404 });
-  try { await requireTournamentAccess(station.tournamentId); } catch { return NextResponse.json({ error: "Forbidden" }, { status: 403 }); }
+  try { await requireTournamentManage(station.tournamentId); } catch { return NextResponse.json({ error: "Forbidden" }, { status: 403 }); }
 
   try {
     const credentials = await ensureStationStream(stationId);

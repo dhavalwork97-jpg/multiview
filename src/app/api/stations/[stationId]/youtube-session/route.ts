@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
-import { requireTournamentAccess } from "@/lib/auth";
+import { requireTournamentManage } from "@/lib/auth";
 import { endStationBroadcast } from "@/lib/youtube";
 import { publishEvent } from "@/lib/events";
 import { writeAuditLog } from "@/lib/audit";
@@ -13,7 +13,7 @@ export async function DELETE(_req: Request, { params }: { params: Promise<{ stat
   if (!station) return NextResponse.json({ error: "Station not found" }, { status: 404 });
   let actor;
   try {
-    actor = await requireTournamentAccess(station.tournamentId);
+    actor = (await requireTournamentManage(station.tournamentId)).user;
   } catch {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }

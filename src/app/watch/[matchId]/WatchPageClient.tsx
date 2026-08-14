@@ -33,14 +33,21 @@ export function WatchPageClient({
   const socket = useSocket({ matchId: initialMatch.id });
 
   useEffect(() => {
-    void fetch("/api/analytics/view", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ matchId: initialMatch.id }) }).catch(() => {});
+    const key = "fgc_viewer_session";
+    let sessionId = sessionStorage.getItem(key);
+    if (!sessionId) {
+      sessionId = typeof crypto?.randomUUID === "function" ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+      sessionStorage.setItem(key, sessionId);
+    }
+    const headers = { "Content-Type": "application/json", "x-viewer-session": sessionId };
+    void fetch("/api/analytics/view", { method: "POST", headers, body: JSON.stringify({ matchId: initialMatch.id }) }).catch(() => {});
     let lastSent = Date.now();
     const interval = setInterval(() => {
       const now = Date.now();
       const seconds = Math.floor((now - lastSent) / 1000);
       if (seconds > 0) {
         lastSent = now;
-        void fetch("/api/analytics/watch", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ matchId: initialMatch.id, seconds }) }).catch(() => {});
+        void fetch("/api/analytics/watch", { method: "POST", headers, body: JSON.stringify({ matchId: initialMatch.id, seconds }) }).catch(() => {});
       }
     }, 30000);
     return () => clearInterval(interval);

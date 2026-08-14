@@ -369,6 +369,7 @@ model Station {
   youtubeLastStatusAt DateTime?
   // Prevent concurrent Start requests from creating duplicate YouTube broadcasts.
   youtubeProvisioningAt DateTime?
+  youtubeStreamProvisioningAt DateTime?
 
   lastHeartbeatAt DateTime?
   currentBitrateKbps Int?
@@ -446,6 +447,21 @@ model Match {
 }
 
 
+
+model ViewerSession {
+  id            String   @id @default(cuid())
+  sessionHash   String
+  tournamentId  String
+  matchId       String
+  dayKey        String
+  firstSeenAt   DateTime @default(now())
+  lastSeenAt    DateTime @updatedAt
+
+  @@unique([sessionHash, matchId, dayKey])
+  @@index([tournamentId, dayKey])
+  @@index([matchId, dayKey])
+  @@map("viewer_sessions")
+}
 
 model AuditLog {
   id           String   @id @default(cuid())

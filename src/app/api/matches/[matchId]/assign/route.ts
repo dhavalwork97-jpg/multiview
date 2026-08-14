@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { db } from "@/lib/db";
-import { requireTournamentAccess } from "@/lib/auth";
+import { requireTournamentManage } from "@/lib/auth";
 import { publishEvent } from "@/lib/events";
 import { writeAuditLog } from "@/lib/audit";
 
@@ -24,7 +24,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ matchId
   const match = await db.match.findUnique({ where: { id: matchId } });
   if (!match) return NextResponse.json({ error: "Match not found" }, { status: 404 });
   let actor;
-  try { actor = await requireTournamentAccess(match.tournamentId); } catch { return NextResponse.json({ error: "Forbidden" }, { status: 403 }); }
+  try { actor = (await requireTournamentManage(match.tournamentId)).user; } catch { return NextResponse.json({ error: "Forbidden" }, { status: 403 }); }
 
   if (match.status !== "QUEUED") {
     return NextResponse.json({ error: "Only queued matches can be assigned or moved between stations" }, { status: 409 });

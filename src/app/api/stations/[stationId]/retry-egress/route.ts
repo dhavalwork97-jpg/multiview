@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
-import { requireRole } from "@/lib/auth";
+import { requireTournamentManage } from "@/lib/auth";
 import { roomNameForStation } from "@/lib/livekit";
 import { tryStartEgressForStation } from "@/lib/egress-orchestration";
 
@@ -14,15 +14,10 @@ import { tryStartEgressForStation } from "@/lib/egress-orchestration";
 // LiveKit and Vercel) with no further event to retry on. This just
 // re-runs the exact same egress-start attempt on demand.
 export async function POST(_req: Request, { params }: { params: Promise<{ stationId: string }> }) {
-  try {
-    await requireRole(["ORGANIZER", "ADMIN"]);
-  } catch {
-    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-  }
-
   const { stationId } = await params;
   const station = await db.station.findUnique({ where: { id: stationId } });
   if (!station) return NextResponse.json({ error: "Station not found" }, { status: 404 });
+  try { await requireTournamentManage(station.tournamentId); } catch { return NextResponse.json({ error: "Forbidden" }, { status: 403 }); }
 
   if (station.status !== "LIVE") {
     return NextResponse.json(
