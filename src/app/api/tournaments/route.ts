@@ -1,8 +1,8 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { db } from "@/lib/db";
-import { requireRole } from "@/lib/auth";
 import { writeAuditLog } from "@/lib/audit";
+import { getOrCreatePersonalOrganization, requirePrimaryOrganizationRole } from "@/lib/organization";
 
 const createTournamentSchema = z.object({
   name: z.string().trim().min(2).max(120),
@@ -42,9 +42,9 @@ function roundName(roundIndex: number, totalRounds: number) {
 export async function POST(req: Request) {
   let user;
   try {
-    user = await requireRole(["ORGANIZER", "ADMIN"]);
+    ({ user } = await requirePrimaryOrganizationRole("ADMIN"));
   } catch {
-    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    return NextResponse.json({ error: "Only organization admins can create tournaments" }, { status: 403 });
   }
 
   const body = await req.json().catch(() => null);
@@ -63,6 +63,8 @@ export async function POST(req: Request) {
     );
   }
 
+  const organization = await getOrCreatePersonalOrganization(user.id);
+
   const result = await db.$transaction(async (tx) => {
     const baseSlug = slugify(parsed.data.name);
     const slug = `${baseSlug}-${Date.now().toString(36)}`;
@@ -75,6 +77,7 @@ export async function POST(req: Request) {
         status: "SCHEDULED",
         startDate: new Date(parsed.data.startDate),
         organizerId: user.id,
+        organizationId: organization.id,
       },
     });
 

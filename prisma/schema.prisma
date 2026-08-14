@@ -26,6 +26,25 @@ enum Role {
   ADMIN
 }
 
+enum OrganizationRole {
+  OWNER
+  ADMIN
+  OPERATOR
+  VIEWER
+}
+
+enum IncidentSeverity {
+  INFO
+  WARNING
+  CRITICAL
+}
+
+enum IncidentStatus {
+  OPEN
+  ACKNOWLEDGED
+  RESOLVED
+}
+
 enum TournamentStatus {
   DRAFT
   SCHEDULED
@@ -111,6 +130,9 @@ model User {
   updatedAt     DateTime @updatedAt
 
   organizedTournaments Tournament[]      @relation("TournamentOrganizer")
+  ownedOrganizations Organization[]       @relation("OrganizationOwner")
+  organizationMemberships OrganizationMember[]
+  sentInvitations OrganizationInvitation[] @relation("InvitationInviter")
   playerProfile        Player?
   favorites            Favorite[]
   watchHistory         WatchHistoryEntry[]
@@ -118,6 +140,101 @@ model User {
 
   @@index([role])
   @@map("users")
+}
+
+
+model Organization {
+  id        String   @id @default(cuid())
+  name      String
+  slug      String   @unique
+  ownerId   String
+  owner     User     @relation("OrganizationOwner", fields: [ownerId], references: [id])
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  members       OrganizationMember[]
+  invitations   OrganizationInvitation[]
+  tournaments   Tournament[]
+  incidents     TournamentIncident[]
+  dailyMetrics  EventDailyMetric[]
+
+  @@index([ownerId])
+  @@map("organizations")
+}
+
+model OrganizationMember {
+  id             String           @id @default(cuid())
+  organizationId String
+  userId         String
+  role           OrganizationRole @default(VIEWER)
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([organizationId, userId])
+  @@index([userId, role])
+  @@map("organization_members")
+}
+
+model OrganizationInvitation {
+  id             String           @id @default(cuid())
+  organizationId String
+  email          String
+  role           OrganizationRole @default(OPERATOR)
+  tokenHash      String           @unique
+  expiresAt      DateTime
+  acceptedAt     DateTime?
+  invitedById    String
+  createdAt      DateTime         @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  invitedBy    User         @relation("InvitationInviter", fields: [invitedById], references: [id])
+
+  @@index([organizationId, email])
+  @@index([expiresAt])
+  @@map("organization_invitations")
+}
+
+model TournamentIncident {
+  id             String           @id @default(cuid())
+  organizationId String
+  tournamentId   String
+  createdById    String?
+  severity       IncidentSeverity @default(INFO)
+  status         IncidentStatus   @default(OPEN)
+  title          String
+  details        String?
+  resolvedAt     DateTime?
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  tournament   Tournament   @relation(fields: [tournamentId], references: [id], onDelete: Cascade)
+
+  @@index([tournamentId, status, createdAt])
+  @@index([organizationId, createdAt])
+  @@map("tournament_incidents")
+}
+
+model EventDailyMetric {
+  id             String   @id @default(cuid())
+  organizationId String
+  tournamentId   String
+  matchId        String?
+  dayKey         String
+  views          Int      @default(0)
+  watchSeconds   Int      @default(0)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@unique([tournamentId, matchId, dayKey])
+  @@index([organizationId, dayKey])
+  @@index([tournamentId, dayKey])
+  @@map("event_daily_metrics")
 }
 
 // A Player is the competitive identity (gamertag) shown on brackets,
@@ -176,6 +293,8 @@ model Tournament {
 
   organizerId   String
   organizer     User              @relation("TournamentOrganizer", fields: [organizerId], references: [id])
+  organizationId String
+  organization  Organization      @relation(fields: [organizationId], references: [id], onDelete: Restrict)
 
   createdAt     DateTime          @default(now())
   updatedAt     DateTime          @updatedAt
@@ -184,9 +303,11 @@ model Tournament {
   stations      Station[]
   matches       Match[]
   brackets      Bracket[]
+  incidents     TournamentIncident[]
 
   @@index([status])
   @@index([slug])
+  @@index([organizationId, status])
   @@map("tournaments")
 }
 

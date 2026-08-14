@@ -1,0 +1,14 @@
+"use client";
+import { useEffect, useState } from "react";
+
+export default function TeamPage() {
+  const [members, setMembers] = useState<any[]>([]);
+  const [email, setEmail] = useState("");
+  const [role, setRole] = useState("OPERATOR");
+  const [inviteUrl, setInviteUrl] = useState("");
+  const [error, setError] = useState("");
+  async function refresh() { const r = await fetch("/api/organizations/current/members", { cache: "no-store" }); const j = await r.json().catch(() => ({})); if (r.ok) setMembers(j.members ?? []); else setError(j.error ?? "Unable to load team"); }
+  useEffect(() => { void refresh(); }, []);
+  async function invite() { setError(""); setInviteUrl(""); const r = await fetch("/api/organizations/current/invitations", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ email, role }) }); const j = await r.json().catch(() => ({})); if (!r.ok) { setError(j.error ?? "Unable to invite"); return; } setInviteUrl(j.inviteUrl); setEmail(""); }
+  return <main className="mx-auto max-w-5xl space-y-8 px-6 py-10"><header><p className="font-mono text-xs uppercase tracking-widest text-ink-faint">Organization</p><h1 className="mt-2 font-display text-3xl uppercase">Team</h1><p className="mt-2 text-sm text-ink-faint">Invite staff without sharing an admin login.</p></header>{error && <div className="rounded-lg border border-signal-error/40 bg-signal-error/10 p-3 text-sm text-signal-error">{error}</div>}<section className="rounded-xl border border-line p-6"><h2 className="text-lg font-semibold">Invite a teammate</h2><div className="mt-4 flex flex-wrap gap-2"><input value={email} onChange={e => setEmail(e.target.value)} placeholder="operator@example.com" className="min-w-64 rounded-lg border border-line bg-transparent px-3 py-2 text-sm"/><select value={role} onChange={e => setRole(e.target.value)} className="rounded-lg border border-line bg-transparent px-3 py-2 text-sm"><option>OPERATOR</option><option>ADMIN</option><option>VIEWER</option></select><button onClick={() => void invite()} className="rounded-lg bg-signal-live px-4 py-2 text-sm font-semibold text-arena-950">Create invite</button></div>{inviteUrl && <div className="mt-4 rounded-lg border border-signal-live/40 p-3 text-sm"><p className="text-ink-faint">Share this one-time invitation URL:</p><code className="mt-1 block break-all text-xs text-signal-live">{inviteUrl}</code></div>}</section><section className="rounded-xl border border-line p-6"><h2 className="text-lg font-semibold">Members</h2><div className="mt-4 divide-y divide-line">{members.map(m => <div key={m.id} className="flex flex-wrap items-center justify-between gap-3 py-3"><div><p className="font-medium">{m.user.displayName ?? m.user.username}</p><p className="text-xs text-ink-faint">{m.user.email}</p></div><span className="rounded-full border border-line px-2 py-1 font-mono text-[10px] uppercase">{m.role}</span></div>)}</div></section></main>;
+}

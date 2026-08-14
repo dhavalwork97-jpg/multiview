@@ -1,11 +1,14 @@
 import { redirect } from "next/navigation";
 import Link from "next/link";
 import { getCurrentUser } from "@/lib/auth";
+import { getPrimaryOrganizationMembership } from "@/lib/organization";
 import { CreateTournamentForm } from "@/components/admin/CreateTournamentForm";
 
 export default async function NewTournamentPage() {
   const user = await getCurrentUser();
-  if (!user || (user.role !== "ADMIN" && user.role !== "ORGANIZER")) redirect("/dashboard");
+  if (!user) redirect("/sign-in");
+  const membership = await getPrimaryOrganizationMembership(user.id);
+  if (user.role !== "ADMIN" && (!membership || (membership.role !== "ADMIN" && membership.role !== "OWNER"))) redirect("/dashboard");
 
   return (
     <main className="min-h-screen bg-arena-950 px-6 py-8">

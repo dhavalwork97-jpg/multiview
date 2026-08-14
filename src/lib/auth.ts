@@ -51,10 +51,12 @@ export async function requireUser() {
 
 /** Require that the signed-in organizer owns a tournament. ADMIN bypasses ownership. */
 export async function requireTournamentAccess(tournamentId: string) {
-  const user = await requireRole(["ORGANIZER", "ADMIN"]);
+  const user = await requireUser();
   if (user.role === "ADMIN") return user;
-  const tournament = await db.tournament.findUnique({ where: { id: tournamentId }, select: { organizerId: true } });
+  const tournament = await db.tournament.findUnique({ where: { id: tournamentId }, select: { organizationId: true } });
   if (!tournament) throw new ForbiddenError("Tournament not found");
-  if (tournament.organizerId !== user.id) throw new ForbiddenError("You do not have access to this tournament");
+  const member = await db.organizationMember.findUnique({ where: { organizationId_userId: { organizationId: tournament.organizationId, userId: user.id } } });
+  if (!member) throw new ForbiddenError("You do not have access to this tournament");
+  if (member.role === "VIEWER") throw new ForbiddenError("Viewer access cannot operate this tournament");
   return user;
 }

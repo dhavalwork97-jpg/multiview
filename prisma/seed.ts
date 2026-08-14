@@ -23,6 +23,17 @@ async function main() {
     process.exit(1);
   }
 
+  const organization = await db.organization.upsert({
+    where: { slug: `seed-${user.id}` },
+    update: {},
+    create: {
+      name: `${user.username ?? "Test"} Events`,
+      slug: `seed-${user.id}`,
+      ownerId: user.id,
+      members: { create: { userId: user.id, role: "OWNER" } },
+    },
+  });
+
   const tournament = await db.tournament.create({
     data: {
       name: "Test Tournament",
@@ -31,6 +42,7 @@ async function main() {
       status: "SCHEDULED",
       startDate: new Date(),
       organizerId: user.id,
+      organizationId: organization.id,
     },
   });
 

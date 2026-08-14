@@ -7,15 +7,20 @@ import { SearchBar } from "@/components/dashboard/SearchBar";
 import { isPremium, trialDaysRemaining } from "@/lib/billing";
 import { TrendingStrip } from "@/components/dashboard/TrendingStrip";
 import { RecommendedStrip } from "@/components/dashboard/RecommendedStrip";
+import { getPrimaryOrganizationMembership } from "@/lib/organization";
 
 export default async function DashboardPage() {
   const user = await getCurrentUser();
   if (!user) redirect("/sign-in");
 
+  const memberships = await db.organizationMember.findMany({ where: { userId: user.id }, select: { organizationId: true } });
+  const primaryMembership = await getPrimaryOrganizationMembership(user.id);
+  const canCreateTournament = user.role === "ADMIN" || primaryMembership?.role === "OWNER" || primaryMembership?.role === "ADMIN";
+  const organizationIds = memberships.map((m) => m.organizationId);
   const tournaments = await db.tournament.findMany({
-    where: { organizerId: user.id },
+    where: user.role === "ADMIN" ? {} : { organizationId: { in: organizationIds } },
     orderBy: { startDate: "desc" },
-    take: 5,
+    take: 8,
     select: { id: true, name: true, status: true, startDate: true },
   });
 
@@ -30,7 +35,8 @@ export default async function DashboardPage() {
         </div>
         <div className="flex items-center gap-3">
           <SearchBar />
-          {(user.role === "ADMIN" || user.role === "ORGANIZER") && (
+          {(canCreateTournament || primaryMembership?.role === "OPERATOR") && <Link href="/dashboard/team" className="rounded-card border border-arena-600 px-3 py-1.5 font-mono text-xs uppercase tracking-wide text-ink-muted hover:border-signal-live hover:text-signal-live">Team</Link>}
+          {canCreateTournament && (
             <Link href="/admin/tournaments/new" className="rounded-card bg-signal-live px-3 py-1.5 font-mono text-xs uppercase tracking-wide text-arena-950 hover:opacity-90">
               Create tournament
             </Link>
@@ -65,7 +71,7 @@ export default async function DashboardPage() {
         {tournaments.length === 0 ? (
           <div className="rounded-card border border-dashed border-arena-600 p-6 text-ink-muted">
             <p>You haven't created a tournament yet.</p>
-            {(user.role === "ADMIN" || user.role === "ORGANIZER") && (
+            {canCreateTournament && (
               <Link href="/admin/tournaments/new" className="mt-3 inline-flex rounded-card border border-signal-live/40 px-3 py-1.5 font-mono text-xs uppercase tracking-wide text-signal-live hover:bg-signal-live/5">
                 Create your first tournament
               </Link>

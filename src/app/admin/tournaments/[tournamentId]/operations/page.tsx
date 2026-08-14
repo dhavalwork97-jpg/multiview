@@ -1,57 +1,56 @@
 "use client";
 
-import { useMemo } from "react";
+import { useEffect, useState } from "react";
+import { useParams } from "next/navigation";
 import { buildEventSetupChecklist } from "@/lib/event-setup";
-import { canManageEvent, canManageTeam, type OrganizerRole } from "@/lib/organization-rbac";
+import { canManageEvent, type OrganizerRole } from "@/lib/organization-rbac";
+
+type Incident = { id: string; severity: "INFO" | "WARNING" | "CRITICAL"; status: "OPEN" | "ACKNOWLEDGED" | "RESOLVED"; title: string; details?: string | null; createdAt: string };
+type Metrics = { totals: { views: number; watchSeconds: number } };
 
 export default function TournamentOperationsPage() {
-  const steps = useMemo(() => buildEventSetupChecklist(), []);
+  const { tournamentId } = useParams<{ tournamentId: string }>();
+  const [incidents, setIncidents] = useState<Incident[]>([]);
+  const [metrics, setMetrics] = useState<Metrics | null>(null);
+  const [title, setTitle] = useState("");
+  const [severity, setSeverity] = useState<Incident["severity"]>("WARNING");
+  const [error, setError] = useState<string | null>(null);
   const role: OrganizerRole = "ADMIN";
+  const steps = buildEventSetupChecklist();
 
-  return (
-    <main className="mx-auto max-w-6xl space-y-8 px-6 py-10">
-      <header>
-        <p className="font-mono text-xs uppercase tracking-widest text-ink-faint">Operations</p>
-        <h1 className="mt-2 text-3xl font-semibold text-ink">Event Operations</h1>
-        <p className="mt-2 max-w-2xl text-sm text-ink-faint">
-          Run the event from one place: setup, staffing, incidents and recovery.
-        </p>
-      </header>
+  async function refresh() {
+    const [i, m] = await Promise.all([fetch(`/api/tournaments/${tournamentId}/incidents`, { cache: "no-store" }), fetch(`/api/tournaments/${tournamentId}/metrics`, { cache: "no-store" })]);
+    if (i.ok) setIncidents((await i.json()).incidents ?? []);
+    if (m.ok) setMetrics(await m.json());
+  }
+  useEffect(() => { void refresh(); }, [tournamentId]);
 
-      <section className="grid gap-4 md:grid-cols-3">
-        <div className="rounded-xl border border-line p-5">
-          <p className="text-xs uppercase tracking-wide text-ink-faint">Your role</p>
-          <p className="mt-2 text-xl font-semibold text-ink">{role}</p>
-          <p className="mt-2 text-sm text-ink-faint">
-            Event control: {canManageEvent(role) ? "enabled" : "read only"}
-          </p>
-        </div>
-        <div className="rounded-xl border border-line p-5">
-          <p className="text-xs uppercase tracking-wide text-ink-faint">Team management</p>
-          <p className="mt-2 text-xl font-semibold text-ink">{canManageTeam(role) ? "enabled" : "restricted"}</p>
-        </div>
-        <div className="rounded-xl border border-line p-5">
-          <p className="text-xs uppercase tracking-wide text-ink-faint">Streaming principle</p>
-          <p className="mt-2 text-sm text-ink">Each station may carry a different match.</p>
-        </div>
-      </section>
+  async function createIncident() {
+    if (!title.trim()) return;
+    const res = await fetch(`/api/tournaments/${tournamentId}/incidents`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ title, severity }) });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) { setError(data.error ?? "Unable to create incident"); return; }
+    setTitle(""); await refresh();
+  }
 
-      <section className="rounded-xl border border-line p-6">
-        <h2 className="text-lg font-semibold text-ink">Event setup</h2>
-        <div className="mt-5 space-y-3">
-          {steps.map((step) => (
-            <div key={step.id} className="flex items-start gap-4 rounded-lg border border-line p-4">
-              <span className="mt-0.5 rounded-full border border-line px-2 py-0.5 text-[10px] font-mono uppercase text-ink-faint">
-                {step.status}
-              </span>
-              <div>
-                <p className="font-medium text-ink">{step.title}</p>
-                <p className="mt-1 text-sm text-ink-faint">{step.description}</p>
-              </div>
-            </div>
-          ))}
-        </div>
-      </section>
-    </main>
-  );
+  async function updateIncident(id: string, status: Incident["status"]) {
+    const res = await fetch(`/api/tournaments/${tournamentId}/incidents/${id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ status }) });
+    if (!res.ok) setError("Unable to update incident");
+    await refresh();
+  }
+
+  return <main className="mx-auto max-w-6xl space-y-8 px-6 py-10">
+    <header><p className="font-mono text-xs uppercase tracking-widest text-ink-faint">Organizer operations</p><h1 className="mt-2 text-3xl font-semibold text-ink">Event control</h1><p className="mt-2 max-w-2xl text-sm text-ink-faint">A commercial-ready operations layer for staffing, incidents, setup and spectator analytics.</p></header>
+    {error && <button onClick={() => setError(null)} className="w-full rounded-xl border border-signal-error/50 bg-signal-error/10 p-3 text-left text-sm text-signal-error">{error} · dismiss</button>}
+
+    <section className="grid gap-4 md:grid-cols-3">
+      <div className="rounded-xl border border-line p-5"><p className="text-xs uppercase tracking-wide text-ink-faint">Role</p><p className="mt-2 text-xl font-semibold text-ink">{role}</p><p className="mt-2 text-sm text-ink-faint">Event control: {canManageEvent(role) ? "enabled" : "read only"}</p></div>
+      <div className="rounded-xl border border-line p-5"><p className="text-xs uppercase tracking-wide text-ink-faint">Spectator views</p><p className="mt-2 text-2xl font-semibold text-ink">{metrics?.totals.views ?? 0}</p></div>
+      <div className="rounded-xl border border-line p-5"><p className="text-xs uppercase tracking-wide text-ink-faint">Watch time</p><p className="mt-2 text-2xl font-semibold text-ink">{Math.floor((metrics?.totals.watchSeconds ?? 0) / 60)} min</p></div>
+    </section>
+
+    <section className="rounded-xl border border-line p-6"><h2 className="text-lg font-semibold text-ink">Event setup</h2><div className="mt-5 grid gap-3 md:grid-cols-2">{steps.map(step => <div key={step.id} className="rounded-lg border border-line p-4"><p className="font-medium text-ink">{step.title}</p><p className="mt-1 text-sm text-ink-faint">{step.description}</p></div>)}</div></section>
+
+    <section className="rounded-xl border border-line p-6"><div className="flex flex-wrap items-end justify-between gap-4"><div><h2 className="text-lg font-semibold text-ink">Incident desk</h2><p className="mt-1 text-sm text-ink-faint">Keep operator issues visible and auditable.</p></div><div className="flex gap-2"><select value={severity} onChange={e => setSeverity(e.target.value as Incident["severity"])} className="rounded-lg border border-line bg-transparent px-3 py-2 text-sm"><option>WARNING</option><option>INFO</option><option>CRITICAL</option></select><input value={title} onChange={e => setTitle(e.target.value)} placeholder="Describe an issue" className="rounded-lg border border-line bg-transparent px-3 py-2 text-sm"/><button onClick={() => void createIncident()} className="rounded-lg bg-signal-live px-4 py-2 text-sm font-semibold text-arena-950">Log</button></div></div><div className="mt-5 space-y-2">{incidents.length === 0 ? <p className="text-sm text-ink-faint">No incidents logged.</p> : incidents.map(i => <div key={i.id} className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-line p-3"><div><p className="font-medium text-ink">{i.title}</p><p className="text-xs text-ink-faint">{i.severity} · {i.status} · {new Date(i.createdAt).toLocaleString()}</p></div>{i.status !== "RESOLVED" && <div className="flex gap-2"><button onClick={() => void updateIncident(i.id, "ACKNOWLEDGED")} className="rounded border border-line px-2 py-1 text-xs">Acknowledge</button><button onClick={() => void updateIncident(i.id, "RESOLVED")} className="rounded border border-line px-2 py-1 text-xs">Resolve</button></div>}</div>)}</div></section>
+  </main>;
 }

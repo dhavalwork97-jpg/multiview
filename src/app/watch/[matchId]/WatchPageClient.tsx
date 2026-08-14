@@ -33,6 +33,20 @@ export function WatchPageClient({
   const socket = useSocket({ matchId: initialMatch.id });
 
   useEffect(() => {
+    void fetch("/api/analytics/view", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ matchId: initialMatch.id }) }).catch(() => {});
+    let lastSent = Date.now();
+    const interval = setInterval(() => {
+      const now = Date.now();
+      const seconds = Math.floor((now - lastSent) / 1000);
+      if (seconds > 0) {
+        lastSent = now;
+        void fetch("/api/analytics/watch", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ matchId: initialMatch.id, seconds }) }).catch(() => {});
+      }
+    }, 30000);
+    return () => clearInterval(interval);
+  }, [initialMatch.id]);
+
+  useEffect(() => {
     if (!match.startedAt) return;
     const startedAt = new Date(match.startedAt).getTime();
     const tick = () => setElapsedSeconds(Math.max(0, Math.floor((Date.now() - startedAt) / 1000)));
