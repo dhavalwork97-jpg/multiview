@@ -39,6 +39,23 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ matchI
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
+  // Idempotent lifecycle rules: retries from the UI, mobile networks, or
+  // operators double-clicking must never replay a transition or create a
+  // second stream session.
+  if (parsed.data.status === existing.status && parsed.data.status !== "COMPLETED") {
+    const updatedSame = await db.match.update({ where: { id: matchId }, data: parsed.data });
+    return NextResponse.json({ match: updatedSame, idempotent: true });
+  }
+  if (parsed.data.status === "LIVE" && !["QUEUED", "DISPUTED"].includes(existing.status)) {
+    return NextResponse.json({ error: `Cannot start a match from ${existing.status}` }, { status: 409 });
+  }
+  if (parsed.data.status === "COMPLETED" && existing.status === "COMPLETED") {
+    return NextResponse.json({ match: existing, idempotent: true });
+  }
+  if (parsed.data.status === "QUEUED" && existing.status !== "QUEUED") {
+    return NextResponse.json({ error: `Cannot move ${existing.status} match back to QUEUED` }, { status: 409 });
+  }
+
   const data = { ...parsed.data } as typeof parsed.data & {
     startedAt?: Date;
     endedAt?: Date;
@@ -154,7 +171,11 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ matchI
   // single write path for that (score-keeper/organizer PATCH is already
   // the single write path for match state generally).
   if (updated.status === "COMPLETED" && updated.winnerId && updated.bracketId) {
-    const advanced = await db.$transaction((tx) => advanceBracket(tx, updated));
+    const advanced = await db.$transaction((tx) => advanceBracket(tx, {
+      ...updated,
+      playerOneId: existing.playerOneId,
+      playerTwoId: existing.playerTwoId,
+    }));
     if (advanced) {
       await publishEvent({
         type: "bracket:advanced",
@@ -179,6 +200,19 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ matchI
           stationId: nextMatch.stationId,
         });
       }
+    }
+  }
+
+  if (updated.status === "COMPLETED") {
+    const remaining = await db.match.count({
+      where: { tournamentId: updated.tournamentId, status: { in: ["QUEUED", "LIVE"] } },
+    });
+    if (remaining === 0) {
+      await db.tournament.updateMany({
+        where: { id: updated.tournamentId, status: { in: ["LIVE", "SCHEDULED"] } },
+        data: { status: "COMPLETED", endDate: new Date() },
+      });
+      await publishEvent({ type: "tournament:completed", tournamentId: updated.tournamentId });
     }
   }
 

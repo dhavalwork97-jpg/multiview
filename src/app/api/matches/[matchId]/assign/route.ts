@@ -3,6 +3,7 @@ import { z } from "zod";
 import { db } from "@/lib/db";
 import { requireTournamentAccess } from "@/lib/auth";
 import { publishEvent } from "@/lib/events";
+import { writeAuditLog } from "@/lib/audit";
 
 const assignSchema = z.object({ stationId: z.string() });
 
@@ -22,7 +23,12 @@ export async function POST(req: Request, { params }: { params: Promise<{ matchId
 
   const match = await db.match.findUnique({ where: { id: matchId } });
   if (!match) return NextResponse.json({ error: "Match not found" }, { status: 404 });
-  try { await requireTournamentAccess(match.tournamentId); } catch { return NextResponse.json({ error: "Forbidden" }, { status: 403 }); }
+  let actor;
+  try { actor = await requireTournamentAccess(match.tournamentId); } catch { return NextResponse.json({ error: "Forbidden" }, { status: 403 }); }
+
+  if (match.status !== "QUEUED") {
+    return NextResponse.json({ error: "Only queued matches can be assigned or moved between stations" }, { status: 409 });
+  }
 
   const station = await db.station.findUnique({ where: { id: parsed.data.stationId } });
   if (!station || station.tournamentId !== match.tournamentId) {
@@ -39,6 +45,10 @@ export async function POST(req: Request, { params }: { params: Promise<{ matchId
     );
   }
 
+  if (station.status === "LIVE" || station.status === "ERROR") {
+    return NextResponse.json({ error: `${station.label} is not available for a new match while it is ${station.status.toLowerCase()}` }, { status: 409 });
+  }
+
   const updated = await db.match.update({
     where: { id: matchId },
     data: { stationId: station.id },
@@ -49,6 +59,14 @@ export async function POST(req: Request, { params }: { params: Promise<{ matchId
     tournamentId: updated.tournamentId,
     matchId: updated.id,
     stationId: station.id,
+  });
+  await writeAuditLog({
+    tournamentId: updated.tournamentId,
+    actorUserId: actor.id,
+    action: "MATCH_ASSIGNED",
+    entityType: "match",
+    entityId: updated.id,
+    metadata: { stationId: station.id, stationLabel: station.label },
   });
 
   return NextResponse.json({ match: updated });

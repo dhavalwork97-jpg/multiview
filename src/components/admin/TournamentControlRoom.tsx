@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useSocket } from "@/hooks/useSocket";
+import Link from "next/link";
 
 type Station = {
   id: string;
@@ -174,6 +175,18 @@ export function TournamentControlRoom({ tournamentId }: { tournamentId: string }
     }
   }
 
+  async function reconcile() {
+    setBusy("reconcile"); setError(null);
+    try {
+      const res = await fetch(`/api/tournaments/${tournamentId}/reconcile`, { method: "POST" });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error ?? "Reconciliation failed");
+      if (data.warnings?.length) setError(data.warnings.join(" "));
+      await refresh();
+    } catch (e) { setError(e instanceof Error ? e.message : "Reconciliation failed"); }
+    finally { setBusy(null); }
+  }
+
   async function getCredentials(stationId: string) {
     setBusy(`key:${stationId}`);
     setError(null);
@@ -214,9 +227,11 @@ export function TournamentControlRoom({ tournamentId }: { tournamentId: string }
               <p className="font-mono text-[10px] uppercase tracking-[0.2em] text-ink-faint">System health</p>
               <h2 className="font-display text-xl uppercase tracking-wide">Control plane diagnostics</h2>
             </div>
-            <span className={`font-mono text-[10px] uppercase ${health.overall === "ok" ? "text-signal-live" : health.overall === "warning" ? "text-yellow-300" : "text-signal-error"}`}>
-              {health.overall}
-            </span>
+            <div className="flex items-center gap-2">
+              <Link href={`/admin/tournaments/${tournamentId}/report`} className="rounded-card border border-arena-600 px-3 py-2 font-mono text-[10px] uppercase">Event report</Link>
+              <button onClick={() => void reconcile()} disabled={busy === "reconcile"} className="rounded-card border border-arena-600 px-3 py-2 font-mono text-[10px] uppercase disabled:opacity-40">{busy === "reconcile" ? "Checking…" : "Reconcile"}</button>
+              <span className={`font-mono text-[10px] uppercase ${health.overall === "ok" ? "text-signal-live" : health.overall === "warning" ? "text-yellow-300" : "text-signal-error"}`}>{health.overall}</span>
+            </div>
           </div>
           <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-3">
             {Object.entries(health.checks).map(([name, check]) => (

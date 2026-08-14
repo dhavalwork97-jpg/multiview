@@ -32,6 +32,10 @@ export type AppEvent =
       stationId: string;
     }
   | {
+      type: "tournament:completed";
+      tournamentId: string;
+    }
+  | {
       // Fired alongside match:updated when advanceBracket() (see
       // src/lib/bracket-progression.ts) instantiates or updates the next
       // round's Match row. InteractiveBracket already refetches on

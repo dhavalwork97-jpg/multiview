@@ -5,10 +5,13 @@ import type { Prisma, PrismaClient } from "@prisma/client";
 // slots. Match.roundIndex/matchIndex are that same pair of indices, so a
 // completed match can find exactly where it sits without re-matching on
 // playerIds/round name.
+type Target = { roundIndex: number; matchIndex: number; slot: "playerOneId" | "playerTwoId" };
 type StructureSlot = {
   playerOneId: string | null;
   playerTwoId: string | null;
   round: string;
+  winnerTarget?: Target;
+  loserTarget?: Target;
 };
 type StructureRound = { name: string; matches: StructureSlot[] };
 
@@ -27,15 +30,11 @@ type TxClient = PrismaClient | Prisma.TransactionClient;
  * bracket structure updates" at all — advancing rounds had to happen by
  * hand (deleting/recreating brackets, or direct DB edits).
  *
- * Single/double elimination both use the same flat round-by-round
- * structure shape, so this works for either — but only handles the
- * straightforward "winner advances to slot floor(matchIndex/2) of the next
- * round" mapping. A real double-elim bracket (loser drops to a losers-side
- * round rather than just advancing) needs a losers-bracket target too;
- * that's not modeled here and would need a second pointer (e.g.
- * `loserNextRoundIndex`/`loserNextMatchIndex`) on Match. Left as a
- * follow-up — single elimination (what prisma/seed-demo.ts generates
- * today) is fully handled.
+ * Existing single-elimination brackets keep the automatic winner-to-next
+ * slot fallback. Imported double-elimination brackets can provide explicit
+ * `winnerTarget` and `loserTarget` pointers in each slot, allowing winners
+ * and losers to feed completely different rounds without hard-coded bracket
+ * math.
  */
 export async function advanceBracket(
   tx: TxClient,
@@ -44,6 +43,8 @@ export async function advanceBracket(
     tournamentId: string;
     bracketId: string | null;
     winnerId: string | null;
+    playerOneId: string;
+    playerTwoId: string;
     roundIndex: number | null;
     matchIndex: number | null;
   }
@@ -61,53 +62,68 @@ export async function advanceBracket(
   if (!bracket) return null;
 
   const rounds = bracket.structure as unknown as StructureRound[];
-  const nextRoundIndex = completedMatch.roundIndex + 1;
-  const nextRound = rounds[nextRoundIndex];
-  if (!nextRound) return null; // completedMatch was the final — nothing to advance into
+  const currentRound = rounds[completedMatch.roundIndex];
+  const currentSlot = currentRound?.matches?.[completedMatch.matchIndex];
+  const loserId = completedMatch.playerOneId === completedMatch.winnerId
+    ? completedMatch.playerTwoId
+    : completedMatch.playerOneId;
 
-  const nextMatchIndex = Math.floor(completedMatch.matchIndex / 2);
-  const slot = nextRound.matches[nextMatchIndex];
-  if (!slot) return null; // structure doesn't declare this slot — nothing to write into
+  const writeTarget = (target: Target | undefined, playerId: string) => {
+    if (!target) return null;
+    const targetRound = rounds[target.roundIndex];
+    const targetSlot = targetRound?.matches?.[target.matchIndex];
+    if (!targetSlot) return null;
+    targetSlot[target.slot] = playerId;
+    return { roundIndex: target.roundIndex, matchIndex: target.matchIndex, slot: targetSlot };
+  };
 
-  const slotKey = completedMatch.matchIndex % 2 === 0 ? "playerOneId" : "playerTwoId";
-  slot[slotKey] = completedMatch.winnerId;
+  const winnerTarget = currentSlot?.winnerTarget ?? {
+    roundIndex: completedMatch.roundIndex + 1,
+    matchIndex: Math.floor(completedMatch.matchIndex / 2),
+    slot: (completedMatch.matchIndex % 2 === 0 ? "playerOneId" : "playerTwoId") as "playerOneId" | "playerTwoId",
+  };
+  const winnerWritten = writeTarget(winnerTarget, completedMatch.winnerId);
+  const loserWritten = writeTarget(currentSlot?.loserTarget, loserId);
+  if (!winnerWritten && !loserWritten) return null;
 
   await tx.bracket.update({
     where: { id: bracket.id },
     data: { structure: rounds as unknown as Prisma.InputJsonValue },
   });
 
-  if (!slot.playerOneId || !slot.playerTwoId) {
-    // Still waiting on the other feeder match — nothing to instantiate yet.
-    return null;
-  }
+  const readyTargets = [winnerWritten, loserWritten].filter(Boolean) as Array<{ roundIndex: number; matchIndex: number; slot: StructureSlot }>;
+  for (const targetForMatch of readyTargets) {
+    const slot = targetForMatch.slot;
+    if (!slot.playerOneId || !slot.playerTwoId) continue;
+    const targetRoundIndex = targetForMatch.roundIndex;
+    const targetMatchIndex = targetForMatch.matchIndex;
+    const targetRound = rounds[targetRoundIndex];
 
-  const existing = await tx.match.findFirst({
-    where: { bracketId: bracket.id, roundIndex: nextRoundIndex, matchIndex: nextMatchIndex },
-  });
-
-  if (existing) {
-    // Shouldn't normally happen (a slot only gets both players once), but
-    // if this runs twice for any reason, make it idempotent rather than
-    // erroring or creating a duplicate Match.
-    await tx.match.update({
-      where: { id: existing.id },
-      data: { playerOneId: slot.playerOneId, playerTwoId: slot.playerTwoId },
+    const existing = await tx.match.findFirst({
+      where: { bracketId: bracket.id, roundIndex: targetRoundIndex, matchIndex: targetMatchIndex },
     });
-    return { id: existing.id, isNew: false };
-  }
 
-  const created = await tx.match.create({
-    data: {
-      tournamentId: completedMatch.tournamentId,
-      bracketId: bracket.id,
-      playerOneId: slot.playerOneId,
-      playerTwoId: slot.playerTwoId,
-      round: slot.round ?? nextRound.name,
-      status: "QUEUED",
-      roundIndex: nextRoundIndex,
-      matchIndex: nextMatchIndex,
-    },
-  });
-  return { id: created.id, isNew: true };
+    if (existing) {
+      await tx.match.update({
+        where: { id: existing.id },
+        data: { playerOneId: slot.playerOneId, playerTwoId: slot.playerTwoId },
+      });
+      return { id: existing.id, isNew: false };
+    }
+
+    const created = await tx.match.create({
+      data: {
+        tournamentId: completedMatch.tournamentId,
+        bracketId: bracket.id,
+        playerOneId: slot.playerOneId,
+        playerTwoId: slot.playerTwoId,
+        round: slot.round ?? targetRound?.name,
+        status: "QUEUED",
+        roundIndex: targetRoundIndex,
+        matchIndex: targetMatchIndex,
+      },
+    });
+    return { id: created.id, isNew: true };
+  }
+  return null;
 }

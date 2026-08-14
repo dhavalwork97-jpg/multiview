@@ -57,6 +57,13 @@ export async function GET(_req: Request, { params }: { params: Promise<{ tournam
         : { status: "ok", detail: `${remaining} quota safety units remaining today` };
   }
 
+  const stationHealth = await db.station.findMany({ where: { tournamentId }, select: { label: true, status: true, youtubeLiveStatus: true, lastHeartbeatAt: true } });
+  const staleStarting = stationHealth.filter((s) => s.youtubeLiveStatus === "starting" && s.lastHeartbeatAt && Date.now() - s.lastHeartbeatAt.getTime() > 90_000);
+  const brokenLocalState = stationHealth.filter((s) => s.status === "ERROR");
+  checks.stations = staleStarting.length || brokenLocalState.length
+    ? { status: "warning", detail: `${staleStarting.length} station session(s) need verification; ${brokenLocalState.length} station(s) are in ERROR` }
+    : { status: "ok", detail: `${stationHealth.length} station(s) have consistent local state` };
+
   const overall = Object.values(checks).some((check) => check.status === "error")
     ? "error"
     : Object.values(checks).some((check) => check.status === "warning")

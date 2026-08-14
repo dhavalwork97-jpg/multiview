@@ -53,7 +53,13 @@ export async function GET(req: Request) {
   // Direct OBS -> YouTube RTMP has no app-side encoder heartbeat. Do not
   // query YouTube here; doing so on every dashboard refresh was a major quota
   // drain. Station state is operator-controlled and event-driven.
-  const withHealth = stations.map((s) => ({ ...s, isStale: false }));
+  const now = Date.now();
+  const withHealth = stations.map((s) => {
+    const startingTooLong = s.youtubeLiveStatus === "starting" && s.lastHeartbeatAt
+      ? now - new Date(s.lastHeartbeatAt).getTime() > 90_000
+      : false;
+    return { ...s, isStale: startingTooLong };
+  });
 
   return NextResponse.json({ stations: withHealth });
 }

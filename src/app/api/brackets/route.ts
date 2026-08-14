@@ -10,10 +10,13 @@ import { requireRole } from "@/lib/auth";
 // relational is Match — once we know two real players are in a slot, we
 // create a Match row so streaming/scoring/live-grid logic never has to
 // know or care where the bracket came from.
+const targetSchema = z.object({ roundIndex: z.number().int().min(0), matchIndex: z.number().int().min(0), slot: z.enum(["playerOneId", "playerTwoId"]) });
 const slotSchema = z.object({
-  playerOneId: z.string().nullable(), // null = "TBD" (winner of an earlier match)
+  playerOneId: z.string().nullable(),
   playerTwoId: z.string().nullable(),
   round: z.string(),
+  winnerTarget: targetSchema.optional(),
+  loserTarget: targetSchema.optional(),
 });
 
 const importSchema = z.object({
