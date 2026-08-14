@@ -47,16 +47,24 @@ export type AppEvent =
 
 let connected = false;
 async function ensureConnected() {
+  if (!redisPub) return false;
   if (!connected) {
-    await redisPub.connect().catch(() => {
-      // already connecting/connected — ioredis throws if connect() is
-      // called twice; safe to ignore here.
-    });
-    connected = true;
+    try {
+      await redisPub.connect();
+      connected = true;
+    } catch {
+      return false;
+    }
   }
+  return true;
 }
 
 export async function publishEvent(event: AppEvent) {
-  await ensureConnected();
-  await redisPub.publish(EVENTS_CHANNEL, JSON.stringify(event));
+  if (!(await ensureConnected()) || !redisPub) return;
+  try {
+    await redisPub.publish(EVENTS_CHANNEL, JSON.stringify(event));
+  } catch (error) {
+    // Realtime fan-out must never make a successful database mutation fail.
+    console.error("[redis] failed to publish realtime event", error);
+  }
 }

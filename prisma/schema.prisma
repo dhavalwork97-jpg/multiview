@@ -246,6 +246,8 @@ model Station {
   youtubeIngestUrl String?      // YouTube RTMP ingest URL
   youtubeLiveStatus String?     // created|ready|liveStarting|live|complete|...
   youtubeLastStatusAt DateTime?
+  // Prevent concurrent Start requests from creating duplicate YouTube broadcasts.
+  youtubeProvisioningAt DateTime?
 
   lastHeartbeatAt DateTime?
   currentBitrateKbps Int?
@@ -320,6 +322,20 @@ model Match {
   @@index([stationId])
   @@index([status, hypeScore])
   @@map("matches")
+}
+
+
+
+model YouTubeQuotaLedger {
+  // UTC calendar day. One row per day lets us enforce an application-side
+  // safety budget before spending YouTube write quota.
+  dayKey      String   @id
+  units       Int      @default(0)
+  blockedUntil DateTime?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@map("youtube_quota_ledger")
 }
 
 enum RecordingStatus {

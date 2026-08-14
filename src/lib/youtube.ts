@@ -1,4 +1,5 @@
 import { db } from "@/lib/db";
+import { isYouTubeQuotaError, markYouTubeQuotaBlocked, reserveYouTubeQuota, YOUTUBE_QUOTA_UNITS } from "@/lib/youtube-quota";
 
 type YouTubeStream = {
   id: string;
@@ -55,6 +56,20 @@ async function youtubeRequest<T>(path: string, init: RequestInit = {}): Promise<
   return data as T;
 }
 
+async function youtubeWrite<T>(path: string, init: RequestInit, quotaUnits: number, operation: string): Promise<T> {
+  await reserveYouTubeQuota(quotaUnits, operation);
+  try {
+    return await youtubeRequest<T>(path, init);
+  } catch (error) {
+    if (isYouTubeQuotaError(error)) {
+      // Once Google reports the project quota as exhausted, stop hammering
+      // the API. The ledger blocks further writes until the next UTC day.
+      await markYouTubeQuotaBlocked();
+    }
+    throw error;
+  }
+}
+
 export function youtubeConfigured() {
   return !!(process.env.YOUTUBE_CLIENT_ID && process.env.YOUTUBE_CLIENT_SECRET && process.env.YOUTUBE_REFRESH_TOKEN);
 }
@@ -76,14 +91,14 @@ export async function createReusableStream(title: string) {
   // insert: the insert response normally contains the RTMP credentials and
   // every extra read consumes quota. If YouTube ever omits them, make one
   // bounded recovery read instead of the old 8-request polling loop.
-  const created = await youtubeRequest<YouTubeStream>("/liveStreams?part=snippet,cdn,contentDetails", {
+  const created = await youtubeWrite<YouTubeStream>("/liveStreams?part=snippet,cdn,contentDetails", {
     method: "POST",
     body: JSON.stringify({
       snippet: { title },
       cdn: { format: "1080p", ingestionType: "rtmp", resolution: "variable", frameRate: "variable" },
       contentDetails: { isReusable: true },
     }),
-  });
+  }, YOUTUBE_QUOTA_UNITS.LIVE_STREAM_INSERT, "liveStreams.insert");
   if (!created?.id) throw new Error("YouTube returned no live stream id");
   if (created.cdn?.ingestionInfo?.ingestionAddress && created.cdn.ingestionInfo.streamName) return created;
 
@@ -127,22 +142,64 @@ export async function createBroadcastForMatch(matchId: string) {
 
   const station = match.station;
 
-  // One YouTube broadcast is reused for the whole station streaming session.
-  // A match is a bracket/UI state, not a new YouTube video. Normal match-to-
-  // match progression therefore makes zero YouTube API calls.
-  if (station.youtubeBroadcastId && station.youtubeVideoId && station.youtubeLiveStatus !== "complete") {
-    await db.match.update({
-      where: { id: matchId },
-      data: { youtubeBroadcastId: station.youtubeBroadcastId, youtubeVideoId: station.youtubeVideoId },
+  // Cross-instance idempotency: two rapid Start clicks can reach different
+  // Vercel instances. Claim a short-lived DB lock before any YouTube write.
+  // If the previous instance crashed, the 2-minute lease expires naturally.
+  const claimed = await db.station.updateMany({
+    where: {
+      id: station.id,
+      OR: [
+        { youtubeProvisioningAt: null },
+        { youtubeProvisioningAt: { lt: new Date(Date.now() - 2 * 60 * 1000) } },
+      ],
+    },
+    data: { youtubeProvisioningAt: new Date() },
+  });
+  if (claimed.count !== 1) {
+    const current = await db.station.findUnique({
+      where: { id: station.id },
+      select: { youtubeBroadcastId: true, youtubeVideoId: true, youtubeLiveStatus: true },
     });
-    return { broadcastId: station.youtubeBroadcastId, videoId: station.youtubeVideoId, station };
+    if (current?.youtubeBroadcastId && current.youtubeVideoId && current.youtubeLiveStatus !== "complete") {
+      await db.match.update({
+        where: { id: matchId },
+        data: { youtubeBroadcastId: current.youtubeBroadcastId, youtubeVideoId: current.youtubeVideoId, status: "LIVE", startedAt: match.startedAt ?? new Date() },
+      });
+      return { broadcastId: current.youtubeBroadcastId, videoId: current.youtubeVideoId, station };
+    }
+    throw new Error(`Station ${station.label} is already preparing a YouTube broadcast. Wait a few seconds and try again.`);
+  }
+
+  try {
+  // A physical station can stream exactly one match at a time. Different
+  // stations have independent YouTube broadcasts, so Station A can stream
+  // Match 1 while Station B simultaneously streams Match 2. Never let a
+  // second LIVE match silently attach itself to the first station's video.
+  const anotherLiveMatch = await db.match.findFirst({
+    where: { stationId: station.id, status: "LIVE", id: { not: matchId } },
+    select: { id: true },
+  });
+  if (anotherLiveMatch) {
+    throw new Error(`Station ${station.label} is already streaming another match. Complete that match before starting this one.`);
+  }
+
+  // One YouTube broadcast is reused for the whole physical-station session.
+  // This is the quota-safe boundary: Match A -> Match B on the SAME station
+  // reuses the same unlisted video, while two DIFFERENT stations each have
+  // their own stream/broadcast/video and can run different matches at once.
+  if (station.youtubeBroadcastId && station.youtubeVideoId && station.youtubeLiveStatus !== "complete") {
+    const reusedMatch = await db.match.update({
+      where: { id: matchId },
+      data: { youtubeBroadcastId: station.youtubeBroadcastId, youtubeVideoId: station.youtubeVideoId, status: "LIVE", startedAt: match.startedAt ?? new Date() },
+    });
+    return { broadcastId: station.youtubeBroadcastId, videoId: station.youtubeVideoId, station: reusedMatch };
   }
 
   const stream = await ensureStationStream(station.id);
   const scheduledStartTime = new Date(Date.now() + 15_000).toISOString();
   const title = `${match.tournament.name} — ${station.label}`;
 
-  const broadcast = await youtubeRequest<YouTubeBroadcast>("/liveBroadcasts?part=snippet,status,contentDetails", {
+  const broadcast = await youtubeWrite<YouTubeBroadcast>("/liveBroadcasts?part=snippet,status,contentDetails", {
     method: "POST",
     body: JSON.stringify({
       snippet: {
@@ -158,24 +215,22 @@ export async function createBroadcastForMatch(matchId: string) {
         enableAutoStop: false,
         enableDvr: true,
         recordFromStart: true,
-        // YouTube documents enableEmbed as optional on insert and defaults it to true.
-        // Omitting the field avoids the invalidEmbedSetting rejection seen on this channel
-        // while preserving the API default for embeddable broadcasts.
+        enableEmbed: true,
       },
     }),
-  });
+  }, YOUTUBE_QUOTA_UNITS.BROADCAST_INSERT, "liveBroadcasts.insert");
   if (!broadcast?.id) throw new Error("YouTube returned no broadcast id");
 
   // bind is a single explicit write. Do not follow it with a list/read just
   // to verify the response; the bind endpoint already returns the resource.
   try {
-    await youtubeRequest(`/liveBroadcasts/bind?id=${encodeURIComponent(broadcast.id)}&part=id,contentDetails&streamId=${encodeURIComponent(stream.streamId)}`, {
+    await youtubeWrite(`/liveBroadcasts/bind?id=${encodeURIComponent(broadcast.id)}&part=id,contentDetails&streamId=${encodeURIComponent(stream.streamId)}`, {
       method: "POST",
       body: JSON.stringify({}),
-    });
+    }, YOUTUBE_QUOTA_UNITS.BROADCAST_BIND, "liveBroadcasts.bind");
   } catch (error) {
     try {
-      await youtubeRequest(`/liveBroadcasts?id=${encodeURIComponent(broadcast.id)}`, { method: "DELETE" });
+      await youtubeWrite(`/liveBroadcasts?id=${encodeURIComponent(broadcast.id)}`, { method: "DELETE" }, YOUTUBE_QUOTA_UNITS.BROADCAST_DELETE, "liveBroadcasts.delete");
     } catch (cleanupError) {
       console.error("[youtube] failed to clean up orphan broadcast", cleanupError);
     }
@@ -184,7 +239,12 @@ export async function createBroadcastForMatch(matchId: string) {
 
   const updatedMatch = await db.match.update({
     where: { id: matchId },
-    data: { youtubeBroadcastId: broadcast.id, youtubeVideoId: broadcast.id },
+    data: {
+      youtubeBroadcastId: broadcast.id,
+      youtubeVideoId: broadcast.id,
+      status: "LIVE",
+      startedAt: match.startedAt ?? new Date(),
+    },
   });
   const now = new Date();
   await db.station.update({
@@ -200,6 +260,9 @@ export async function createBroadcastForMatch(matchId: string) {
   });
 
   return { broadcastId: broadcast.id, videoId: broadcast.id, station: updatedMatch };
+  } finally {
+    await db.station.updateMany({ where: { id: station.id }, data: { youtubeProvisioningAt: null } });
+  }
 }
 
 /**
@@ -224,9 +287,10 @@ export async function endStationBroadcast(stationId: string) {
   if (!station?.youtubeBroadcastId) return { ended: false };
 
   try {
-    await youtubeRequest(
+    await youtubeWrite(
       `/liveBroadcasts/transition?id=${encodeURIComponent(station.youtubeBroadcastId)}&part=id,status&broadcastStatus=complete`,
       { method: "POST", body: JSON.stringify({}) },
+      YOUTUBE_QUOTA_UNITS.BROADCAST_TRANSITION, "liveBroadcasts.transition",
     );
   } catch (error) {
     const message = String(error);
@@ -235,7 +299,7 @@ export async function endStationBroadcast(stationId: string) {
     // an explicit operator action, not a background retry loop.
     if (/errorStreamInactive|invalidTransition/i.test(message)) {
       try {
-        await youtubeRequest(`/liveBroadcasts?id=${encodeURIComponent(station.youtubeBroadcastId)}`, { method: "DELETE" });
+        await youtubeWrite(`/liveBroadcasts?id=${encodeURIComponent(station.youtubeBroadcastId)}`, { method: "DELETE" }, YOUTUBE_QUOTA_UNITS.BROADCAST_DELETE, "liveBroadcasts.delete");
       } catch (deleteError) {
         const deleteMessage = String(deleteError);
         if (!/notFound|liveBroadcastNotFound/i.test(deleteMessage)) throw deleteError;
