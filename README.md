@@ -279,3 +279,8 @@ deployable online stages (Vercel, socket server, LiveKit media server,
 clip worker, AI worker, plus Neon/Upstash/S3/CloudFront as managed
 services), automated on every push, with a real (if incomplete, and
 documented as such) test and security posture behind it.
+
+
+## Organizer Operations
+
+V7 adds the organizer operations foundation: role policies, event setup checklist, incident contracts, and an operations page at `/admin/tournaments/[tournamentId]/operations`. These additions are deliberately additive and do not invent a new persistence schema.
