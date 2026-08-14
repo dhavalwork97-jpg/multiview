@@ -6,10 +6,6 @@ import { publishEvent } from "@/lib/events";
 import { advanceBracket } from "@/lib/bracket-progression";
 import { createBroadcastForMatch, endBroadcastForMatch } from "@/lib/youtube";
 
-function updatedNeedsBroadcast(match: { status: string; youtubeBroadcastId: string | null }) {
-  return match.youtubeBroadcastId == null;
-}
-
 const updateSchema = z.object({
   playerOneScore: z.number().int().min(0).optional(),
   playerTwoScore: z.number().int().min(0).optional(),
@@ -53,7 +49,16 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ matchI
   // one going COMPLETED gets endedAt.
   // Prepare YouTube BEFORE publishing LIVE. This makes Start idempotent and
   // prevents a match from becoming visible as LIVE when no broadcast exists.
-  if (parsed.data.status === "LIVE" && updatedNeedsBroadcast(existing)) {
+  //
+  // Important: do not use the match's old youtubeBroadcastId as the decision
+  // here. Match A and Match B on one physical station intentionally share the
+  // station session, while a match may also retain historical IDs after it
+  // completes. createBroadcastForMatch() is the authoritative station-scoped
+  // reuse/provisioning path.
+  if (parsed.data.status === "LIVE" && existing.status !== "LIVE") {
+    if (existing.status === "COMPLETED") {
+      return NextResponse.json({ error: "A completed match cannot be started again. Create or schedule a new match instead." }, { status: 409 });
+    }
     if (!existing.stationId) return NextResponse.json({ error: "Match must be assigned to a station before going LIVE" }, { status: 409 });
     try {
       const broadcast = await createBroadcastForMatch(matchId);

@@ -12,7 +12,7 @@ export async function GET() {
   }
 
   const dayKey = new Date().toISOString().slice(0, 10);
-  const ledger = await db.youtubeQuotaLedger.findUnique({ where: { dayKey } });
+  const ledger = await db.youTubeQuotaLedger.findUnique({ where: { dayKey } });
   const configured = Number(process.env.YOUTUBE_DAILY_QUOTA_BUDGET ?? DEFAULT_BUDGET);
   const budget = Number.isFinite(configured) && configured > 0 ? Math.floor(configured) : DEFAULT_BUDGET;
 

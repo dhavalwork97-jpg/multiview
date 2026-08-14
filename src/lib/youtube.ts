@@ -215,7 +215,9 @@ export async function createBroadcastForMatch(matchId: string) {
         enableAutoStop: false,
         enableDvr: true,
         recordFromStart: true,
-        enableEmbed: true,
+        // Do not explicitly send enableEmbed here.
+        // YouTube defaults broadcasts to embeddable, while explicitly sending
+        // enableEmbed=true can return invalidEmbedSetting on some channels.
       },
     }),
   }, YOUTUBE_QUOTA_UNITS.BROADCAST_INSERT, "liveBroadcasts.insert");

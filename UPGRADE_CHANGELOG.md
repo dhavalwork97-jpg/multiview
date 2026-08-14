@@ -62,3 +62,9 @@ Keep `REDIS_URL`, Clerk production variables, and the existing YouTube OAuth var
 ## Important operational rule
 
 Do not add background YouTube polling just to display LIVE status. The application deliberately keeps viewer status DB-driven to protect quota. The YouTube iframe itself is the final playback authority.
+
+### 7. Operator transition safety
+- Starting a match now always uses the station-scoped YouTube provisioning/reuse path instead of trusting a historical match YouTube ID.
+- Completed matches cannot be accidentally restarted as LIVE.
+- A station YouTube session cannot be ended while a match on that station is still LIVE.
+- These checks prevent stale match IDs and operator clicks from producing a website match that points at an ended or unrelated stream.

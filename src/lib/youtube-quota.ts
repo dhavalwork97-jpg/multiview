@@ -42,7 +42,7 @@ export async function reserveYouTubeQuota(units: number, operation: string) {
     throw new Error(`YouTube operation ${operation} exceeds the configured daily quota safety budget (${budget} units)`);
   }
 
-  const ledger = await db.youtubeQuotaLedger.upsert({
+  const ledger = await db.youTubeQuotaLedger.upsert({
     where: { dayKey: key },
     create: { dayKey: key },
     update: {},
@@ -52,7 +52,7 @@ export async function reserveYouTubeQuota(units: number, operation: string) {
     throw new Error(`YouTube quota is temporarily blocked until ${ledger.blockedUntil.toISOString()}; no further API writes will be attempted today`);
   }
 
-  const result = await db.youtubeQuotaLedger.updateMany({
+  const result = await db.youTubeQuotaLedger.updateMany({
     where: {
       dayKey: key,
       blockedUntil: null,
@@ -70,7 +70,7 @@ export async function reserveYouTubeQuota(units: number, operation: string) {
 
 export async function markYouTubeQuotaBlocked() {
   const now = new Date();
-  await db.youtubeQuotaLedger.upsert({
+  await db.youTubeQuotaLedger.upsert({
     where: { dayKey: dayKey(now) },
     create: { dayKey: dayKey(now), blockedUntil: nextUtcDay(now) },
     update: { blockedUntil: nextUtcDay(now) },
