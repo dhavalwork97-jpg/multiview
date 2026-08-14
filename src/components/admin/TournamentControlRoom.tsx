@@ -40,14 +40,16 @@ export function TournamentControlRoom({ tournamentId }: { tournamentId: string }
   const [newStation, setNewStation] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [activity, setActivity] = useState<Array<{ id: string; action: string; entityType: string; createdAt: string; metadata?: Record<string, unknown> | null }>>([]);
+  const [health, setHealth] = useState<{ overall: "ok" | "warning" | "error"; checkedAt: string; checks: Record<string, { status: "ok" | "warning" | "error"; detail: string }>; youtubeQuota: { used: number; budget: number; remaining: number; blockedUntil: string | null } } | null>(null);
   const socket = useSocket({ tournamentId });
 
   const refresh = useCallback(async () => {
     try {
-      const [stationsRes, queuedRes, activityRes] = await Promise.all([
+      const [stationsRes, queuedRes, activityRes, healthRes] = await Promise.all([
         fetch(`/api/stations?tournamentId=${tournamentId}`, { cache: "no-store" }),
         fetch(`/api/matches?tournamentId=${tournamentId}&status=QUEUED`, { cache: "no-store" }),
         fetch(`/api/tournaments/${tournamentId}/activity`, { cache: "no-store" }),
+        fetch(`/api/tournaments/${tournamentId}/health`, { cache: "no-store" }),
       ]);
       if (!stationsRes.ok) throw new Error("Failed to load stations");
       const stationData = await stationsRes.json();
@@ -59,6 +61,10 @@ export function TournamentControlRoom({ tournamentId }: { tournamentId: string }
       if (activityRes.ok) {
         const data = await activityRes.json();
         setActivity(data.events ?? []);
+      }
+      if (healthRes.ok) {
+        const data = await healthRes.json();
+        setHealth(data);
       }
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to refresh control room");
@@ -200,6 +206,31 @@ export function TournamentControlRoom({ tournamentId }: { tournamentId: string }
         <Metric label="Offline" value={counts.offline} />
         <Metric label="Attention" value={counts.alerts} tone={counts.alerts ? "error" : undefined} />
       </div>
+
+      {health && (
+        <section className="rounded-card border border-arena-600 bg-arena-900 p-4">
+          <div className="mb-3 flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+            <div>
+              <p className="font-mono text-[10px] uppercase tracking-[0.2em] text-ink-faint">System health</p>
+              <h2 className="font-display text-xl uppercase tracking-wide">Control plane diagnostics</h2>
+            </div>
+            <span className={`font-mono text-[10px] uppercase ${health.overall === "ok" ? "text-signal-live" : health.overall === "warning" ? "text-yellow-300" : "text-signal-error"}`}>
+              {health.overall}
+            </span>
+          </div>
+          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-3">
+            {Object.entries(health.checks).map(([name, check]) => (
+              <div key={name} className="rounded-card border border-arena-700 bg-arena-950 p-3">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="font-mono text-[10px] uppercase tracking-wide text-ink-faint">{name}</span>
+                  <span className={`font-mono text-[10px] uppercase ${check.status === "ok" ? "text-signal-live" : check.status === "warning" ? "text-yellow-300" : "text-signal-error"}`}>{check.status}</span>
+                </div>
+                <p className="mt-1 text-xs text-ink-faint">{check.detail}</p>
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
 
       <section className="rounded-card border border-arena-600 bg-arena-900 p-4">
         <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
