@@ -36,6 +36,13 @@ export type AppEvent =
       tournamentId: string;
     }
   | {
+      type: "clip:ready";
+      tournamentId: string;
+      matchId: string;
+      clipId: string;
+      s3Key: string;
+    }
+  | {
       // Fired alongside match:updated when advanceBracket() (see
       // src/lib/bracket-progression.ts) instantiates or updates the next
       // round's Match row. InteractiveBracket already refetches on

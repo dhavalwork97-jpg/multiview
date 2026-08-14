@@ -83,15 +83,16 @@ const worker = new Worker<ClipJobData>(
         data: { status: "READY", s3Key },
       });
 
+      const match = await db.match.findUniqueOrThrow({
+        where: { id: job.data.matchId },
+        select: { tournamentId: true },
+      });
       await publishEvent({
-        type: "match:updated", // reuses the match room so anyone watching sees the new clip appear live
-        tournamentId: (await db.match.findUniqueOrThrow({ where: { id: job.data.matchId } })).tournamentId,
+        type: "clip:ready",
+        tournamentId: match.tournamentId,
         matchId: job.data.matchId,
-        status: "LIVE",
-        playerOneScore: 0, // unused by clip-ready listeners; see note below
-        playerTwoScore: 0,
-        winnerId: null,
-        stationId: null,
+        clipId: clip.id,
+        s3Key,
       });
 
       return clip;
@@ -108,9 +109,3 @@ worker.on("failed", (job, err) => {
 });
 
 console.log("[clip-worker] listening for clip-generation jobs");
-
-// NOTE: piggybacking clip-ready notifications on the `match:updated` event
-// is a shortcut — a dedicated `clip:ready` event (with its own listener on
-// the watch page) is the cleaner design and worth splitting out before
-// this goes to real production traffic. Flagging rather than silently
-// shipping the shortcut.

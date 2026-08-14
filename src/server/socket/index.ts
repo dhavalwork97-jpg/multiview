@@ -78,6 +78,10 @@ eventsSubscriber.on("message", (_channel, raw) => {
     case "bracket:advanced":
       io.to(`tournament:${event.tournamentId}`).emit("bracket:advanced", event);
       break;
+    case "clip:ready":
+      io.to(`match:${event.matchId}`).emit("clip:ready", event);
+      io.to(`tournament:${event.tournamentId}`).emit("clip:ready", event);
+      break;
   }
 });
 

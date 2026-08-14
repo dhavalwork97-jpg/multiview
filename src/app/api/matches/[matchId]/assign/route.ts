@@ -4,6 +4,7 @@ import { db } from "@/lib/db";
 import { requireTournamentManage } from "@/lib/auth";
 import { publishEvent } from "@/lib/events";
 import { writeAuditLog } from "@/lib/audit";
+import { defaultRateLimit } from "@/lib/rate-limit";
 
 const assignSchema = z.object({ stationId: z.string() });
 
@@ -25,6 +26,9 @@ export async function POST(req: Request, { params }: { params: Promise<{ matchId
   if (!match) return NextResponse.json({ error: "Match not found" }, { status: 404 });
   let actor;
   try { actor = (await requireTournamentManage(match.tournamentId)).user; } catch { return NextResponse.json({ error: "Forbidden" }, { status: 403 }); }
+
+  const limit = await defaultRateLimit.limit(`assign:${actor.id}`);
+  if (!limit.success) return NextResponse.json({ error: "Too many assignment operations — slow down and try again shortly" }, { status: 429 });
 
   if (match.status !== "QUEUED") {
     return NextResponse.json({ error: "Only queued matches can be assigned or moved between stations" }, { status: 409 });

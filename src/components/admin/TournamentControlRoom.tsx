@@ -44,6 +44,7 @@ export function TournamentControlRoom({ tournamentId }: { tournamentId: string }
   const [canOperate, setCanOperate] = useState(true);
   const [metrics, setMetrics] = useState<{ views: number; watchSeconds: number; watchHours: number }>({ views: 0, watchSeconds: 0, watchHours: 0 });
   const [incidentCount, setIncidentCount] = useState(0);
+  const [incidents, setIncidents] = useState<Array<{ id: string; severity: "INFO" | "WARNING" | "CRITICAL"; status: "OPEN" | "ACKNOWLEDGED" | "RESOLVED"; title: string; details?: string | null; createdAt: string }>>([]);
   const [health, setHealth] = useState<{ overall: "ok" | "warning" | "error"; checkedAt: string; checks: Record<string, { status: "ok" | "warning" | "error"; detail: string }>; youtubeQuota: { used: number; budget: number; remaining: number; blockedUntil: string | null } } | null>(null);
   const socket = useSocket({ tournamentId });
 
@@ -60,6 +61,7 @@ export function TournamentControlRoom({ tournamentId }: { tournamentId: string }
       setActivity(snapshot.activity ?? []);
       setCanOperate(snapshot.canOperate !== false);
       setMetrics(snapshot.metrics ?? { views: 0, watchSeconds: 0, watchHours: 0 });
+      setIncidents(snapshot.incidents ?? []);
       setIncidentCount((snapshot.incidents ?? []).length);
       if (healthRes.ok) setHealth(await healthRes.json());
     } catch (e) {
@@ -182,6 +184,31 @@ export function TournamentControlRoom({ tournamentId }: { tournamentId: string }
     finally { setBusy(null); }
   }
 
+  async function reconcileEgress() {
+    setBusy("egress-reconcile"); setError(null);
+    try {
+      const res = await fetch(`/api/tournaments/${tournamentId}/reconcile-egress`, { method: "POST" });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error ?? "Egress reconciliation failed");
+      if (data.errors?.length) setError(data.errors.join(" "));
+      await refresh();
+    } catch (e) { setError(e instanceof Error ? e.message : "Egress reconciliation failed"); }
+    finally { setBusy(null); }
+  }
+
+  async function updateIncident(incidentId: string, status: "ACKNOWLEDGED" | "RESOLVED") {
+    setBusy(`incident:${incidentId}`); setError(null);
+    try {
+      const res = await fetch(`/api/tournaments/${tournamentId}/incidents/${incidentId}`, {
+        method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ status }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error ?? "Failed to update incident");
+      await refresh();
+    } catch (e) { setError(e instanceof Error ? e.message : "Failed to update incident"); }
+    finally { setBusy(null); }
+  }
+
   async function verifyYouTube(stationId: string) {
     setBusy(`verify:${stationId}`); setError(null);
     try {
@@ -238,6 +265,7 @@ export function TournamentControlRoom({ tournamentId }: { tournamentId: string }
             <div className="flex items-center gap-2">
               <Link href={`/admin/tournaments/${tournamentId}/report`} className="rounded-card border border-arena-600 px-3 py-2 font-mono text-[10px] uppercase">Event report</Link>
               <button onClick={() => void reconcile()} disabled={!canOperate || busy === "reconcile"} className="rounded-card border border-arena-600 px-3 py-2 font-mono text-[10px] uppercase disabled:opacity-40">{busy === "reconcile" ? "Checking…" : "Reconcile"}</button>
+              <button onClick={() => void reconcileEgress()} disabled={!canOperate || busy === "egress-reconcile"} className="rounded-card border border-arena-600 px-3 py-2 font-mono text-[10px] uppercase disabled:opacity-40">{busy === "egress-reconcile" ? "Checking egress…" : "Repair playback"}</button>
               <span className={`font-mono text-[10px] uppercase ${health.overall === "ok" ? "text-signal-live" : health.overall === "warning" ? "text-yellow-300" : "text-signal-error"}`}>{health.overall}</span>
             </div>
           </div>
@@ -333,6 +361,40 @@ export function TournamentControlRoom({ tournamentId }: { tournamentId: string }
           ))}
           {queued.filter((m) => !m.station).length === 0 && <p className="text-sm text-ink-faint">No unassigned queued matches.</p>}
         </div>
+      </section>
+
+      <section className="rounded-card border border-arena-600 bg-arena-900 p-4">
+        <div className="mb-3 flex items-center justify-between">
+          <div>
+            <p className="font-mono text-[10px] uppercase tracking-[0.2em] text-ink-faint">Incidents</p>
+            <h2 className="font-display text-xl uppercase tracking-wide">Open issues</h2>
+          </div>
+          <span className="font-mono text-[10px] uppercase text-ink-faint">{incidentCount} active</span>
+        </div>
+        {incidents.length === 0 ? (
+          <p className="text-sm text-ink-faint">No open incidents. The event control plane is clear.</p>
+        ) : (
+          <div className="space-y-2">
+            {incidents.map((incident) => (
+              <div key={incident.id} className="rounded-card border border-arena-700 bg-arena-950 p-3">
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <span className={`font-mono text-[10px] uppercase ${incident.severity === "CRITICAL" ? "text-signal-error" : incident.severity === "WARNING" ? "text-yellow-300" : "text-ink-faint"}`}>{incident.severity}</span>
+                      <span className="font-mono text-[10px] uppercase text-ink-faint">{incident.status}</span>
+                    </div>
+                    <p className="mt-1 text-sm font-medium">{incident.title}</p>
+                    {incident.details && <p className="mt-1 text-xs text-ink-faint">{incident.details}</p>}
+                  </div>
+                  {canOperate && <div className="flex gap-2">
+                    {incident.status === "OPEN" && <button disabled={busy === `incident:${incident.id}`} onClick={() => void updateIncident(incident.id, "ACKNOWLEDGED")} className="rounded-card border border-arena-600 px-2 py-1 font-mono text-[10px] uppercase disabled:opacity-40">Acknowledge</button>}
+                    {incident.status !== "RESOLVED" && <button disabled={busy === `incident:${incident.id}`} onClick={() => void updateIncident(incident.id, "RESOLVED")} className="rounded-card border border-signal-live/40 px-2 py-1 font-mono text-[10px] uppercase text-signal-live disabled:opacity-40">Resolve</button>}
+                  </div>}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
       </section>
 
       <section className="rounded-card border border-arena-600 bg-arena-900 p-4">

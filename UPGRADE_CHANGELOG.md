@@ -111,3 +111,11 @@ Do not add background YouTube polling just to display LIVE status. The applicati
 - Added watch hours and top-match audience metrics.
 - Event reports now expose unique viewers, watch hours and top matches.
 - Watch-page analytics now sends a stable session identifier from sessionStorage.
+
+## Post-V8 production hardening
+- Added explicit operator-triggered LiveKit egress reconciliation for LIVE stations missing playback.
+- Added dedicated `clip:ready` realtime events instead of piggybacking on `match:updated`.
+- Added rate limiting to score/status and station-assignment mutations.
+- Added an active-incident panel with acknowledge/resolve controls in Control Room.
+- Added a k6 public-event load-test smoke script and an npm high-severity audit CI gate.
+- Added an incident-response runbook covering quota exhaustion, playback recovery, credential exposure, and Prisma P1001 incidents.

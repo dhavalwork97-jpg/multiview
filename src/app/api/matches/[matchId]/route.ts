@@ -6,6 +6,7 @@ import { publishEvent } from "@/lib/events";
 import { advanceBracket } from "@/lib/bracket-progression";
 import { createBroadcastForMatch, endBroadcastForMatch } from "@/lib/youtube";
 import { writeAuditLog } from "@/lib/audit";
+import { defaultRateLimit } from "@/lib/rate-limit";
 
 const updateSchema = z.object({
   playerOneScore: z.number().int().min(0).optional(),
@@ -37,6 +38,11 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ matchI
     actor = (await requireTournamentManage(existing.tournamentId)).user;
   } catch {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
+
+  const limit = await defaultRateLimit.limit(`match:${actor.id}`);
+  if (!limit.success) {
+    return NextResponse.json({ error: "Too many match operations — slow down and try again shortly" }, { status: 429 });
   }
 
   // Idempotent lifecycle rules: retries from the UI, mobile networks, or
