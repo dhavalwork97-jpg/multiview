@@ -127,22 +127,9 @@ export async function createBroadcastForMatch(matchId: string) {
 
   const station = match.station;
 
-  // A physical station can stream exactly one match at a time. Different
-  // stations have independent YouTube broadcasts, so Station A can stream
-  // Match 1 while Station B simultaneously streams Match 2. Never let a
-  // second LIVE match silently attach itself to the first station's video.
-  const anotherLiveMatch = await db.match.findFirst({
-    where: { stationId: station.id, status: "LIVE", id: { not: matchId } },
-    select: { id: true },
-  });
-  if (anotherLiveMatch) {
-    throw new Error(`Station ${station.label} is already streaming another match. Complete that match before starting this one.`);
-  }
-
-  // One YouTube broadcast is reused for the whole physical-station session.
-  // This is the quota-safe boundary: Match A -> Match B on the SAME station
-  // reuses the same unlisted video, while two DIFFERENT stations each have
-  // their own stream/broadcast/video and can run different matches at once.
+  // One YouTube broadcast is reused for the whole station streaming session.
+  // A match is a bracket/UI state, not a new YouTube video. Normal match-to-
+  // match progression therefore makes zero YouTube API calls.
   if (station.youtubeBroadcastId && station.youtubeVideoId && station.youtubeLiveStatus !== "complete") {
     await db.match.update({
       where: { id: matchId },
