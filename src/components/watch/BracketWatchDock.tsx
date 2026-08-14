@@ -14,10 +14,10 @@ export type DockMatch = {
   playerTwoScore: number;
   playerOne: { gamertag: string };
   playerTwo: { gamertag: string };
+  youtubeVideoId: string | null;
   station: {
     id: string;
     label: string;
-    youtubeVideoId: string | null;
   } | null;
 };
 
@@ -98,7 +98,7 @@ export function BracketWatchDock({
   if (!match) return null;
 
   const isLive = match.status === "LIVE";
-  const videoId = match.station?.youtubeVideoId ?? null;
+  const videoId = match.youtubeVideoId ?? null;
 
   return (
     <div

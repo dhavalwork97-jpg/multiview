@@ -14,9 +14,10 @@ type InitialMatch = {
   tournamentId: string;
   playerOne: { gamertag: string };
   playerTwo: { gamertag: string };
-  station: { id: string; label: string; youtubeVideoId: string | null } | null;
+  station: { id: string; label: string } | null;
   tournament: { name: string };
   startedAt: string | null;
+  youtubeVideoId: string | null;
 };
 
 export function WatchPageClient({
@@ -30,24 +31,6 @@ export function WatchPageClient({
   const [viewerCount, setViewerCount] = useState<number | null>(null);
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
   const socket = useSocket({ matchId: initialMatch.id });
-
-  useEffect(() => {
-    if (!match.station) return;
-    let cancelled = false;
-    fetch(`/api/stations/${match.station.id}/youtube-status`, { cache: "no-store" })
-      .then((res) => (res.ok ? res.json() : null))
-      .then((data) => {
-        if (!cancelled && data) {
-          setMatch((prev) => ({
-            ...prev,
-            status: data.isLive ? "LIVE" : prev.status,
-            station: prev.station ? { ...prev.station, youtubeVideoId: data.videoId ?? prev.station.youtubeVideoId } : prev.station,
-          }));
-        }
-      })
-      .catch(() => {});
-    return () => { cancelled = true; };
-  }, [match.station?.id, match.status]);
 
   useEffect(() => {
     if (!match.startedAt) return;
@@ -94,16 +77,16 @@ export function WatchPageClient({
 
       {/* Real player: HLS by default (scales), WebRTC opt-in (low latency) */}
       <div className="my-4 max-w-4xl">
-        {match.station ? (
+        {match.status === "LIVE" && match.station ? (
           <VideoPlayer
             stationId={match.station.id}
-            youtubeVideoId={match.station.youtubeVideoId}
+            youtubeVideoId={match.youtubeVideoId}
             isPremium={isPremium}
-            isLive={match.status === "LIVE"}
+            isLive
           />
         ) : (
           <div className="flex aspect-video w-full items-center justify-center rounded-card bg-arena-900 text-sm text-ink-muted">
-            Not yet assigned to a station
+            {match.station ? (match.status === "COMPLETED" ? "Stream ended" : "Waiting for stream") : "Not yet assigned to a station"}
           </div>
         )}
       </div>

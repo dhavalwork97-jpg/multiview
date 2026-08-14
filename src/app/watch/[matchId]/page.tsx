@@ -22,9 +22,10 @@ export default async function WatchPage({ params }: { params: Promise<{ matchId:
       playerTwoScore: true,
       tournamentId: true,
       startedAt: true,
+      youtubeVideoId: true,
       playerOne: { select: { gamertag: true } },
       playerTwo: { select: { gamertag: true } },
-      station: { select: { id: true, label: true, youtubeVideoId: true } },
+      station: { select: { id: true, label: true } },
       tournament: { select: { name: true } },
     },
   });

@@ -14,9 +14,10 @@ type BracketMatch = {
   playerTwoScore: number;
   winnerId: string | null;
   stationId: string | null;
+  youtubeVideoId: string | null;
   playerOne: { gamertag: string };
   playerTwo: { gamertag: string };
-  station: { id: string; label: string; youtubeVideoId: string | null } | null;
+  station: { id: string; label: string } | null;
 };
 
 type StructureSlot = {
