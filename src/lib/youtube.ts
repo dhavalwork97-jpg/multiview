@@ -158,7 +158,9 @@ export async function createBroadcastForMatch(matchId: string) {
         enableAutoStop: false,
         enableDvr: true,
         recordFromStart: true,
-        enableEmbed: true,
+        // YouTube documents enableEmbed as optional on insert and defaults it to true.
+        // Omitting the field avoids the invalidEmbedSetting rejection seen on this channel
+        // while preserving the API default for embeddable broadcasts.
       },
     }),
   });
