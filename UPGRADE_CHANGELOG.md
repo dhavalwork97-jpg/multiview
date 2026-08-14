@@ -119,3 +119,20 @@ Do not add background YouTube polling just to display LIVE status. The applicati
 - Added an active-incident panel with acknowledge/resolve controls in Control Room.
 - Added a k6 public-event load-test smoke script and an npm high-severity audit CI gate.
 - Added an incident-response runbook covering quota exhaustion, playback recovery, credential exposure, and Prisma P1001 incidents.
+
+## V10 — Commercial Event Platform
+- Added organization white-label fields and branding settings.
+- Added public branded event route `/e/[slug]` and custom-domain host rewrite support.
+- Added teams, rosters, tournament teams, player profiles and team profiles.
+- Added sponsor management, public sponsor placements and click tracking.
+- Added in-app organization/tournament notifications.
+- Added authenticated tournament JSON export and participant import API.
+- Added tournament analytics page.
+- Added plan tiers and active-tournament limit enforcement.
+- Added tournament format and best-of configuration, including round-robin scheduling.
+
+## 2026-08-14 — Final repair pass after #1–#10 upgrades
+- Added the missing `Tournament.sponsors` Prisma back-relation required by the `Sponsor.tournament` relation.
+- Restored the missing `PLAN_LIMITS` import in the tournament creation API.
+- Kept the existing commercial-event platform schema/migration changes intact.
+- This repair is schema/client-generation focused: after extraction, run `npm install` and `npx prisma generate` before typecheck/build so Prisma Client is regenerated from the corrected schema.

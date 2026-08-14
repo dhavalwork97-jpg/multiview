@@ -99,6 +99,29 @@ model MatchEvent {
   @@map("match_events")
 }
 
+enum PlanTier {
+  FREE
+  STARTER
+  PRO
+  ENTERPRISE
+}
+
+enum TournamentFormat {
+  SINGLE_ELIMINATION
+  DOUBLE_ELIMINATION
+  ROUND_ROBIN
+  SWISS
+}
+
+enum NotificationType {
+  MATCH_STARTING
+  MATCH_LIVE
+  MATCH_COMPLETED
+  BRACKET_ADVANCED
+  STREAM_ALERT
+  TOURNAMENT_UPDATE
+}
+
 enum SubscriptionStatus {
   NONE
   ACTIVE
@@ -151,12 +174,20 @@ model Organization {
   owner     User     @relation("OrganizationOwner", fields: [ownerId], references: [id])
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+  plan          PlanTier @default(FREE)
+  brandLogoUrl  String?
+  brandPrimaryColor String?
+  brandAccentColor String?
+  customDomain  String? @unique
+  tagline       String?
 
   members       OrganizationMember[]
   invitations   OrganizationInvitation[]
   tournaments   Tournament[]
   incidents     TournamentIncident[]
   dailyMetrics  EventDailyMetric[]
+  sponsors      Sponsor[]
+  notifications Notification[]
 
   @@index([ownerId])
   @@map("organizations")
@@ -257,6 +288,7 @@ model Player {
   matchesAsP1  Match[]  @relation("MatchPlayerOne")
   matchesAsP2  Match[]  @relation("MatchPlayerTwo")
   favoritedBy  Favorite[]
+  teamMemberships TeamMember[]
 
   @@index([gamertag])
   @@map("players")
@@ -289,6 +321,10 @@ model Tournament {
   endDate       DateTime?
   venue         String?
   bracketSource String?           // e.g. "start.gg" — provenance of imported bracket
+  format        TournamentFormat  @default(SINGLE_ELIMINATION)
+  bestOf        Int               @default(3)
+  publicEnabled Boolean            @default(true)
+  publicTheme   Json?
   bracketExternalId String?       // id in the source system, for re-sync
 
   organizerId   String
@@ -300,15 +336,96 @@ model Tournament {
   updatedAt     DateTime          @updatedAt
 
   entrants      TournamentEntrant[]
+  teams         TournamentTeam[]
   stations      Station[]
   matches       Match[]
   brackets      Bracket[]
   incidents     TournamentIncident[]
+  notifications Notification[]
+  sponsors      Sponsor[]
 
   @@index([status])
   @@index([slug])
   @@index([organizationId, status])
   @@map("tournaments")
+}
+
+model Team {
+  id          String   @id @default(cuid())
+  name        String
+  slug        String   @unique
+  logoUrl     String?
+  country     String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  members     TeamMember[]
+  tournaments TournamentTeam[]
+
+  @@index([name])
+  @@map("teams")
+}
+
+model TeamMember {
+  id        String @id @default(cuid())
+  teamId    String
+  playerId  String
+  role      String?
+  team      Team   @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  player    Player @relation(fields: [playerId], references: [id], onDelete: Cascade)
+  @@unique([teamId, playerId])
+  @@map("team_members")
+}
+
+model TournamentTeam {
+  id           String @id @default(cuid())
+  tournamentId String
+  teamId       String
+  seed         Int?
+  eliminated   Boolean @default(false)
+  tournament   Tournament @relation(fields: [tournamentId], references: [id], onDelete: Cascade)
+  team         Team @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  @@unique([tournamentId, teamId])
+  @@map("tournament_teams")
+}
+
+model Sponsor {
+  id             String @id @default(cuid())
+  organizationId String
+  tournamentId   String
+  name           String
+  logoUrl        String?
+  websiteUrl     String?
+  bannerUrl      String?
+  placement      String @default("EVENT")
+  weight         Int @default(1)
+  active         Boolean @default(true)
+  clicks         Int @default(0)
+  impressions    Int @default(0)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  tournament     Tournament @relation(fields: [tournamentId], references: [id], onDelete: Cascade)
+  @@index([tournamentId, active])
+  @@map("sponsors")
+}
+
+model Notification {
+  id             String @id @default(cuid())
+  organizationId String
+  tournamentId   String?
+  userId         String?
+  type           NotificationType
+  title          String
+  message        String
+  href           String?
+  readAt         DateTime?
+  createdAt      DateTime @default(now())
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  tournament     Tournament? @relation(fields: [tournamentId], references: [id], onDelete: Cascade)
+  @@index([organizationId, createdAt])
+  @@index([userId, readAt, createdAt])
+  @@map("notifications")
 }
 
 model TournamentEntrant {

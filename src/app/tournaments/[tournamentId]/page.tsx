@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import type { CSSProperties } from "react";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { db } from "@/lib/db";
@@ -36,10 +37,17 @@ export default async function TournamentPage({
     select: {
       id: true,
       name: true,
+      slug: true,
+      bestOf: true,
+      format: true,
+      publicEnabled: true,
       game: true,
       status: true,
       venue: true,
       startDate: true,
+      organization: { select: { name: true, tagline: true, brandLogoUrl: true, brandPrimaryColor: true, brandAccentColor: true } },
+      sponsors: { where: { active: true }, orderBy: { weight: "desc" }, take: 8 },
+      teams: { include: { team: { select: { id: true, name: true, logoUrl: true } } }, orderBy: { seed: "asc" } },
       brackets: { select: { id: true, name: true } },
       matches: {
         where: { status: { in: ["LIVE", "COMPLETED"] } },
@@ -60,7 +68,7 @@ export default async function TournamentPage({
     },
   });
 
-  if (!tournament) notFound();
+  if (!tournament || !tournament.publicEnabled) notFound();
 
   const liveMatches = tournament.matches.filter((m) => m.status === "LIVE");
   const completedMatches = tournament.matches.filter((m) => m.status === "COMPLETED");
@@ -87,7 +95,22 @@ export default async function TournamentPage({
         </div>
       </header>
 
-      <div className="mx-auto max-w-6xl space-y-8">
+      <div className="mx-auto max-w-6xl space-y-8" style={{ ["--event-accent" as string]: tournament.organization.brandPrimaryColor ?? "#7cf7c5" } as CSSProperties}>
+        <section className="rounded-card border border-arena-700 bg-arena-900 p-4 sm:p-5">
+          <div className="flex flex-wrap items-center gap-4">
+            {tournament.organization.brandLogoUrl && <img src={tournament.organization.brandLogoUrl} alt="" className="h-12 w-12 rounded-card object-cover" />}
+            <div><p className="font-mono text-[10px] uppercase tracking-widest text-signal-live">{tournament.organization.name}</p><p className="text-sm text-ink-faint">{tournament.organization.tagline ?? "Official event broadcast hub"}</p></div>
+          </div>
+        </section>
+
+        {tournament.sponsors.length > 0 && <section className="rounded-card border border-arena-700 bg-arena-900 p-4">
+          <p className="font-mono text-[10px] uppercase tracking-widest text-ink-faint">Presented by</p>
+          <div className="mt-3 flex flex-wrap gap-3">{tournament.sponsors.map(s => <a key={s.id} href={s.websiteUrl ?? "#"} target="_blank" rel="noreferrer" onClick={() => fetch("/api/sponsors/click", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: s.id }) }).catch(() => {})} className="rounded-card border border-arena-700 px-4 py-2 hover:border-signal-live">{s.logoUrl ? <img src={s.logoUrl} alt={s.name} className="h-8 max-w-28 object-contain" /> : s.name}</a>)}</div>
+        </section>}
+
+        {tournament.teams.length > 0 && <section><div className="mb-3"><p className="font-mono text-[10px] uppercase tracking-[0.2em] text-ink-faint">Competitors</p><h2 className="font-display text-xl uppercase tracking-wide">Teams</h2></div><div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">{tournament.teams.slice(0,12).map(({team}) => <Link key={team.id} href={`/teams/${team.id}`} className="rounded-card border border-arena-700 bg-arena-900 p-4 hover:border-signal-live">{team.logoUrl&&<img src={team.logoUrl} alt="" className="h-10 w-10 rounded object-cover" />}<p className="mt-2 font-display uppercase">{team.name}</p></Link>)}</div></section>}
+
+      <div className="space-y-8">
         <section className="rounded-card border border-arena-600 bg-arena-900 p-4 sm:p-5">
           <div className="mb-4 flex items-center justify-between gap-3">
             <div>
@@ -155,6 +178,7 @@ export default async function TournamentPage({
             </div>
           </section>
         )}
+      </div>
       </div>
     </main>
   );

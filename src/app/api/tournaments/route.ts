@@ -3,6 +3,7 @@ import { z } from "zod";
 import { db } from "@/lib/db";
 import { writeAuditLog } from "@/lib/audit";
 import { getOrCreatePersonalOrganization, requirePrimaryOrganizationRole } from "@/lib/organization";
+import { PLAN_LIMITS } from "@/lib/plan-limits";
 
 const createTournamentSchema = z.object({
   name: z.string().trim().min(2).max(120),
@@ -10,6 +11,8 @@ const createTournamentSchema = z.object({
   startDate: z.string().datetime(),
   stationCount: z.number().int().min(1).max(64),
   players: z.array(z.string().trim().min(1).max(80)).min(2).max(64),
+  format: z.enum(["SINGLE_ELIMINATION", "DOUBLE_ELIMINATION", "ROUND_ROBIN", "SWISS"]).default("SINGLE_ELIMINATION"),
+  bestOf: z.number().int().min(1).max(9).default(3),
 });
 
 function slugify(value: string) {
@@ -64,6 +67,9 @@ export async function POST(req: Request) {
   }
 
   const organization = await getOrCreatePersonalOrganization(user.id);
+  const currentTournamentCount = await db.tournament.count({ where: { organizationId: organization.id, status: { not: "ARCHIVED" } } });
+  const planLimit = PLAN_LIMITS[organization.plan].tournaments;
+  if (currentTournamentCount >= planLimit) return NextResponse.json({ error: `Your ${organization.plan} plan allows ${planLimit} active tournaments. Upgrade to create another.` }, { status: 402 });
 
   const result = await db.$transaction(async (tx) => {
     const baseSlug = slugify(parsed.data.name);
@@ -78,6 +84,8 @@ export async function POST(req: Request) {
         startDate: new Date(parsed.data.startDate),
         organizerId: user.id,
         organizationId: organization.id,
+        format: parsed.data.format,
+        bestOf: parsed.data.bestOf,
       },
     });
 
@@ -109,48 +117,75 @@ export async function POST(req: Request) {
       );
     }
 
-    const totalRounds = Math.log2(playerCount);
-    const rounds = Array.from({ length: totalRounds }, (_, roundIndex) => ({
-      name: roundName(roundIndex, totalRounds),
-      matches: Array.from({ length: playerCount / 2 ** (roundIndex + 1) }, () => ({
-        playerOneId: null as string | null,
-        playerTwoId: null as string | null,
-        round: roundName(roundIndex, totalRounds),
-      })),
-    }));
+    let bracketStructure: any[] = [];
+    let firstRoundMatches: any[] = [];
 
-    for (let index = 0; index < playerCount / 2; index += 1) {
-      rounds[0].matches[index].playerOneId = players[index * 2].id;
-      rounds[0].matches[index].playerTwoId = players[index * 2 + 1].id;
+    if (parsed.data.format === "ROUND_ROBIN") {
+      const roundCount = playerCount - 1;
+      bracketStructure = Array.from({ length: roundCount }, (_, roundIndex) => ({
+        name: `Round ${roundIndex + 1}`,
+        matches: [],
+      }));
+      const rotation = [...players];
+      for (let roundIndex = 0; roundIndex < roundCount; roundIndex += 1) {
+        const matches = [];
+        for (let i = 0; i < playerCount / 2; i += 1) {
+          const a = rotation[i];
+          const b = rotation[playerCount - 1 - i];
+          matches.push({ playerOneId: a.id, playerTwoId: b.id, round: `Round ${roundIndex + 1}` });
+        }
+        bracketStructure[roundIndex].matches = matches;
+        const fixed = rotation[0];
+        const rest = rotation.slice(1);
+        rest.unshift(rest.pop()!);
+        rotation.splice(0, rotation.length, fixed, ...rest);
+      }
+    } else {
+      const totalRounds = Math.log2(playerCount);
+      bracketStructure = Array.from({ length: totalRounds }, (_, roundIndex) => ({
+        name: roundName(roundIndex, totalRounds),
+        matches: Array.from({ length: playerCount / 2 ** (roundIndex + 1) }, () => ({
+          playerOneId: null as string | null,
+          playerTwoId: null as string | null,
+          round: roundName(roundIndex, totalRounds),
+        })),
+      }));
+      for (let index = 0; index < playerCount / 2; index += 1) {
+        bracketStructure[0].matches[index].playerOneId = players[index * 2].id;
+        bracketStructure[0].matches[index].playerTwoId = players[index * 2 + 1].id;
+      }
     }
 
     const bracket = await tx.bracket.create({
       data: {
         tournamentId: tournament.id,
-        name: "Winners Bracket",
-        format: "single_elimination",
-        structure: rounds,
+        name: parsed.data.format === "ROUND_ROBIN" ? "Round Robin" : parsed.data.format === "SWISS" ? "Swiss Stage" : parsed.data.format === "DOUBLE_ELIMINATION" ? "Double Elimination" : "Winners Bracket",
+        format: parsed.data.format.toLowerCase(),
+        structure: bracketStructure,
       },
     });
 
-    const firstRoundMatches = [];
-    for (let index = 0; index < rounds[0].matches.length; index += 1) {
-      const slot = rounds[0].matches[index];
-      firstRoundMatches.push(
-        await tx.match.create({
-          data: {
-            tournamentId: tournament.id,
-            bracketId: bracket.id,
-            stationId: stations[index % stations.length].id,
-            playerOneId: slot.playerOneId!,
-            playerTwoId: slot.playerTwoId!,
-            round: slot.round,
-            status: "QUEUED",
-            roundIndex: 0,
-            matchIndex: index,
-          },
-        })
-      );
+    for (let roundIndex = 0; roundIndex < bracketStructure.length; roundIndex += 1) {
+      for (let index = 0; index < bracketStructure[roundIndex].matches.length; index += 1) {
+        const slot = bracketStructure[roundIndex].matches[index];
+        if (!slot.playerOneId || !slot.playerTwoId) continue;
+        firstRoundMatches.push(
+          await tx.match.create({
+            data: {
+              tournamentId: tournament.id,
+              bracketId: bracket.id,
+              stationId: stations[firstRoundMatches.length % stations.length].id,
+              playerOneId: slot.playerOneId,
+              playerTwoId: slot.playerTwoId,
+              round: slot.round,
+              status: "QUEUED",
+              roundIndex,
+              matchIndex: index,
+            },
+          })
+        );
+      }
+      if (parsed.data.format !== "ROUND_ROBIN") break;
     }
 
     return {

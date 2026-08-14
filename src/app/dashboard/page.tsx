@@ -8,6 +8,7 @@ import { isPremium, trialDaysRemaining } from "@/lib/billing";
 import { TrendingStrip } from "@/components/dashboard/TrendingStrip";
 import { RecommendedStrip } from "@/components/dashboard/RecommendedStrip";
 import { getPrimaryOrganizationMembership } from "@/lib/organization";
+import { NotificationBell } from "@/components/notifications/NotificationBell";
 
 export default async function DashboardPage() {
   const user = await getCurrentUser();
@@ -21,7 +22,7 @@ export default async function DashboardPage() {
     where: user.role === "ADMIN" ? {} : { organizationId: { in: organizationIds } },
     orderBy: { startDate: "desc" },
     take: 8,
-    select: { id: true, name: true, status: true, startDate: true },
+    select: { id: true, slug: true, name: true, status: true, startDate: true },
   });
 
   return (
@@ -35,6 +36,7 @@ export default async function DashboardPage() {
         </div>
         <div className="flex items-center gap-3">
           <SearchBar />
+          <NotificationBell />
           {(canCreateTournament || primaryMembership?.role === "OPERATOR") && <Link href="/dashboard/team" className="rounded-card border border-arena-600 px-3 py-1.5 font-mono text-xs uppercase tracking-wide text-ink-muted hover:border-signal-live hover:text-signal-live">Team</Link>}
           {canCreateTournament && (
             <Link href="/admin/tournaments/new" className="rounded-card bg-signal-live px-3 py-1.5 font-mono text-xs uppercase tracking-wide text-arena-950 hover:opacity-90">
@@ -42,6 +44,7 @@ export default async function DashboardPage() {
             </Link>
           )}
         </div>
+        <Link href="/organization/settings" className="rounded-card border border-arena-600 px-3 py-1.5 font-mono text-xs uppercase tracking-wide text-ink-muted hover:border-signal-live hover:text-signal-live">Branding</Link>
         <Link href="/pricing" className="rounded-card border border-arena-600 px-3 py-1.5 font-mono text-xs uppercase tracking-wide text-ink-muted hover:border-signal-live hover:text-signal-live">{isPremium(user) ? `Trial / Plans · ${trialDaysRemaining(user)}d` : "Plans & Free Trial"}</Link>
       </header>
 
@@ -60,7 +63,8 @@ export default async function DashboardPage() {
       <section className="mb-10 rounded-card border border-signal-live/30 bg-signal-live/5 p-5">
         <div className="flex flex-wrap items-center justify-between gap-4">
           <div><p className="font-mono text-[10px] uppercase tracking-widest text-signal-live">Monetization</p><h2 className="mt-1 font-display text-xl uppercase tracking-wide">Paid plans are coming soon</h2><p className="mt-1 text-sm text-ink-muted">Explore Starter, Pro and Event pricing. Billing, subscriptions and the customer portal are not enabled yet.</p></div>
-          <Link href="/pricing" className="rounded-card bg-signal-live px-4 py-2 font-mono text-xs uppercase tracking-wide text-arena-950">View plans</Link>
+          <Link href="/organization/settings" className="rounded-card border border-arena-600 px-3 py-1.5 font-mono text-xs uppercase tracking-wide text-ink-muted hover:border-signal-live hover:text-signal-live">Branding</Link>
+        <Link href="/pricing" className="rounded-card bg-signal-live px-4 py-2 font-mono text-xs uppercase tracking-wide text-arena-950">View plans</Link>
         </div>
       </section>
 
@@ -94,11 +98,15 @@ export default async function DashboardPage() {
                 </div>
                 <div className="flex items-center gap-3">
                   <Link
-                    href={`/tournaments/${t.id}`}
+                    href={`/e/${t.slug}`}
                     className="font-mono text-xs uppercase tracking-wide text-ink-faint hover:text-ink"
                   >
                     View public page
                   </Link>
+                  <Link
+                    href={`/admin/tournaments/${t.id}/analytics`}
+                    className="font-mono text-xs uppercase tracking-wide text-ink-faint hover:text-signal-live"
+                  >Analytics</Link>
                   <Link
                     href={`/admin/tournaments/${t.id}`}
                     className="rounded-card border border-arena-600 px-3 py-1.5 font-mono text-xs uppercase tracking-wide text-ink hover:border-signal-live hover:text-signal-live"

@@ -218,6 +218,12 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ matchI
     }
   }
 
+  const organization = await db.tournament.findUnique({ where: { id: updated.tournamentId }, select: { organizationId: true } });
+  if (organization) {
+    const notificationType = updated.status === "LIVE" ? "MATCH_LIVE" : updated.status === "COMPLETED" ? "MATCH_COMPLETED" : "TOURNAMENT_UPDATE";
+    await db.notification.create({ data: { organizationId: organization.organizationId, tournamentId: updated.tournamentId, type: notificationType, title: updated.status === "LIVE" ? "Match is live" : updated.status === "COMPLETED" ? "Match completed" : "Match updated", message: `Match ${updated.id.slice(0, 8)} is now ${updated.status.toLowerCase()}.`, href: `/watch/${updated.id}` } });
+  }
+
   await writeAuditLog({
     tournamentId: updated.tournamentId,
     actorUserId: actor.id,

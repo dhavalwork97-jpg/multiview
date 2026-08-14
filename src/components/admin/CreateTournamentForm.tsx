@@ -16,6 +16,8 @@ export function CreateTournamentForm() {
   });
   const [playerText, setPlayerText] = useState("");
   const [stationCount, setStationCount] = useState(4);
+  const [format, setFormat] = useState("SINGLE_ELIMINATION");
+  const [bestOf, setBestOf] = useState(3);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
 
@@ -45,6 +47,8 @@ export function CreateTournamentForm() {
           startDate: new Date(startDate).toISOString(),
           stationCount,
           players,
+          format,
+          bestOf,
         }),
       });
       const data = await response.json();
@@ -77,6 +81,23 @@ export function CreateTournamentForm() {
           <input required type="datetime-local" value={startDate} onChange={(e) => setStartDate(e.target.value)} className="w-full rounded-card border border-arena-600 bg-arena-950 px-3 py-2 text-sm outline-none focus:border-signal-live" />
         </label>
 
+
+        <label>
+          <span className="mb-1 block font-mono text-xs uppercase tracking-widest text-ink-faint">Format</span>
+          <select value={format} onChange={(e) => setFormat(e.target.value)} className="w-full rounded-card border border-arena-600 bg-arena-950 px-3 py-2 text-sm outline-none focus:border-signal-live">
+            <option value="SINGLE_ELIMINATION">Single elimination</option>
+            <option value="DOUBLE_ELIMINATION">Double elimination</option>
+            <option value="ROUND_ROBIN">Round robin</option>
+            <option value="SWISS">Swiss</option>
+          </select>
+        </label>
+        <label>
+          <span className="mb-1 block font-mono text-xs uppercase tracking-widest text-ink-faint">Series</span>
+          <select value={bestOf} onChange={(e) => setBestOf(Number(e.target.value))} className="w-full rounded-card border border-arena-600 bg-arena-950 px-3 py-2 text-sm outline-none focus:border-signal-live">
+            {[1,3,5,7,9].map((v) => <option key={v} value={v}>Best of {v}</option>)}
+          </select>
+        </label>
+
         <label>
           <span className="mb-1 block font-mono text-xs uppercase tracking-widest text-ink-faint">Stations</span>
           <input required type="number" min={1} max={64} value={stationCount} onChange={(e) => setStationCount(Number(e.target.value))} className="w-full rounded-card border border-arena-600 bg-arena-950 px-3 py-2 text-sm outline-none focus:border-signal-live" />
@@ -96,7 +117,7 @@ export function CreateTournamentForm() {
       </div>
 
       <div className="mt-6 rounded-card border border-signal-live/20 bg-signal-live/5 p-4 text-sm text-ink-muted">
-        This creates the tournament, entrants, stations, a single-elimination bracket and all Round 1 matches automatically. Winners will advance into later rounds when matches are completed.
+        This creates the tournament, entrants, stations and the selected competition format. Single/double elimination advance from completed matches; round-robin schedules all pairings.
       </div>
 
       {error && <p className="mt-4 rounded-card border border-red-500/30 bg-red-500/5 p-3 text-sm text-red-300">{error}</p>}

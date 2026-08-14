@@ -19,6 +19,15 @@ const isProtectedRoute = createRouteMatcher([
 const isOrganizerRoute = createRouteMatcher(["/admin(.*)"]);
 
 export default clerkMiddleware(async (authFn, req) => {
+  const host = req.headers.get("host")?.split(":")[0]?.toLowerCase();
+  const isPlatformHost = !host || host.endsWith("vercel.app") || host === "localhost" || host === "127.0.0.1";
+  if (!isPlatformHost && !req.nextUrl.pathname.startsWith("/api/")) {
+    try {
+      const response = await fetch(new URL(`/api/public/domain?host=${encodeURIComponent(host)}`, req.url));
+      const data = await response.json() as { slug?: string | null };
+      if (data.slug && req.nextUrl.pathname === "/") return NextResponse.rewrite(new URL(`/e/${data.slug}`, req.url));
+    } catch {}
+  }
   if (isProtectedRoute(req)) {
     await authFn.protect();
   }
