@@ -4,6 +4,7 @@ import { getCurrentUser } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { InteractiveBracket } from "@/components/bracket/InteractiveBracket";
 import { StationAssignmentBoard } from "@/components/admin/StationAssignmentBoard";
+import { TournamentAdminNav } from "@/components/admin/TournamentAdminNav";
 
 export default async function AdminTournamentPage({
   params,
@@ -40,27 +41,7 @@ export default async function AdminTournamentPage({
         </Link>
       </header>
 
-      <nav aria-label="Tournament administration" className="mb-3 flex flex-wrap gap-2 rounded-card border border-arena-700 bg-arena-900 p-2">
-        {[
-          ["", "Overview"],
-          ["/control-room", "Control Room"],
-          ["/operations", "Operations"],
-          ["/ops", "Station Ops"],
-          ["/analytics", "Analytics"],
-          ["/report", "Report"],
-        ].map(([suffix, label]) => (
-          <Link key={label} href={`/admin/tournaments/${tournament.id}${suffix}`} className="inline-flex min-h-10 items-center rounded-card border border-arena-700 px-3 font-mono text-[11px] font-semibold uppercase tracking-wide text-ink-muted hover:border-signal-live hover:bg-arena-800 hover:text-signal-live">
-            {label}
-          </Link>
-        ))}
-      </nav>
-      <nav aria-label="Tournament resources" className="mb-8 flex flex-wrap gap-2">
-        <Link href={`/e/${tournament.slug}`} className="inline-flex min-h-9 items-center rounded-card border border-signal-live/40 bg-signal-live/5 px-3 font-mono text-[11px] font-semibold uppercase tracking-wide text-signal-live hover:bg-signal-live/10">Public event</Link>
-        <Link href="/teams" className="inline-flex min-h-9 items-center rounded-card border border-arena-700 px-3 font-mono text-[11px] font-semibold uppercase tracking-wide text-ink-muted hover:border-signal-live hover:text-signal-live">Teams</Link>
-        <Link href="/players" className="inline-flex min-h-9 items-center rounded-card border border-arena-700 px-3 font-mono text-[11px] font-semibold uppercase tracking-wide text-ink-muted hover:border-signal-live hover:text-signal-live">Players</Link>
-        <Link href="/multiview" className="inline-flex min-h-9 items-center rounded-card border border-arena-700 px-3 font-mono text-[11px] font-semibold uppercase tracking-wide text-ink-muted hover:border-signal-live hover:text-signal-live">Multi-View</Link>
-      </nav>
-
+      <div className="mb-8"><TournamentAdminNav tournamentId={tournament.id} slug={tournament.slug} /></div>
       <section className="mb-10">
         <h2 className="mb-3 font-display text-xl uppercase tracking-wide text-ink-muted">
           Station assignment

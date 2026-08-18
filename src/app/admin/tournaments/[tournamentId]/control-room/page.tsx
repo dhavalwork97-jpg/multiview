@@ -3,6 +3,7 @@ import Link from "next/link";
 import { requireTournamentAccess } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { TournamentControlRoom } from "@/components/admin/TournamentControlRoom";
+import { TournamentAdminNav } from "@/components/admin/TournamentAdminNav";
 
 export default async function TournamentControlRoomPage({
   params,
@@ -14,13 +15,13 @@ export default async function TournamentControlRoomPage({
 
   const tournament = await db.tournament.findUnique({
     where: { id: tournamentId },
-    select: { id: true, name: true, game: true },
+    select: { id: true, name: true, game: true, slug: true },
   });
   if (!tournament) redirect("/dashboard");
 
   return (
     <main className="min-h-screen bg-arena-950 px-4 py-6 sm:px-6 lg:px-8">
-      <header className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+      <div className="mx-auto max-w-[1600px]"><div className="mb-6"><TournamentAdminNav tournamentId={tournament.id} slug={tournament.slug} /></div><header className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
         <div>
           <p className="font-mono text-[10px] uppercase tracking-[0.22em] text-ink-faint">Tournament control room</p>
           <h1 className="mt-1 font-display text-3xl uppercase tracking-wide">{tournament.name}</h1>
@@ -42,6 +43,6 @@ export default async function TournamentControlRoomPage({
         </div>
       </header>
       <TournamentControlRoom tournamentId={tournament.id} />
-    </main>
+    </div></main>
   );
 }

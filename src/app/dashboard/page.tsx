@@ -81,7 +81,7 @@ export default async function DashboardPage() {
             ["/players", "Players"],
             ["/multiview", "Live / Multi-View"],
             ["/organization/settings", "Organization"],
-            ...(user.role === "ADMIN" ? [["/admin/users", "Admin"]] : []),
+            ...(user.role === "ADMIN" || user.role === "ORGANIZER" ? [["/admin", "Admin"]] : []),
           ].map(([href, label]) => (
             <Link key={href} href={href} className="flex min-h-12 items-center justify-center rounded-card border border-arena-600 bg-arena-950 px-3 py-2 text-center font-mono text-[11px] font-semibold uppercase tracking-wide text-ink-muted transition-colors hover:border-signal-live hover:bg-arena-800 hover:text-signal-live">
               {label}

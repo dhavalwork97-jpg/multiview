@@ -30,7 +30,7 @@ export async function GET(req: Request) {
 
   const matches = await db.match.findMany({
     where: {
-      status: status ?? "LIVE",
+      status: status ?? undefined,
       ...(tournamentId ? { tournamentId } : {}),
     },
     orderBy: [{ hypeScore: "desc" }, { startedAt: "desc" }],
@@ -44,7 +44,7 @@ export async function GET(req: Request) {
       hypeScore: true,
       scoringAdapter: true,
       winnerSideId: true,
-      sides: { include: { participants: true } },
+      sides: { include: { participants: { include: { player: { select: { gamertag: true } }, team: { select: { name: true } } } } } },
       playerOne: { select: { id: true, gamertag: true, avatarUrl: true, country: true } },
       playerTwo: { select: { id: true, gamertag: true, avatarUrl: true, country: true } },
       youtubeVideoId: true,

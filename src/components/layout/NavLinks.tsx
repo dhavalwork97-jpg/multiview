@@ -21,7 +21,7 @@ export function NavLinks({ showDashboard = false, showAdmin = false }: Props) {
   const links = [
     ...(showDashboard ? [{ href: "/dashboard", label: "Dashboard" }] : []),
     ...PUBLIC_LINKS,
-    ...(showAdmin ? [{ href: "/admin/users", label: "Admin" }] : []),
+    ...(showAdmin ? [{ href: "/admin", label: "Admin" }] : []),
   ];
 
   return (
