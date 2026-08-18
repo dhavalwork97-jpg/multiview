@@ -27,25 +27,23 @@ export default async function DashboardPage() {
 
   return (
     <main className="min-h-screen bg-arena-950 px-6 py-8">
-      <header className="mb-8 flex items-center justify-between">
-        <div>
-          <p className="font-mono text-xs uppercase tracking-widest text-ink-faint">Dashboard</p>
-          <h1 className="font-display text-3xl uppercase tracking-wide">
-            Welcome back, {user.displayName ?? user.username}
-          </h1>
+      <header className="mb-8 rounded-card border border-arena-700 bg-arena-900 p-4">
+        <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
+          <div className="min-w-0">
+            <p className="font-mono text-xs uppercase tracking-widest text-ink-faint">Dashboard</p>
+            <h1 className="truncate font-display text-3xl uppercase tracking-wide">
+              Welcome back, {user.displayName ?? user.username}
+            </h1>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <SearchBar />
+            <NotificationBell />
+            {(canCreateTournament || primaryMembership?.role === "OPERATOR") && <Link href="/dashboard/team" className="action-secondary">Team</Link>}
+            <Link href="/organization/settings" className="action-secondary">Branding</Link>
+            <Link href="/pricing" className="action-secondary">{isPremium(user) ? `Trial / Plans · ${trialDaysRemaining(user)}d` : "Plans"}</Link>
+            {canCreateTournament && <Link href="/admin/tournaments/new" className="action-primary">Create tournament</Link>}
+          </div>
         </div>
-        <div className="flex items-center gap-3">
-          <SearchBar />
-          <NotificationBell />
-          {(canCreateTournament || primaryMembership?.role === "OPERATOR") && <Link href="/dashboard/team" className="rounded-card border border-arena-600 px-3 py-1.5 font-mono text-xs uppercase tracking-wide text-ink-muted hover:border-signal-live hover:text-signal-live">Team</Link>}
-          {canCreateTournament && (
-            <Link href="/admin/tournaments/new" className="rounded-card bg-signal-live px-3 py-1.5 font-mono text-xs uppercase tracking-wide text-arena-950 hover:opacity-90">
-              Create tournament
-            </Link>
-          )}
-        </div>
-        <Link href="/organization/settings" className="rounded-card border border-arena-600 px-3 py-1.5 font-mono text-xs uppercase tracking-wide text-ink-muted hover:border-signal-live hover:text-signal-live">Branding</Link>
-        <Link href="/pricing" className="rounded-card border border-arena-600 px-3 py-1.5 font-mono text-xs uppercase tracking-wide text-ink-muted hover:border-signal-live hover:text-signal-live">{isPremium(user) ? `Trial / Plans · ${trialDaysRemaining(user)}d` : "Plans & Free Trial"}</Link>
       </header>
 
       <section className="mb-10">

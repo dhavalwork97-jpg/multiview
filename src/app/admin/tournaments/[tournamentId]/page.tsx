@@ -28,7 +28,7 @@ export default async function AdminTournamentPage({
       <header className="mb-8 flex items-start justify-between">
         <div>
           <p className="font-mono text-xs uppercase tracking-widest text-ink-faint">
-            {tournament.game}
+            {tournament.sport} · {tournament.game} · {tournament.participantMode}
           </p>
           <h1 className="font-display text-3xl uppercase tracking-wide">{tournament.name}</h1>
         </div>
@@ -39,6 +39,21 @@ export default async function AdminTournamentPage({
           Control room
         </Link>
       </header>
+
+      <nav aria-label="Tournament administration" className="mb-8 flex flex-wrap gap-2 rounded-card border border-arena-700 bg-arena-900 p-2">
+        {[
+          ["", "Overview"],
+          ["/control-room", "Control Room"],
+          ["/operations", "Operations"],
+          ["/ops", "Ops"],
+          ["/analytics", "Analytics"],
+          ["/report", "Report"],
+        ].map(([suffix, label]) => (
+          <Link key={label} href={`/admin/tournaments/${tournament.id}${suffix}`} className="inline-flex min-h-9 items-center rounded-card border border-arena-700 px-3 font-mono text-[11px] font-semibold uppercase tracking-wide text-ink-muted hover:border-signal-live hover:bg-arena-800 hover:text-signal-live">
+            {label}
+          </Link>
+        ))}
+      </nav>
 
       <section className="mb-10">
         <h2 className="mb-3 font-display text-xl uppercase tracking-wide text-ink-muted">

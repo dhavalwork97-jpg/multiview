@@ -1,34 +1,33 @@
-# Dynamic Competition Engine — Upgrade
+# Dynamic Competition Engine Upgrade
 
-This is an additive foundation for making FGC-Stream competition-agnostic.
+This build continues the current FGC Stream codebase and moves the product toward a generic competition platform.
 
-## What it adds
-- Sport/event is no longer conceptually tied to fighting games.
-- Competition presets for fighting, football, basketball, cricket, tennis, badminton, table tennis, volleyball, other esports, and custom events.
-- Participant model: individual, team, pair/doubles, mixed.
-- Scoring mode: configurable instead of assuming rounds.
-- Format and best-of are stored as competition rules.
-- Public tournament pages can display the selected sport and participant model.
+## Included
+- Generic competition preset/rule layer in `src/lib/competition-engine.ts`
+- Sport presets for esports, football, basketball, cricket, tennis, badminton, volleyball, table tennis and custom competitions
+- Dynamic tournament creation form with sport, participant model, scoring adapter and custom rules JSON
+- Rules are snapshotted onto Tournament and Match records
+- Existing MatchSide / MatchParticipant models are populated for newly-created matches
+- Automatic single-elimination draws support non-power-of-two entry counts by using byes
+- New public `/teams` and `/players` directories
+- Navigation expanded to Teams and Players
+- Responsive navigation made horizontally scrollable with high-contrast visible buttons
+- Dashboard action controls consolidated into a responsive toolbar
+- Tournament admin sub-navigation for Overview, Control Room, Operations, Ops, Analytics and Report
+- Generic metadata and public tournament labels
+- Player profile team lookup fixed to avoid invalid Prisma include typing
 
 ## Important
-The latest complete project archive available in this chat predates some of the later #11–#25 work. Therefore this package is an **overlay**, not a replacement for the current repository. Do not replace your whole project with an older archive.
+No Prisma schema migration is required for these changes because the current schema already contains:
+`Tournament.sport`, `competitionType`, `participantMode`, `scoringMode`, `competitionRules`, `MatchSide`, `MatchParticipant`, `MatchScoreEvent`, `Match.engineVersion`, `Match.scoringAdapter`, and `Match.rulesSnapshot`.
 
-## Apply
-1. Copy `src/lib/competition-engine.ts` and `src/components/admin/DynamicCompetitionFields.tsx` into the same paths in the current repo.
-2. Copy `src/app/api/tournaments/dynamic-validation.ts` into the same path.
-3. Copy the migration directory into `prisma/migrations/`.
-4. Copy `scripts/apply-dynamic-competition-schema.mjs` into `scripts/`.
-5. Run:
-
+## Verify locally
 ```bash
-node scripts/apply-dynamic-competition-schema.mjs
+npm install
 npx prisma generate
 npx prisma migrate deploy
 npm run typecheck
 npm run build
 ```
 
-6. The existing tournament creation route and form must then pass the new fields shown in `dynamic-validation.ts`. The package intentionally does not overwrite your current upgraded `route.ts` or `CreateTournamentForm.tsx`, because those files contain later commercial-platform changes that must be preserved.
-
-## Architecture direction
-This is the first layer. The next layer should move Match from hard-coded `playerOne/playerTwo` toward generic `sideA/sideB` participants, with sport-specific scoring adapters. That is what will make football teams, doubles, cricket teams, FPS teams, fighting-game players, and custom competitions truly share one engine rather than merely sharing a form.
+If your local Neon database is temporarily unreachable, `prisma migrate deploy` can fail with P1001; that is a database connectivity issue rather than a TypeScript/build issue.

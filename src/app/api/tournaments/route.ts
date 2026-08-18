@@ -4,6 +4,7 @@ import { db } from "@/lib/db";
 import { writeAuditLog } from "@/lib/audit";
 import { getOrCreatePersonalOrganization, requirePrimaryOrganizationRole } from "@/lib/organization";
 import { PLAN_LIMITS } from "@/lib/plan-limits";
+import { normalizeRules } from "@/lib/competition-engine";
 
 const createTournamentSchema = z.object({
   name: z.string().trim().min(2).max(120),
@@ -63,12 +64,8 @@ export async function POST(req: Request) {
 
   const uniquePlayers = [...new Map(parsed.data.players.map((name) => [name.toLowerCase(), name])).values()];
   const playerCount = uniquePlayers.length;
-  const isPowerOfTwo = (playerCount & (playerCount - 1)) === 0;
-  if (!isPowerOfTwo) {
-    return NextResponse.json(
-      { error: "For automatic bracket generation, player count must be 2, 4, 8, 16, 32 or 64." },
-      { status: 400 }
-    );
+  if (playerCount < 2 || playerCount > 64) {
+    return NextResponse.json({ error: "Enter between 2 and 64 competitors." }, { status: 400 });
   }
 
   const organization = await getOrCreatePersonalOrganization(user.id);
@@ -89,7 +86,7 @@ export async function POST(req: Request) {
         competitionType: parsed.data.competitionType,
         participantMode: parsed.data.participantMode,
         scoringMode: parsed.data.scoringMode,
-        competitionRules: parsed.data.competitionRules as any,
+        competitionRules: normalizeRules(parsed.data.sport, parsed.data.scoringMode, parsed.data.bestOf, parsed.data.competitionRules) as any,
         status: "SCHEDULED",
         startDate: new Date(parsed.data.startDate),
         organizerId: user.id,
@@ -151,18 +148,19 @@ export async function POST(req: Request) {
         rotation.splice(0, rotation.length, fixed, ...rest);
       }
     } else {
-      const totalRounds = Math.log2(playerCount);
+      const bracketSize = 2 ** Math.ceil(Math.log2(playerCount));
+      const totalRounds = Math.log2(bracketSize);
       bracketStructure = Array.from({ length: totalRounds }, (_, roundIndex) => ({
         name: roundName(roundIndex, totalRounds),
-        matches: Array.from({ length: playerCount / 2 ** (roundIndex + 1) }, () => ({
+        matches: Array.from({ length: bracketSize / 2 ** (roundIndex + 1) }, () => ({
           playerOneId: null as string | null,
           playerTwoId: null as string | null,
           round: roundName(roundIndex, totalRounds),
         })),
       }));
-      for (let index = 0; index < playerCount / 2; index += 1) {
-        bracketStructure[0].matches[index].playerOneId = players[index * 2].id;
-        bracketStructure[0].matches[index].playerTwoId = players[index * 2 + 1].id;
+      for (let index = 0; index < bracketSize / 2; index += 1) {
+        bracketStructure[0].matches[index].playerOneId = players[index * 2]?.id ?? null;
+        bracketStructure[0].matches[index].playerTwoId = players[index * 2 + 1]?.id ?? null;
       }
     }
 
@@ -179,21 +177,35 @@ export async function POST(req: Request) {
       for (let index = 0; index < bracketStructure[roundIndex].matches.length; index += 1) {
         const slot = bracketStructure[roundIndex].matches[index];
         if (!slot.playerOneId || !slot.playerTwoId) continue;
-        firstRoundMatches.push(
-          await tx.match.create({
-            data: {
-              tournamentId: tournament.id,
-              bracketId: bracket.id,
-              stationId: stations[firstRoundMatches.length % stations.length].id,
-              playerOneId: slot.playerOneId,
-              playerTwoId: slot.playerTwoId,
-              round: slot.round,
-              status: "QUEUED",
-              roundIndex,
-              matchIndex: index,
-            },
-          })
-        );
+        const match = await tx.match.create({
+          data: {
+            tournamentId: tournament.id,
+            bracketId: bracket.id,
+            stationId: stations[firstRoundMatches.length % stations.length].id,
+            playerOneId: slot.playerOneId,
+            playerTwoId: slot.playerTwoId,
+            round: slot.round,
+            status: "QUEUED",
+            roundIndex,
+            matchIndex: index,
+            scoringAdapter: parsed.data.scoringMode,
+            rulesSnapshot: normalizeRules(parsed.data.sport, parsed.data.scoringMode, parsed.data.bestOf, parsed.data.competitionRules) as any,
+          },
+        });
+        await tx.matchSide.createMany({
+          data: [
+            { matchId: match.id, sideKey: "A", label: "Side A" },
+            { matchId: match.id, sideKey: "B", label: "Side B" },
+          ],
+        });
+        const sides = await tx.matchSide.findMany({ where: { matchId: match.id }, orderBy: { sideKey: "asc" } });
+        await tx.matchParticipant.createMany({
+          data: [
+            { sideId: sides[0].id, playerId: slot.playerOneId },
+            { sideId: sides[1].id, playerId: slot.playerTwoId },
+          ],
+        });
+        firstRoundMatches.push(match);
       }
       if (parsed.data.format !== "ROUND_ROBIN") break;
     }
