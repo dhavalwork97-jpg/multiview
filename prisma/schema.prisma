@@ -528,7 +528,7 @@ model Match {
   engineVersion String       @default("1")
   scoringAdapter String      @default("points")
   rulesSnapshot Json?
-  winnerSideId  String?
+  winnerSideId  String?      @unique
 
   round         String?      // "Winners Semis", "Pool A Round 2", etc.
   status        MatchStatus  @default(QUEUED)
@@ -567,7 +567,6 @@ model Match {
   @@index([tournamentId, status])
   @@index([stationId])
   @@index([status, hypeScore])
-  @@index([winnerSideId])
   @@map("matches")
 }
 

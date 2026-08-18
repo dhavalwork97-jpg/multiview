@@ -46,7 +46,7 @@ export const battleRoyaleAdapter: ScoringAdapter = {
     return allowed.includes(metric);
   },
   score(side, rules) {
-    const weights = { placement: 0, kills: 1, points: 1, ...(rules.weights ?? {}) };
+    const weights: Record<string, number> = { placement: 0, kills: 1, points: 1, ...(rules.weights ?? {}) };
     return side.events.reduce((total, event) => total + event.value * (weights[event.metric] ?? 0), 0);
   },
   resolve(a, b, rules) {

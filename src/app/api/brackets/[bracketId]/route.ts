@@ -59,11 +59,11 @@ export async function GET(_req: Request, { params }: { params: Promise<{ bracket
   const gamertagByPlayerId: Record<string, string> = {};
   for (const m of bracket.matches) {
     if (m.status === "LIVE") {
-      liveMatchByPlayerId[m.playerOneId] = m.id;
-      liveMatchByPlayerId[m.playerTwoId] = m.id;
+      if (m.playerOneId) liveMatchByPlayerId[m.playerOneId] = m.id;
+      if (m.playerTwoId) liveMatchByPlayerId[m.playerTwoId] = m.id;
     }
-    gamertagByPlayerId[m.playerOneId] = m.playerOne.gamertag;
-    gamertagByPlayerId[m.playerTwoId] = m.playerTwo.gamertag;
+    if (m.playerOneId && m.playerOne) gamertagByPlayerId[m.playerOneId] = m.playerOne.gamertag;
+    if (m.playerTwoId && m.playerTwo) gamertagByPlayerId[m.playerTwoId] = m.playerTwo.gamertag;
   }
 
   return NextResponse.json({
