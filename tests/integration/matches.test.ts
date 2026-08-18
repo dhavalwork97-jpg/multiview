@@ -12,7 +12,7 @@ vi.mock("@clerk/nextjs/server", () => ({
 
 import { GET, POST } from "@/app/api/matches/route";
 import { db } from "@/lib/db";
-import { resetDb, createUser, createTournament, createPlayer, createStation } from "./setup";
+import { resetDb, createUser, createTournament, createPlayer, createStation, createTeam } from "./setup";
 
 describe("GET /api/matches", () => {
   beforeEach(async () => {
@@ -102,5 +102,47 @@ describe("POST /api/matches", () => {
       })
     );
     expect(res.status).toBe(400);
+  });
+});
+
+
+describe("generic Match Engine", () => {
+  beforeEach(async () => {
+    authState.userId = null;
+    await resetDb();
+  });
+
+  it("creates a team-vs-team match through Side A / Side B", async () => {
+    const organizer = await createUser("ORGANIZER");
+    authState.userId = organizer.clerkId;
+    const tournament = await createTournament(organizer.id);
+    const [teamA, teamB] = await Promise.all([createTeam("Alpha"), createTeam("Beta")]);
+    await db.tournamentTeam.createMany({
+      data: [
+        { tournamentId: tournament.id, teamId: teamA.id },
+        { tournamentId: tournament.id, teamId: teamB.id },
+      ],
+    });
+
+    const res = await POST(
+      new Request("http://test/api/matches", {
+        method: "POST",
+        body: JSON.stringify({
+          tournamentId: tournament.id,
+          sport: "football",
+          scoringAdapter: "goals",
+          sides: [
+            { key: "A", label: "Alpha", participants: [{ teamId: teamA.id }] },
+            { key: "B", label: "Beta", participants: [{ teamId: teamB.id }] },
+          ],
+        }),
+      }),
+    );
+
+    expect(res.status).toBe(201);
+    const body = await res.json();
+    expect(body.match.sides).toHaveLength(2);
+    expect(body.match.sides[0].participants[0].teamId).toBe(teamA.id);
+    expect(body.match.playerOneId).toBeNull();
   });
 });

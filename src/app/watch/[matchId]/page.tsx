@@ -25,6 +25,7 @@ export default async function WatchPage({ params }: { params: Promise<{ matchId:
       youtubeVideoId: true,
       playerOne: { select: { gamertag: true } },
       playerTwo: { select: { gamertag: true } },
+      sides: { include: { participants: { include: { player: { select: { gamertag: true } }, team: { select: { name: true } } } } } },
       station: { select: { id: true, label: true } },
       tournament: { select: { name: true } },
     },
@@ -34,9 +35,19 @@ export default async function WatchPage({ params }: { params: Promise<{ matchId:
 
   const user = await getCurrentUser();
 
+  const sideA = match.sides.find((side) => side.sideKey === "A");
+  const sideB = match.sides.find((side) => side.sideKey === "B");
+  const nameFor = (side: typeof sideA, fallback: string) =>
+    side?.participants.map((p) => p.player?.gamertag ?? p.team?.name ?? p.displayName).filter(Boolean).join(" / ") || fallback;
+
   return (
     <WatchPageClient
-      initialMatch={{ ...match, startedAt: match.startedAt?.toISOString() ?? null }}
+      initialMatch={{
+        ...match,
+        playerOne: { gamertag: nameFor(sideA, match.playerOne?.gamertag ?? "Side A") },
+        playerTwo: { gamertag: nameFor(sideB, match.playerTwo?.gamertag ?? "Side B") },
+        startedAt: match.startedAt?.toISOString() ?? null,
+      }}
       isPremium={isPremium(user)}
     />
   );

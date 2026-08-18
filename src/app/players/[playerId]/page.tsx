@@ -76,7 +76,7 @@ export default async function PlayerPage({
                 className="flex justify-between gap-3 py-3 hover:text-signal-live"
               >
                 <span>
-                  {player.gamertag} vs {match.opponent.gamertag}
+                  {player.gamertag} vs {match.opponent?.gamertag ?? "Unknown opponent"}
                 </span>
                 <span className="font-mono text-xs">
                   {match.playerOneScore}—{match.playerTwoScore}

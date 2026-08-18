@@ -16,6 +16,8 @@ export type AppEvent =
       playerOneScore: number;
       playerTwoScore: number;
       winnerId: string | null;
+      winnerSideId?: string | null;
+      sideScores?: { A: number; B: number };
       stationId: string | null;
     }
   | {

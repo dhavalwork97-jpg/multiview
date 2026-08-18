@@ -287,6 +287,7 @@ model Player {
   entrants     TournamentEntrant[]
   matchesAsP1  Match[]  @relation("MatchPlayerOne")
   matchesAsP2  Match[]  @relation("MatchPlayerTwo")
+  matchParticipants MatchParticipant[]
   favoritedBy  Favorite[]
   teamMemberships TeamMember[]
 
@@ -315,11 +316,11 @@ model Tournament {
   id            String            @id @default(cuid())
   name          String
   slug          String            @unique
-  game          String            // "Street Fighter 6", "Tekken 8", "Guilty Gear -STRIVE-"
-  sport            String            @default("esports")
-  competitionType  String            @default("tournament")
-  participantMode  String            @default("individual")
-  scoringMode      String            @default("points")
+  game          String            // Legacy display/game title; retained for compatibility.
+  sport         String            @default("esports")
+  competitionType String          @default("tournament")
+  participantMode String          @default("individual")
+  scoringMode   String            @default("points")
   competitionRules Json?
   status        TournamentStatus  @default(DRAFT)
   startDate     DateTime
@@ -366,6 +367,7 @@ model Team {
 
   members     TeamMember[]
   tournaments TournamentTeam[]
+  matchParticipants MatchParticipant[]
 
   @@index([name])
   @@map("teams")
@@ -514,45 +516,45 @@ model Match {
   bracketId     String?
   stationId     String?
 
-  playerOneId   String
-  playerTwoId   String
-  playerOneScore Int         @default(0)
-  playerTwoScore Int         @default(0)
+  // Legacy player columns are nullable compatibility fields. New matches should
+  // use sides/participants below. Existing FGC matches continue to work.
+  playerOneId   String?
+  playerTwoId   String?
+  playerOneScore Int        @default(0)
+  playerTwoScore Int        @default(0)
   winnerId      String?
 
-  round         String?      // "Winners Semis", "Pool A Round 2"
+  // Generic Match Engine state.
+  engineVersion String       @default("1")
+  scoringAdapter String      @default("points")
+  rulesSnapshot Json?
+  winnerSideId  String?
+
+  round         String?      // "Winners Semis", "Pool A Round 2", etc.
   status        MatchStatus  @default(QUEUED)
 
   startedAt     DateTime?
   endedAt       DateTime?
 
   // Denormalized "hype" score, updated by the AI highlight pipeline (Phase 4+).
-  // Kept here rather than a separate table so the live grid can sort/filter
-  // on it with a single indexed query.
   hypeScore     Float?       @default(0)
 
   // Match-scoped reference to the station's current YouTube broadcast.
-  // Multiple matches on one station can share the same unlisted YouTube live
-  // video; bracket/match state is managed by the app.
   youtubeBroadcastId String?
   youtubeVideoId     String?
 
-  // Position within Bracket.structure (round index, then index within that
-  // round's matches array), 0-based. Set at creation — either at bracket
-  // import time (see POST /api/brackets) or when a later round's Match row
-  // gets instantiated by advanceBracket() in src/lib/bracket-progression.ts
-  // once both of its feeder matches are decided. Null for matches not tied
-  // to a Bracket (nothing to advance into). This is what lets a completed
-  // match find "the next match, right slot" without re-parsing the whole
-  // structure JSON on a string/name match.
   roundIndex    Int?
   matchIndex    Int?
 
   tournament    Tournament   @relation(fields: [tournamentId], references: [id], onDelete: Cascade)
   bracket       Bracket?     @relation(fields: [bracketId], references: [id])
   station       Station?     @relation(fields: [stationId], references: [id])
-  playerOne     Player       @relation("MatchPlayerOne", fields: [playerOneId], references: [id])
-  playerTwo     Player       @relation("MatchPlayerTwo", fields: [playerTwoId], references: [id])
+  playerOne     Player?      @relation("MatchPlayerOne", fields: [playerOneId], references: [id])
+  playerTwo     Player?      @relation("MatchPlayerTwo", fields: [playerTwoId], references: [id])
+  winnerSide    MatchSide?   @relation("MatchWinnerSide", fields: [winnerSideId], references: [id])
+
+  sides         MatchSide[]       @relation("MatchSides")
+  scoreEvents   MatchScoreEvent[]
 
   createdAt     DateTime     @default(now())
   updatedAt     DateTime     @updatedAt
@@ -565,9 +567,78 @@ model Match {
   @@index([tournamentId, status])
   @@index([stationId])
   @@index([status, hypeScore])
+  @@index([winnerSideId])
   @@map("matches")
 }
 
+// A match always has two sides, but a side can contain one participant
+// (Street Fighter, tennis singles) or many participants (football, cricket,
+// Valorant, doubles tennis, BGMI squads). This is the generic boundary between
+// match mechanics and the domain entities competing in the match.
+model MatchSide {
+  id          String   @id @default(cuid())
+  matchId     String
+  sideKey     String   // "A" | "B" — stable machine key, not a player/team name
+  label       String?
+  score       Int      @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  match       Match   @relation("MatchSides", fields: [matchId], references: [id], onDelete: Cascade)
+  winnerFor   Match?  @relation("MatchWinnerSide")
+  participants MatchParticipant[]
+  scoreEvents MatchScoreEvent[]
+
+  @@unique([matchId, sideKey])
+  @@index([matchId])
+  @@map("match_sides")
+}
+
+// A participant is deliberately polymorphic at the application boundary: a
+// row can point to a Player or a Team. A Side is what permits pairs/squads to
+// be represented without changing Match itself. Validation lives in the
+// engine so the database can remain compatible with future participant types.
+model MatchParticipant {
+  id          String   @id @default(cuid())
+  sideId      String
+  playerId    String?
+  teamId      String?
+  role        String?
+  displayName String?
+  createdAt   DateTime @default(now())
+
+  side        MatchSide @relation(fields: [sideId], references: [id], onDelete: Cascade)
+  player      Player?   @relation(fields: [playerId], references: [id], onDelete: Cascade)
+  team        Team?     @relation(fields: [teamId], references: [id], onDelete: Cascade)
+
+  @@unique([sideId, playerId, teamId])
+  @@index([playerId])
+  @@index([teamId])
+  @@map("match_participants")
+}
+
+// Immutable scoring ledger. The current side score is a projection; these
+// events are the audit trail that lets sport-specific adapters reason about
+// periods, wickets, kills, sets, rounds, points, etc. without hard-coding them
+// into Match.
+model MatchScoreEvent {
+  id          String   @id @default(cuid())
+  matchId     String
+  sideId      String
+  sequence    Int
+  metric      String   // "points", "goals", "runs", "rounds", "sets", "kills", ...
+  value       Int      @default(0)
+  period      String?
+  metadata    Json?
+  createdAt   DateTime @default(now())
+
+  match       Match     @relation(fields: [matchId], references: [id], onDelete: Cascade)
+  side        MatchSide @relation(fields: [sideId], references: [id], onDelete: Cascade)
+
+  @@unique([matchId, sequence])
+  @@index([matchId, sideId])
+  @@map("match_score_events")
+}
 
 
 model ViewerSession {

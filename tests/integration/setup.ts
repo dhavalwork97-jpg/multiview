@@ -21,6 +21,9 @@ export async function resetDb() {
     db.tournamentEntrant.deleteMany(),
     db.tournament.deleteMany(),
     db.player.deleteMany(),
+    db.teamMember.deleteMany(),
+    db.tournamentTeam.deleteMany(),
+    db.team.deleteMany(),
     db.organization.deleteMany(),
     db.user.deleteMany(),
   ]);
@@ -65,4 +68,8 @@ export async function createPlayer(gamertag: string) {
 
 export async function createStation(tournamentId: string, label = "Station 1") {
   return db.station.create({ data: { tournamentId, label } });
+}
+
+export async function createTeam(name: string) {
+  return db.team.create({ data: { name, slug: `${name.toLowerCase().replace(/\s+/g, "-")}-${crypto.randomUUID().slice(0, 8)}` } });
 }

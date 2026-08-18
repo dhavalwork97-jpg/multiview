@@ -42,6 +42,9 @@ export default async function TournamentPage({
       format: true,
       publicEnabled: true,
       game: true,
+      sport: true,
+      participantMode: true,
+      scoringMode: true,
       status: true,
       venue: true,
       startDate: true,
@@ -62,6 +65,7 @@ export default async function TournamentPage({
           youtubeVideoId: true,
           playerOne: { select: { gamertag: true } },
           playerTwo: { select: { gamertag: true } },
+          sides: { include: { participants: { include: { player: { select: { gamertag: true } }, team: { select: { name: true } } } } } },
           station: { select: { label: true } },
         },
       },
@@ -79,7 +83,7 @@ export default async function TournamentPage({
         <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
           <div>
             <p className="font-mono text-xs uppercase tracking-widest text-ink-faint">
-              {tournament.game}{tournament.venue ? ` · ${tournament.venue}` : ""}
+              {tournament.game} · {tournament.sport}{tournament.venue ? ` · ${tournament.venue}` : ""}
             </p>
             <h1 className="mt-1 font-display text-3xl uppercase tracking-wide sm:text-4xl">{tournament.name}</h1>
             <p className="mt-2 text-sm text-ink-faint">
@@ -140,9 +144,9 @@ export default async function TournamentPage({
                     <span className="font-mono text-[10px] uppercase text-ink-faint">{match.station?.label ?? "Station"}</span>
                   </div>
                   <div className="mt-4 grid grid-cols-[1fr_auto_1fr] items-center gap-2">
-                    <span className="truncate font-display text-lg uppercase">{match.playerOne.gamertag}</span>
+                    <span className="truncate font-display text-lg uppercase">{match.sides.find(s => s.sideKey === "A")?.participants.map(p => p.player?.gamertag ?? p.team?.name ?? p.displayName).join(" / ") ?? match.playerOne?.gamertag ?? "Side A"}</span>
                     <span className="font-mono text-xs text-ink-faint">VS</span>
-                    <span className="truncate text-right font-display text-lg uppercase">{match.playerTwo.gamertag}</span>
+                    <span className="truncate text-right font-display text-lg uppercase">{match.sides.find(s => s.sideKey === "B")?.participants.map(p => p.player?.gamertag ?? p.team?.name ?? p.displayName).join(" / ") ?? match.playerTwo?.gamertag ?? "Side B"}</span>
                   </div>
                   <p className="mt-3 text-xs text-ink-faint">{match.round} · Watch this game</p>
                 </Link>
@@ -169,7 +173,7 @@ export default async function TournamentPage({
               {completedMatches.slice(0, 8).map((match) => (
                 <Link key={match.id} href={`/watch/${match.id}`} className="flex items-center justify-between gap-4 py-3 hover:text-signal-live">
                   <div className="min-w-0">
-                    <p className="truncate text-sm">{match.playerOne.gamertag} <span className="text-ink-faint">vs</span> {match.playerTwo.gamertag}</p>
+                    <p className="truncate text-sm">{match.sides.find(s => s.sideKey === "A")?.participants.map(p => p.player?.gamertag ?? p.team?.name ?? p.displayName).join(" / ") ?? match.playerOne?.gamertag ?? "Side A"} <span className="text-ink-faint">vs</span> {match.sides.find(s => s.sideKey === "B")?.participants.map(p => p.player?.gamertag ?? p.team?.name ?? p.displayName).join(" / ") ?? match.playerTwo?.gamertag ?? "Side B"}</p>
                     <p className="font-mono text-[10px] uppercase text-ink-faint">{match.round} · {match.station?.label ?? "Station"}</p>
                   </div>
                   <span className="shrink-0 font-mono text-sm">{match.playerOneScore} — {match.playerTwoScore}</span>
