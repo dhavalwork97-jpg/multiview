@@ -284,3 +284,11 @@ documented as such) test and security posture behind it.
 ## Organizer Operations
 
 V7 adds the organizer operations foundation: role policies, event setup checklist, incident contracts, and an operations page at `/admin/tournaments/[tournamentId]/operations`. These additions are deliberately additive and do not invent a new persistence schema.
+
+## V27 Universal Competition Layer
+
+V27 adds a format-neutral standings engine and operator standings workspace. Completed generic Side A / Side B matches now produce standings for individual competitors, teams, pairs and mixed participant groups. The rules snapshot can define win/draw/loss points, while score-for/against and differential provide generic secondary ranking data.
+
+Public standings: `/tournaments/:tournamentId/standings`
+Operator standings: `/admin/tournaments/:tournamentId/standings`
+Standings API: `/api/tournaments/:tournamentId/standings`

@@ -83,3 +83,24 @@ export const ADAPTERS: Record<string, ScoringAdapter> = {
 export function getScoringAdapter(id: string | undefined): ScoringAdapter {
   return ADAPTERS[id ?? "points"] ?? customAdapter;
 }
+
+export function getAdapterMetrics(id: string | undefined, rules: MatchRules = {}): string[] {
+  const adapter = getScoringAdapter(id);
+  const candidates = rules.allowedMetrics ?? (() => {
+    switch (adapter.id) {
+      case "battle_royale": return ["kills", "placement", "points"];
+      case "goals": return ["goals"];
+      case "runs": return ["runs"];
+      case "rounds": return ["rounds"];
+      case "sets": return ["sets"];
+      case "games": return ["games"];
+      case "points": return ["points"];
+      default: return ["points"];
+    }
+  })();
+  return candidates.filter((metric) => adapter.acceptsMetric(metric, rules));
+}
+
+export function metricLabel(metric: string): string {
+  return metric.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+}

@@ -7,6 +7,7 @@ export function TournamentAdminNav({ tournamentId, slug }: { tournamentId: strin
     ["/competition", "Rules"],
     ["/participants", "Participants"],
     ["/matches", "Scoring"],
+    ["/standings", "Standings"],
     ["/control-room", "Control Room"],
     ["/operations", "Operations"],
     ["/ops", "Stations"],

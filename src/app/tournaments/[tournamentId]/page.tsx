@@ -158,7 +158,7 @@ export default async function TournamentPage({
         <section>
           <div className="mb-3">
             <p className="font-mono text-[10px] uppercase tracking-[0.2em] text-ink-faint">Competition</p>
-            <h2 className="font-display text-xl uppercase tracking-wide">Brackets</h2>
+            <div className="flex flex-wrap items-center justify-between gap-3"><h2 className="font-display text-xl uppercase tracking-wide">Brackets</h2><Link href={`/tournaments/${tournament.id}/standings`} className="action-secondary">Standings</Link></div>
           </div>
           <BracketExplorer brackets={tournament.brackets} tournamentId={tournament.id} />
         </section>

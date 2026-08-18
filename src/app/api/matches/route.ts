@@ -43,6 +43,7 @@ export async function GET(req: Request) {
       startedAt: true,
       hypeScore: true,
       scoringAdapter: true,
+      rulesSnapshot: true,
       winnerSideId: true,
       sides: { include: { participants: { include: { player: { select: { gamertag: true } }, team: { select: { name: true } } } } } },
       playerOne: { select: { id: true, gamertag: true, avatarUrl: true, country: true } },
