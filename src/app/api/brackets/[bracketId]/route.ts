@@ -26,8 +26,6 @@ export async function GET(_req: Request, { params }: { params: Promise<{ bracket
           winnerId: true,
           stationId: true,
           youtubeVideoId: true,
-          winnerSideId: true,
-          sides: { include: { participants: { include: { player: { select: { id: true, gamertag: true } }, team: { select: { id: true, name: true } } } } } },
           playerOne: { select: { gamertag: true } },
           playerTwo: { select: { gamertag: true } },
           // Bracket UI plays matches inline (see BracketWatchDock) rather
@@ -51,8 +49,6 @@ export async function GET(_req: Request, { params }: { params: Promise<{ bracket
   // exactly what the bracket UI needs to decide whether clicking a
   // player's name should jump to a live stream or just show a tooltip.
   const liveMatchByPlayerId: Record<string, string> = {};
-  const liveMatchByTeamId: Record<string, string> = {};
-  const participantNameById: Record<string, string> = {};
   // playerId -> gamertag, for every player known so far. A slot only gets
   // a real Match row once BOTH its players are decided (see
   // advanceBracket() in src/lib/bracket-progression.ts) — so a slot with
@@ -68,19 +64,6 @@ export async function GET(_req: Request, { params }: { params: Promise<{ bracket
     }
     if (m.playerOneId && m.playerOne) gamertagByPlayerId[m.playerOneId] = m.playerOne.gamertag;
     if (m.playerTwoId && m.playerTwo) gamertagByPlayerId[m.playerTwoId] = m.playerTwo.gamertag;
-    for (const side of m.sides) {
-      for (const participant of side.participants) {
-        if (participant.player) {
-          participantNameById[`player:${participant.player.id}`] = participant.player.gamertag;
-          if (m.status === "LIVE") liveMatchByPlayerId[participant.player.id] = m.id;
-        }
-        if (participant.team) {
-          participantNameById[`team:${participant.team.id}`] = participant.team.name;
-          if (m.status === "LIVE") liveMatchByTeamId[participant.team.id] = m.id;
-        }
-        if (participant.displayName) participantNameById[`participant:${participant.id}`] = participant.displayName;
-      }
-    }
   }
 
   return NextResponse.json({
@@ -92,8 +75,6 @@ export async function GET(_req: Request, { params }: { params: Promise<{ bracket
     },
     matches: bracket.matches,
     liveMatchByPlayerId,
-    liveMatchByTeamId,
     gamertagByPlayerId,
-    participantNameById,
   });
 }

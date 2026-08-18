@@ -4,7 +4,7 @@ import { db } from "@/lib/db";
 import { writeAuditLog } from "@/lib/audit";
 import { getOrCreatePersonalOrganization, requirePrimaryOrganizationRole } from "@/lib/organization";
 import { PLAN_LIMITS } from "@/lib/plan-limits";
-import { createGenericMatch } from "@/lib/match-engine/persistence";
+import { normalizeRules } from "@/lib/competition-engine";
 
 const createTournamentSchema = z.object({
   name: z.string().trim().min(2).max(120),
@@ -64,6 +64,9 @@ export async function POST(req: Request) {
 
   const uniquePlayers = [...new Map(parsed.data.players.map((name) => [name.toLowerCase(), name])).values()];
   const playerCount = uniquePlayers.length;
+  if (playerCount < 2 || playerCount > 64) {
+    return NextResponse.json({ error: "Enter between 2 and 64 competitors." }, { status: 400 });
+  }
 
   const organization = await getOrCreatePersonalOrganization(user.id);
   const currentTournamentCount = await db.tournament.count({ where: { organizationId: organization.id, status: { not: "ARCHIVED" } } });
@@ -83,7 +86,7 @@ export async function POST(req: Request) {
         competitionType: parsed.data.competitionType,
         participantMode: parsed.data.participantMode,
         scoringMode: parsed.data.scoringMode,
-        competitionRules: parsed.data.competitionRules as any,
+        competitionRules: normalizeRules(parsed.data.sport, parsed.data.scoringMode, parsed.data.bestOf, parsed.data.competitionRules) as any,
         status: "SCHEDULED",
         startDate: new Date(parsed.data.startDate),
         organizerId: user.id,
@@ -93,7 +96,7 @@ export async function POST(req: Request) {
       },
     });
 
-    const players: Array<{ id: string; gamertag: string }> = [];
+    const players = [];
     for (let index = 0; index < uniquePlayers.length; index += 1) {
       const gamertag = uniquePlayers[index];
       const player = await tx.player.upsert({
@@ -144,39 +147,20 @@ export async function POST(req: Request) {
         rest.unshift(rest.pop()!);
         rotation.splice(0, rotation.length, fixed, ...rest);
       }
-    } else if (parsed.data.format === "SWISS") {
-      bracketStructure = [{
-        name: "Swiss Round 1",
-        matches: Array.from({ length: Math.floor(playerCount / 2) }, (_, index) => ({
-          playerOneId: players[index * 2]?.id ?? null,
-          playerTwoId: players[index * 2 + 1]?.id ?? null,
-          sideA: players[index * 2] ? [{ playerId: players[index * 2].id }] : [],
-          sideB: players[index * 2 + 1] ? [{ playerId: players[index * 2 + 1].id }] : [],
-          round: "Swiss Round 1",
-        })),
-      }];
     } else {
       const bracketSize = 2 ** Math.ceil(Math.log2(playerCount));
       const totalRounds = Math.log2(bracketSize);
-      const seeded = [...players];
-      while (seeded.length < bracketSize) seeded.push(null as any);
       bracketStructure = Array.from({ length: totalRounds }, (_, roundIndex) => ({
         name: roundName(roundIndex, totalRounds),
         matches: Array.from({ length: bracketSize / 2 ** (roundIndex + 1) }, () => ({
           playerOneId: null as string | null,
           playerTwoId: null as string | null,
-          sideA: [] as any[],
-          sideB: [] as any[],
           round: roundName(roundIndex, totalRounds),
         })),
       }));
       for (let index = 0; index < bracketSize / 2; index += 1) {
-        const a = seeded[index * 2];
-        const b = seeded[index * 2 + 1];
-        bracketStructure[0].matches[index].playerOneId = a?.id ?? null;
-        bracketStructure[0].matches[index].playerTwoId = b?.id ?? null;
-        bracketStructure[0].matches[index].sideA = a ? [{ playerId: a.id }] : [];
-        bracketStructure[0].matches[index].sideB = b ? [{ playerId: b.id }] : [];
+        bracketStructure[0].matches[index].playerOneId = players[index * 2]?.id ?? null;
+        bracketStructure[0].matches[index].playerTwoId = players[index * 2 + 1]?.id ?? null;
       }
     }
 
@@ -192,31 +176,34 @@ export async function POST(req: Request) {
     for (let roundIndex = 0; roundIndex < bracketStructure.length; roundIndex += 1) {
       for (let index = 0; index < bracketStructure[roundIndex].matches.length; index += 1) {
         const slot = bracketStructure[roundIndex].matches[index];
-        const sideA = slot.sideA ?? (slot.playerOneId ? [{ playerId: slot.playerOneId }] : []);
-        const sideB = slot.sideB ?? (slot.playerTwoId ? [{ playerId: slot.playerTwoId }] : []);
-        if (!sideA.length || !sideB.length) continue;
-        const created = await createGenericMatch(tx, {
-          tournamentId: tournament.id,
-          bracketId: bracket.id,
-          stationId: stations[firstRoundMatches.length % stations.length].id,
-          round: slot.round,
-          sport: parsed.data.sport,
-          scoringAdapter: parsed.data.scoringMode,
-          rules: parsed.data.competitionRules as any,
-          sides: [
-            { key: "A", label: "Side A", participants: sideA },
-            { key: "B", label: "Side B", participants: sideB },
-          ],
-        });
-        const match = await tx.match.update({
-          where: { id: created.id },
+        if (!slot.playerOneId || !slot.playerTwoId) continue;
+        const match = await tx.match.create({
           data: {
+            tournamentId: tournament.id,
+            bracketId: bracket.id,
             stationId: stations[firstRoundMatches.length % stations.length].id,
-            playerOneId: slot.playerOneId ?? null,
-            playerTwoId: slot.playerTwoId ?? null,
+            playerOneId: slot.playerOneId,
+            playerTwoId: slot.playerTwoId,
+            round: slot.round,
+            status: "QUEUED",
             roundIndex,
             matchIndex: index,
+            scoringAdapter: parsed.data.scoringMode,
+            rulesSnapshot: normalizeRules(parsed.data.sport, parsed.data.scoringMode, parsed.data.bestOf, parsed.data.competitionRules) as any,
           },
+        });
+        await tx.matchSide.createMany({
+          data: [
+            { matchId: match.id, sideKey: "A", label: "Side A" },
+            { matchId: match.id, sideKey: "B", label: "Side B" },
+          ],
+        });
+        const sides = await tx.matchSide.findMany({ where: { matchId: match.id }, orderBy: { sideKey: "asc" } });
+        await tx.matchParticipant.createMany({
+          data: [
+            { sideId: sides[0].id, playerId: slot.playerOneId },
+            { sideId: sides[1].id, playerId: slot.playerTwoId },
+          ],
         });
         firstRoundMatches.push(match);
       }

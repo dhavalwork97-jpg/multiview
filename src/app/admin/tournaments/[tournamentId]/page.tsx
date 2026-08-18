@@ -28,25 +28,38 @@ export default async function AdminTournamentPage({
       <header className="mb-8 flex items-start justify-between">
         <div>
           <p className="font-mono text-xs uppercase tracking-widest text-ink-faint">
-            {tournament.game}
+            {tournament.sport} · {tournament.game} · {tournament.participantMode}
           </p>
           <h1 className="font-display text-3xl uppercase tracking-wide">{tournament.name}</h1>
         </div>
-        <nav aria-label="Tournament admin" className="flex max-w-full flex-wrap items-center justify-end gap-2">
-          {[
-            ["Overview", `/admin/tournaments/${tournament.id}`],
-            ["Control Room", `/admin/tournaments/${tournament.id}/control-room`],
-            ["Operations", `/admin/tournaments/${tournament.id}/operations`],
-            ["Analytics", `/admin/tournaments/${tournament.id}/analytics`],
-            ["Report", `/admin/tournaments/${tournament.id}/report`],
-            ["Public", `/e/${tournament.slug}`],
-          ].map(([label, href]) => (
-            <Link key={href} href={href} className="rounded-card border border-arena-600 bg-arena-900 px-3 py-2 font-mono text-[10px] font-semibold uppercase tracking-wide text-ink-muted transition hover:border-signal-live hover:text-signal-live">
-              {label}
-            </Link>
-          ))}
-        </nav>
+        <Link
+          href={`/admin/tournaments/${tournament.id}/control-room`}
+          className="rounded-card border border-arena-600 px-3 py-1.5 font-mono text-xs uppercase tracking-wide text-ink-faint transition-colors hover:border-signal-live hover:text-signal-live"
+        >
+          Control room
+        </Link>
       </header>
+
+      <nav aria-label="Tournament administration" className="mb-3 flex flex-wrap gap-2 rounded-card border border-arena-700 bg-arena-900 p-2">
+        {[
+          ["", "Overview"],
+          ["/control-room", "Control Room"],
+          ["/operations", "Operations"],
+          ["/ops", "Station Ops"],
+          ["/analytics", "Analytics"],
+          ["/report", "Report"],
+        ].map(([suffix, label]) => (
+          <Link key={label} href={`/admin/tournaments/${tournament.id}${suffix}`} className="inline-flex min-h-10 items-center rounded-card border border-arena-700 px-3 font-mono text-[11px] font-semibold uppercase tracking-wide text-ink-muted hover:border-signal-live hover:bg-arena-800 hover:text-signal-live">
+            {label}
+          </Link>
+        ))}
+      </nav>
+      <nav aria-label="Tournament resources" className="mb-8 flex flex-wrap gap-2">
+        <Link href={`/e/${tournament.slug}`} className="inline-flex min-h-9 items-center rounded-card border border-signal-live/40 bg-signal-live/5 px-3 font-mono text-[11px] font-semibold uppercase tracking-wide text-signal-live hover:bg-signal-live/10">Public event</Link>
+        <Link href="/teams" className="inline-flex min-h-9 items-center rounded-card border border-arena-700 px-3 font-mono text-[11px] font-semibold uppercase tracking-wide text-ink-muted hover:border-signal-live hover:text-signal-live">Teams</Link>
+        <Link href="/players" className="inline-flex min-h-9 items-center rounded-card border border-arena-700 px-3 font-mono text-[11px] font-semibold uppercase tracking-wide text-ink-muted hover:border-signal-live hover:text-signal-live">Players</Link>
+        <Link href="/multiview" className="inline-flex min-h-9 items-center rounded-card border border-arena-700 px-3 font-mono text-[11px] font-semibold uppercase tracking-wide text-ink-muted hover:border-signal-live hover:text-signal-live">Multi-View</Link>
+      </nav>
 
       <section className="mb-10">
         <h2 className="mb-3 font-display text-xl uppercase tracking-wide text-ink-muted">

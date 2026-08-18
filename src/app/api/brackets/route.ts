@@ -2,7 +2,6 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { db } from "@/lib/db";
 import { requireTournamentManage } from "@/lib/auth";
-import { createGenericMatch } from "@/lib/match-engine/persistence";
 
 // Bracket topology is stored as JSON (see prisma/schema.prisma comment on
 // Bracket) rather than a relational tree, because every bracket source
@@ -11,18 +10,10 @@ import { createGenericMatch } from "@/lib/match-engine/persistence";
 // relational is Match — once we know two real players are in a slot, we
 // create a Match row so streaming/scoring/live-grid logic never has to
 // know or care where the bracket came from.
-const targetSchema = z.object({ roundIndex: z.number().int().min(0), matchIndex: z.number().int().min(0), slot: z.enum(["playerOneId", "playerTwoId", "sideA", "sideB"]) });
-const participantSchema = z.object({
-  playerId: z.string().optional(),
-  teamId: z.string().optional(),
-  role: z.string().optional(),
-  displayName: z.string().optional(),
-});
+const targetSchema = z.object({ roundIndex: z.number().int().min(0), matchIndex: z.number().int().min(0), slot: z.enum(["playerOneId", "playerTwoId"]) });
 const slotSchema = z.object({
-  playerOneId: z.string().nullable().default(null),
-  playerTwoId: z.string().nullable().default(null),
-  sideA: z.array(participantSchema).optional(),
-  sideB: z.array(participantSchema).optional(),
+  playerOneId: z.string().nullable(),
+  playerTwoId: z.string().nullable(),
   round: z.string(),
   winnerTarget: targetSchema.optional(),
   loserTarget: targetSchema.optional(),
@@ -77,19 +68,19 @@ export async function POST(req: Request) {
       const round = rounds[roundIndex];
       for (let matchIndex = 0; matchIndex < round.matches.length; matchIndex++) {
         const slot = round.matches[matchIndex];
-        const sideA = slot.sideA ?? (slot.playerOneId ? [{ playerId: slot.playerOneId }] : []);
-        const sideB = slot.sideB ?? (slot.playerTwoId ? [{ playerId: slot.playerTwoId }] : []);
-        if (sideA.length && sideB.length) {
-          const match = await createGenericMatch(tx, {
-            tournamentId,
-            bracketId: bracket.id,
-            round: slot.round,
-            sides: [
-              { key: "A", label: "Side A", participants: sideA },
-              { key: "B", label: "Side B", participants: sideB },
-            ],
+        if (slot.playerOneId && slot.playerTwoId) {
+          const match = await tx.match.create({
+            data: {
+              tournamentId,
+              bracketId: bracket.id,
+              playerOneId: slot.playerOneId,
+              playerTwoId: slot.playerTwoId,
+              round: slot.round,
+              status: "QUEUED",
+              roundIndex,
+              matchIndex,
+            },
           });
-          await tx.match.update({ where: { id: match.id }, data: { playerOneId: slot.playerOneId ?? null, playerTwoId: slot.playerTwoId ?? null, roundIndex, matchIndex } });
           createdMatchIds.push(match.id);
         }
       }

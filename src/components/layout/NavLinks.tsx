@@ -3,7 +3,12 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
-const LINKS = [
+type Props = {
+  showDashboard?: boolean;
+  showAdmin?: boolean;
+};
+
+const PUBLIC_LINKS = [
   { href: "/", label: "Home" },
   { href: "/tournaments", label: "Tournaments" },
   { href: "/teams", label: "Teams" },
@@ -11,20 +16,26 @@ const LINKS = [
   { href: "/multiview", label: "Multi-View" },
 ];
 
-export function NavLinks() {
+export function NavLinks({ showDashboard = false, showAdmin = false }: Props) {
   const pathname = usePathname();
+  const links = [
+    ...(showDashboard ? [{ href: "/dashboard", label: "Dashboard" }] : []),
+    ...PUBLIC_LINKS,
+    ...(showAdmin ? [{ href: "/admin/users", label: "Admin" }] : []),
+  ];
 
   return (
     <nav aria-label="Primary navigation" className="flex min-w-max items-center gap-1">
-      {LINKS.map((link) => {
-        const isActive = link.href === "/" ? pathname === "/" : pathname.startsWith(link.href);
+      {links.map((link) => {
+        const isActive =
+          link.href === "/" ? pathname === "/" : pathname === link.href || pathname.startsWith(`${link.href}/`);
         return (
           <Link
             key={link.href}
             href={link.href}
-            className={`inline-flex min-h-9 items-center whitespace-nowrap rounded-card border px-3 py-1.5 font-mono text-xs font-semibold uppercase tracking-wide transition-colors ${
+            className={`inline-flex min-h-10 items-center whitespace-nowrap rounded-card border px-3 py-2 font-mono text-[11px] font-semibold uppercase tracking-wide transition-colors ${
               isActive
-                ? "border-signal-live/50 bg-signal-live/10 text-signal-live"
+                ? "border-signal-live/60 bg-arena-700 text-ink shadow-[inset_0_0_0_1px_rgba(255,255,255,.04)]"
                 : "border-transparent text-ink-muted hover:border-arena-600 hover:bg-arena-800 hover:text-ink"
             }`}
           >
