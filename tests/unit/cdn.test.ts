@@ -9,18 +9,16 @@ describe("cdnUrl", () => {
     vi.resetModules();
   });
 
-  it("builds a Supabase Storage public URL from an S3 key", async () => {
-    vi.stubEnv("NEXT_PUBLIC_SUPABASE_STORAGE_URL", "https://xyz.supabase.co");
-    vi.stubEnv("NEXT_PUBLIC_SUPABASE_BUCKET", "media");
+  it("builds an https CloudFront URL from an S3 key", async () => {
+    vi.stubEnv("NEXT_PUBLIC_CLOUDFRONT_DOMAIN", "d123.cloudfront.net");
     const { cdnUrl } = await import("@/lib/cdn");
     expect(cdnUrl("recordings/station-1/match-1/index.m3u8")).toBe(
-      "https://xyz.supabase.co/storage/v1/object/public/media/recordings/station-1/match-1/index.m3u8"
+      "https://d123.cloudfront.net/recordings/station-1/match-1/index.m3u8"
     );
   });
 
   it("throws rather than silently returning a broken URL when unconfigured", async () => {
-    vi.stubEnv("NEXT_PUBLIC_SUPABASE_STORAGE_URL", "");
-    vi.stubEnv("NEXT_PUBLIC_SUPABASE_BUCKET", "");
+    vi.stubEnv("NEXT_PUBLIC_CLOUDFRONT_DOMAIN", "");
     const { cdnUrl } = await import("@/lib/cdn");
     expect(() => cdnUrl("clips/match-1/clip-1.mp4")).toThrow();
   });

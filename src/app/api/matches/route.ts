@@ -98,6 +98,14 @@ const assignSchema = z.object({
 // onto a station. This is the action the "Assign matches to stations"
 // dashboard feature calls.
 export async function POST(req: Request) {
+  // Authenticate before validating the payload so an unauthenticated caller
+  // cannot turn a protected endpoint into a schema oracle. It also preserves
+  // the API contract that signed-out callers receive 403 even for malformed
+  // bodies. Tournament-level authorization is still checked below.
+  const { getCurrentUser } = await import("@/lib/auth");
+  const currentUser = await getCurrentUser();
+  if (!currentUser) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+
   const body = await req.json();
   const parsed = assignSchema.safeParse(body);
   if (!parsed.success) {

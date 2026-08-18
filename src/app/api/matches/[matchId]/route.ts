@@ -302,33 +302,37 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ matchI
   // progression — see src/lib/bracket-progression.ts for why this is the
   // single write path for that (score-keeper/organizer PATCH is already
   // the single write path for match state generally).
-  if (updated.status === "COMPLETED" && updated.winnerId && updated.bracketId && existing.playerOneId && existing.playerTwoId) {
-    const playerOneId = existing.playerOneId;
-    const playerTwoId = existing.playerTwoId;
-    const advanced = await db.$transaction((tx) => advanceBracket(tx, {
-      ...updated,
-      playerOneId,
-      playerTwoId,
-    }));
-    for (const downstream of advanced) {
-      await publishEvent({
-        type: "bracket:advanced",
-        tournamentId: updated.tournamentId,
-        bracketId: updated.bracketId,
-        matchId: downstream.id,
-      });
-      const nextMatch = await db.match.findUnique({ where: { id: downstream.id } });
-      if (nextMatch) {
+  if (updated.status === "COMPLETED" && updated.winnerId && updated.bracketId) {
+    if (!existing.playerOneId || !existing.playerTwoId) {
+      // Generic/team matches do not participate in the legacy player-based
+      // bracket progression path yet. Their generic winner is already stored
+      // in winnerSideId, so do not fabricate legacy player IDs.
+    } else {
+      const advanced = await db.$transaction((tx) => advanceBracket(tx, {
+        ...updated,
+        playerOneId: existing.playerOneId!,
+        playerTwoId: existing.playerTwoId!,
+      }));
+      for (const downstream of advanced) {
         await publishEvent({
-          type: "match:updated",
-          tournamentId: nextMatch.tournamentId,
-          matchId: nextMatch.id,
-          status: nextMatch.status,
-          playerOneScore: nextMatch.playerOneScore,
-          playerTwoScore: nextMatch.playerTwoScore,
-          winnerId: nextMatch.winnerId,
-          stationId: nextMatch.stationId,
+          type: "bracket:advanced",
+          tournamentId: updated.tournamentId,
+          bracketId: updated.bracketId,
+          matchId: downstream.id,
         });
+        const nextMatch = await db.match.findUnique({ where: { id: downstream.id } });
+        if (nextMatch) {
+          await publishEvent({
+            type: "match:updated",
+            tournamentId: nextMatch.tournamentId,
+            matchId: nextMatch.id,
+            status: nextMatch.status,
+            playerOneScore: nextMatch.playerOneScore,
+            playerTwoScore: nextMatch.playerTwoScore,
+            winnerId: nextMatch.winnerId,
+            stationId: nextMatch.stationId,
+          });
+        }
       }
     }
   }

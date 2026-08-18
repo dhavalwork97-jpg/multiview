@@ -1,9 +1,11 @@
-const SUPABASE_STORAGE_URL = process.env.NEXT_PUBLIC_SUPABASE_STORAGE_URL;
-const SUPABASE_BUCKET = process.env.NEXT_PUBLIC_SUPABASE_BUCKET;
+const CLOUDFRONT_DOMAIN = process.env.NEXT_PUBLIC_CLOUDFRONT_DOMAIN;
 
 export function cdnUrl(s3Key: string) {
-  if (!SUPABASE_STORAGE_URL || !SUPABASE_BUCKET) {
-    throw new Error("Supabase storage URL/bucket is not configured");
+  if (!CLOUDFRONT_DOMAIN) {
+    throw new Error("CloudFront domain is not configured");
   }
-  return `${SUPABASE_STORAGE_URL}/storage/v1/object/public/${SUPABASE_BUCKET}/${s3Key}`;
+
+  const normalizedDomain = CLOUDFRONT_DOMAIN.replace(/^https?:\/\//, "").replace(/\/$/, "");
+  const normalizedKey = s3Key.replace(/^\/+/, "");
+  return `https://${normalizedDomain}/${normalizedKey}`;
 }
