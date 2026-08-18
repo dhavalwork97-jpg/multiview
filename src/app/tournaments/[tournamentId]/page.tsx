@@ -176,9 +176,7 @@ export default async function TournamentPage({
                     <p className="truncate text-sm">{match.sides.find(s => s.sideKey === "A")?.participants.map(p => p.player?.gamertag ?? p.team?.name ?? p.displayName).join(" / ") ?? match.playerOne?.gamertag ?? "Side A"} <span className="text-ink-faint">vs</span> {match.sides.find(s => s.sideKey === "B")?.participants.map(p => p.player?.gamertag ?? p.team?.name ?? p.displayName).join(" / ") ?? match.playerTwo?.gamertag ?? "Side B"}</p>
                     <p className="font-mono text-[10px] uppercase text-ink-faint">{match.round} · {match.station?.label ?? "Station"}</p>
                   </div>
-                  <span className="shrink-0 font-mono text-sm">
-  {match.sides.find(s => s.sideKey === "A")?.score ?? match.playerOneScore} — {match.sides.find(s => s.sideKey === "B")?.score ?? match.playerTwoScore}
-</span>
+                  <span className="shrink-0 font-mono text-sm">{match.playerOneScore} — {match.playerTwoScore}</span>
                 </Link>
               ))}
             </div>

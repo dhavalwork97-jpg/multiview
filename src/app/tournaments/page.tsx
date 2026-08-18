@@ -22,8 +22,6 @@ export default async function TournamentsPage() {
       id: true,
       name: true,
       game: true,
-      sport: true,
-      competitionType: true,
       status: true,
       startDate: true,
       venue: true,
@@ -50,7 +48,7 @@ export default async function TournamentsPage() {
             >
               <div className="flex items-center justify-between">
                 <span className="font-mono text-[10px] uppercase tracking-widest text-ink-faint">
-                  {t.sport} · {t.game}
+                  {t.game}
                 </span>
                 <span
                   className={`flex items-center gap-1 font-mono text-[10px] uppercase tracking-widest ${STATUS_STYLE[t.status]}`}

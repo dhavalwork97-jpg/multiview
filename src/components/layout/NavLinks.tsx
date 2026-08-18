@@ -17,15 +17,14 @@ export function NavLinks() {
   return (
     <nav aria-label="Primary navigation" className="flex min-w-max items-center gap-1">
       {LINKS.map((link) => {
-        const isActive =
-          link.href === "/" ? pathname === "/" : pathname === link.href || pathname.startsWith(`${link.href}/`);
+        const isActive = link.href === "/" ? pathname === "/" : pathname.startsWith(link.href);
         return (
           <Link
             key={link.href}
             href={link.href}
-            className={`inline-flex min-h-9 items-center whitespace-nowrap rounded-card border px-3 py-1.5 font-mono text-[11px] font-semibold uppercase tracking-wide transition-colors ${
+            className={`inline-flex min-h-9 items-center whitespace-nowrap rounded-card border px-3 py-1.5 font-mono text-xs font-semibold uppercase tracking-wide transition-colors ${
               isActive
-                ? "border-arena-600 bg-arena-700 text-ink"
+                ? "border-signal-live/50 bg-signal-live/10 text-signal-live"
                 : "border-transparent text-ink-muted hover:border-arena-600 hover:bg-arena-800 hover:text-ink"
             }`}
           >

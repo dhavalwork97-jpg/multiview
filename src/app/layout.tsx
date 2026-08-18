@@ -4,8 +4,8 @@ import { Nav } from "@/components/layout/Nav";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "FGC Stream — Competition & Live Broadcast Platform",
-  description: "Run tournaments, leagues and competitions for esports, sports and custom formats with live scoring, brackets and broadcast control.",
+  title: "FGC Stream — every station, live",
+  description: "Watch any fighting-game tournament match, on any station, the instant it starts.",
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

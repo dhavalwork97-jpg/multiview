@@ -22,15 +22,11 @@ export default async function PlayerPage({
         orderBy: { updatedAt: "desc" },
         take: 20,
       },
+      teamMemberships: { include: { team: true } },
     },
   });
 
   if (!player) notFound();
-
-  const teamMemberships = await db.teamMember.findMany({
-    where: { playerId: player.id },
-    include: { team: true },
-  });
 
   const matches = [
     ...player.matchesAsP1.map((match) => ({
@@ -59,7 +55,7 @@ export default async function PlayerPage({
         )}
 
         <div className="mt-6 flex flex-wrap gap-2">
-          {teamMemberships.map((membership) => (
+          {player.teamMemberships.map((membership) => (
             <Link
               key={membership.teamId}
               href={`/teams/${membership.teamId}`}

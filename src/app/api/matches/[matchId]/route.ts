@@ -117,6 +117,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ matchI
 
         const winnerSideKey = parsed.data.winnerSideKey ?? outcome.winnerSideKey;
         const winnerSideId = winnerSideKey ? sidesByKey[winnerSideKey].id : null;
+        const winnerPlayerId = winnerSideKey ? sidesByKey[winnerSideKey].participants.find((participant) => participant.playerId)?.playerId ?? null : null;
         const completed = parsed.data.status === "COMPLETED";
         if (completed && !winnerSideKey) {
           throw new Error("Cannot complete a tied generic match without winnerSideKey or a score that produces a winner");
@@ -127,7 +128,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ matchI
           data: {
             ...(parsed.data.status ? { status: parsed.data.status } : {}),
             ...(parsed.data.status === "LIVE" ? { startedAt: existing.startedAt ?? new Date(), youtubeBroadcastId: existing.youtubeBroadcastId, youtubeVideoId: existing.youtubeVideoId } : {}),
-            ...(completed ? { endedAt: existing.endedAt ?? new Date(), winnerSideId, youtubeBroadcastId: existing.youtubeBroadcastId, youtubeVideoId: existing.youtubeVideoId } : winnerSideKey ? { winnerSideId } : {}),
+            ...(completed ? { endedAt: existing.endedAt ?? new Date(), winnerSideId, winnerId: winnerPlayerId, youtubeBroadcastId: existing.youtubeBroadcastId, youtubeVideoId: existing.youtubeVideoId } : winnerSideKey ? { winnerSideId } : {}),
             // Legacy score projection remains synchronized for clients that
             // still render playerOne/playerTwo fields.
             playerOneScore: scores.A,
@@ -147,6 +148,48 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ matchI
         }
         if (result.updated.stationId) {
           await db.station.update({ where: { id: result.updated.stationId }, data: { status: "IDLE", lastHeartbeatAt: new Date() } });
+        }
+
+        if (result.updated.bracketId && result.updated.winnerSideId) {
+          const advanced = await db.$transaction((tx) => advanceBracket(tx, {
+            ...result.updated,
+            playerOneId: existing.playerOneId,
+            playerTwoId: existing.playerTwoId,
+            sides: existing.sides,
+          }));
+          for (const downstream of advanced) {
+            await publishEvent({
+              type: "bracket:advanced",
+              tournamentId: result.updated.tournamentId,
+              bracketId: result.updated.bracketId,
+              matchId: downstream.id,
+            });
+            const nextMatch = await db.match.findUnique({ where: { id: downstream.id } });
+            if (nextMatch) {
+              await publishEvent({
+                type: "match:updated",
+                tournamentId: nextMatch.tournamentId,
+                matchId: nextMatch.id,
+                status: nextMatch.status,
+                playerOneScore: nextMatch.playerOneScore,
+                playerTwoScore: nextMatch.playerTwoScore,
+                winnerId: nextMatch.winnerId,
+                winnerSideId: nextMatch.winnerSideId,
+                stationId: nextMatch.stationId,
+              });
+            }
+          }
+        }
+
+        const remaining = await db.match.count({
+          where: { tournamentId: result.updated.tournamentId, status: { in: ["QUEUED", "LIVE"] } },
+        });
+        if (remaining === 0) {
+          await db.tournament.updateMany({
+            where: { id: result.updated.tournamentId, status: { in: ["LIVE", "SCHEDULED"] } },
+            data: { status: "COMPLETED", endDate: new Date() },
+          });
+          await publishEvent({ type: "tournament:completed", tournamentId: result.updated.tournamentId });
         }
       }
 
@@ -302,38 +345,20 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ matchI
   // progression — see src/lib/bracket-progression.ts for why this is the
   // single write path for that (score-keeper/organizer PATCH is already
   // the single write path for match state generally).
-  if (updated.status === "COMPLETED" && updated.winnerId && updated.bracketId) {
-    if (!existing.playerOneId || !existing.playerTwoId) {
-      // Generic/team matches do not participate in the legacy player-based
-      // bracket progression path yet. Their generic winner is already stored
-      // in winnerSideId, so do not fabricate legacy player IDs.
-    } else {
-      const advanced = await db.$transaction((tx) => advanceBracket(tx, {
-        ...updated,
-        playerOneId: existing.playerOneId!,
-        playerTwoId: existing.playerTwoId!,
-      }));
-      for (const downstream of advanced) {
-        await publishEvent({
-          type: "bracket:advanced",
-          tournamentId: updated.tournamentId,
-          bracketId: updated.bracketId,
-          matchId: downstream.id,
-        });
-        const nextMatch = await db.match.findUnique({ where: { id: downstream.id } });
-        if (nextMatch) {
-          await publishEvent({
-            type: "match:updated",
-            tournamentId: nextMatch.tournamentId,
-            matchId: nextMatch.id,
-            status: nextMatch.status,
-            playerOneScore: nextMatch.playerOneScore,
-            playerTwoScore: nextMatch.playerTwoScore,
-            winnerId: nextMatch.winnerId,
-            stationId: nextMatch.stationId,
-          });
-        }
-      }
+  if (updated.status === "COMPLETED" && updated.winnerId && updated.bracketId && existing.sides.length < 2) {
+    const advanced = await db.$transaction((tx) => advanceBracket(tx, {
+      ...updated,
+      playerOneId: existing.playerOneId,
+      playerTwoId: existing.playerTwoId,
+      sides: existing.sides,
+    }));
+    for (const downstream of advanced) {
+      await publishEvent({
+        type: "bracket:advanced",
+        tournamentId: updated.tournamentId,
+        bracketId: updated.bracketId,
+        matchId: downstream.id,
+      });
     }
   }
 

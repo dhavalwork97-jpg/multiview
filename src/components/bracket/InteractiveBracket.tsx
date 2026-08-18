@@ -8,8 +8,8 @@ type BracketMatch = {
   id: string;
   round: string | null;
   status: string;
-  playerOneId: string;
-  playerTwoId: string;
+  playerOneId: string | null;
+  playerTwoId: string | null;
   playerOneScore: number;
   playerTwoScore: number;
   winnerId: string | null;
@@ -18,11 +18,15 @@ type BracketMatch = {
   playerOne: { gamertag: string };
   playerTwo: { gamertag: string };
   station: { id: string; label: string } | null;
+  sides?: Array<{ sideKey: string; participants: Array<{ id: string; player?: { id: string; gamertag: string } | null; team?: { id: string; name: string } | null; displayName?: string | null }> }>;
 };
 
+type ParticipantRef = { playerId?: string; teamId?: string; role?: string; displayName?: string };
 type StructureSlot = {
   playerOneId: string | null;
   playerTwoId: string | null;
+  sideA?: ParticipantRef[];
+  sideB?: ParticipantRef[];
   round: string;
 };
 
@@ -54,6 +58,7 @@ export function InteractiveBracket({
   const [matches, setMatches] = useState<BracketMatch[]>([]);
   const [liveMatchByPlayerId, setLiveMatchByPlayerId] = useState<Record<string, string>>({});
   const [gamertagByPlayerId, setGamertagByPlayerId] = useState<Record<string, string>>({});
+  const [participantNameById, setParticipantNameById] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(true);
   const socket = useSocket({ tournamentId });
 
@@ -68,6 +73,7 @@ export function InteractiveBracket({
           setMatches(data.matches);
           setLiveMatchByPlayerId(data.liveMatchByPlayerId);
           setGamertagByPlayerId(data.gamertagByPlayerId ?? {});
+          setParticipantNameById(data.participantNameById ?? {});
         })
         .finally(() => !cancelled && setLoading(false));
     }
@@ -102,12 +108,17 @@ export function InteractiveBracket({
   // yet (only slots with two known players get one — see the import
   // route). Match on player ids + round name to find it.
   function findMatch(slot: StructureSlot): BracketMatch | undefined {
-    return matches.find(
-      (m) =>
-        m.round === slot.round &&
-        m.playerOneId === slot.playerOneId &&
-        m.playerTwoId === slot.playerTwoId
-    );
+    return matches.find((m) => m.round === slot.round && m.playerOneId === slot.playerOneId && m.playerTwoId === slot.playerTwoId);
+  }
+
+  function sideName(slot: StructureSlot, side: "A" | "B", match?: BracketMatch) {
+    const refs = side === "A" ? slot.sideA : slot.sideB;
+    if (refs?.length) {
+      return refs.map((ref) => ref.playerId ? participantNameById[`player:${ref.playerId}`] ?? gamertagByPlayerId[ref.playerId] : ref.teamId ? participantNameById[`team:${ref.teamId}`] : ref.displayName).filter(Boolean).join(" / ") || "TBD";
+    }
+    const participants = match?.sides?.find((s) => s.sideKey === side)?.participants ?? [];
+    if (participants.length) return participants.map((p) => p.player?.gamertag ?? p.team?.name ?? p.displayName).filter(Boolean).join(" / ") || "TBD";
+    return side === "A" ? (slot.playerOneId ? gamertagByPlayerId[slot.playerOneId] ?? "…" : "TBD") : (slot.playerTwoId ? gamertagByPlayerId[slot.playerTwoId] ?? "…" : "TBD");
   }
 
   function openMatch(match: BracketMatch | undefined) {
@@ -138,12 +149,10 @@ export function InteractiveBracket({
             const match = findMatch(slot);
             const isLive = match?.status === "LIVE";
             const isSelected = !!match && match.id === selectedMatchId;
-            const p1Name =
-              match?.playerOne.gamertag ??
-              (slot.playerOneId ? gamertagByPlayerId[slot.playerOneId] ?? "…" : "TBD");
-            const p2Name =
-              match?.playerTwo.gamertag ??
-              (slot.playerTwoId ? gamertagByPlayerId[slot.playerTwoId] ?? "…" : "TBD");
+            const p1Name = sideName(slot, "A", match);
+            const p2Name = sideName(slot, "B", match);
+            const hasLiveA = !!slot.playerOneId && !!liveMatchByPlayerId[slot.playerOneId];
+            const hasLiveB = !!slot.playerTwoId && !!liveMatchByPlayerId[slot.playerTwoId];
 
             return (
               <div
@@ -154,8 +163,8 @@ export function InteractiveBracket({
               >
                 <button
                   type="button"
-                  onClick={() => openIfLive(slot.playerOneId)}
-                  disabled={!slot.playerOneId || !liveMatchByPlayerId[slot.playerOneId]}
+                  onClick={() => openMatch(match)}
+                  disabled={!match || (!hasLiveA && match.status !== "LIVE")}
                   className="flex w-full items-center justify-between border-b border-arena-700 border-l-2 border-l-corner-p1 px-3 py-2 text-left disabled:cursor-default enabled:hover:bg-arena-700"
                 >
                   <span className="truncate">{p1Name}</span>
@@ -163,8 +172,8 @@ export function InteractiveBracket({
                 </button>
                 <button
                   type="button"
-                  onClick={() => openIfLive(slot.playerTwoId)}
-                  disabled={!slot.playerTwoId || !liveMatchByPlayerId[slot.playerTwoId]}
+                  onClick={() => openMatch(match)}
+                  disabled={!match || (!hasLiveB && match.status !== "LIVE")}
                   className="flex w-full items-center justify-between border-l-2 border-l-corner-p2 px-3 py-2 text-left disabled:cursor-default enabled:hover:bg-arena-700"
                 >
                   <span className="truncate">{p2Name}</span>
