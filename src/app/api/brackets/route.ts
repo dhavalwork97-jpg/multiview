@@ -58,6 +58,15 @@ export async function POST(req: Request) {
       },
     });
 
+    const stage = await tx.competitionStage.create({
+      data: {
+        tournamentId,
+        name,
+        kind: format === "round_robin" ? "LEAGUE" : format === "swiss" ? "SWISS" : "KNOCKOUT",
+        orderIndex: await tx.competitionStage.count({ where: { tournamentId } }),
+      },
+    });
+
     const createdMatchIds: string[] = [];
 
     // Only create a Match row where both players are already known —
@@ -73,6 +82,7 @@ export async function POST(req: Request) {
             data: {
               tournamentId,
               bracketId: bracket.id,
+              stageId: stage.id,
               playerOneId: slot.playerOneId,
               playerTwoId: slot.playerTwoId,
               round: slot.round,

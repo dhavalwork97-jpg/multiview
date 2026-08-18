@@ -99,11 +99,11 @@ export default async function TournamentPage({
         </div>
       </header>
 
-      <div className="mx-auto max-w-6xl space-y-8" style={{ ["--event-accent" as string]: tournament.organization.brandPrimaryColor ?? "#7cf7c5" } as CSSProperties}>
+      <div className="mx-auto max-w-6xl space-y-8" style={{ ["--event-accent" as string]: tournament.organization.brandPrimaryColor ?? "#7cf7c5", ["--event-accent-2" as string]: tournament.organization.brandAccentColor ?? "#7c9cff" } as CSSProperties}>
         <section className="rounded-card border border-arena-700 bg-arena-900 p-4 sm:p-5">
           <div className="flex flex-wrap items-center gap-4">
             {tournament.organization.brandLogoUrl && <img src={tournament.organization.brandLogoUrl} alt="" className="h-12 w-12 rounded-card object-cover" />}
-            <div><p className="font-mono text-[10px] uppercase tracking-widest text-signal-live">{tournament.organization.name}</p><p className="text-sm text-ink-faint">{tournament.organization.tagline ?? "Official event broadcast hub"}</p></div>
+            <div><p className="font-mono text-[10px] uppercase tracking-widest" style={{ color: "var(--event-accent)" }}>{tournament.organization.name}</p><p className="text-sm text-ink-faint">{tournament.organization.tagline ?? "Official event broadcast hub"}</p></div>
           </div>
         </section>
 
@@ -135,7 +135,7 @@ export default async function TournamentPage({
                 <Link
                   key={match.id}
                   href={`/watch/${match.id}`}
-                  className="rounded-card border border-signal-live/40 bg-arena-950 p-4 transition-colors hover:border-signal-live"
+                  className="rounded-card border border-signal-live/40 bg-arena-950 p-4 transition-colors hover:border-signal-live" style={{ borderColor: "color-mix(in srgb, var(--event-accent) 40%, transparent)" }}
                 >
                   <div className="flex items-center justify-between gap-2">
                     <span className="flex items-center gap-2 font-mono text-[10px] uppercase tracking-widest text-signal-live">

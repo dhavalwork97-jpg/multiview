@@ -4,6 +4,7 @@ import { db } from "@/lib/db";
 import { requireTournamentManage } from "@/lib/auth";
 import { publishEvent } from "@/lib/events";
 import { advanceBracket } from "@/lib/bracket-progression";
+import { advanceCompetitionFromMatch, resolveStageRankAdvancements } from "@/lib/competition-progression";
 import { createBroadcastForMatch, endBroadcastForMatch } from "@/lib/youtube";
 import { writeAuditLog } from "@/lib/audit";
 import { defaultRateLimit } from "@/lib/rate-limit";
@@ -162,6 +163,16 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ matchI
         sideScores: { A: result.updated.playerOneScore, B: result.updated.playerTwoScore },
         stationId: result.updated.stationId,
       });
+      if (result.updated.status === "COMPLETED") {
+        const advanced = await db.$transaction((tx) => advanceCompetitionFromMatch(tx, result.updated.id));
+        if (result.updated.stageId) {
+          const stage = await db.competitionStage.findUnique({ where: { id: result.updated.stageId }, select: { status: true } });
+          if (stage?.status === "COMPLETED") await db.$transaction((tx) => resolveStageRankAdvancements(tx, result.updated.stageId!));
+        }
+        for (const downstream of advanced) {
+          await publishEvent({ type: "bracket:advanced", tournamentId: result.updated.tournamentId, bracketId: result.updated.bracketId ?? "", matchId: downstream.targetMatchId });
+        }
+      }
       return NextResponse.json({ match: result.updated, engine: { winnerSideKey: result.winnerSideKey, outcome: result.outcome } });
     } catch (error) {
       return NextResponse.json({ error: error instanceof Error ? error.message : "Failed to update generic match" }, { status: 400 });
@@ -334,6 +345,15 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ matchI
           });
         }
       }
+    }
+  }
+
+  if (updated.status === "COMPLETED" && updated.stageId) {
+    const advanced = await db.$transaction((tx) => advanceCompetitionFromMatch(tx, updated.id));
+    const stage = await db.competitionStage.findUnique({ where: { id: updated.stageId! }, select: { status: true } });
+    if (stage?.status === "COMPLETED") await db.$transaction((tx) => resolveStageRankAdvancements(tx, updated.stageId!));
+    for (const downstream of advanced) {
+      await publishEvent({ type: "bracket:advanced", tournamentId: updated.tournamentId, bracketId: updated.bracketId ?? "", matchId: downstream.targetMatchId });
     }
   }
 

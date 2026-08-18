@@ -26,7 +26,9 @@ export async function GET(req: Request) {
     return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
   }
 
-  const { tournamentId, status } = parsed.data;
+  const { tournamentId } = parsed.data;
+  // Public endpoint defaults to LIVE matches; callers can explicitly request another status.
+  const status = parsed.data.status ?? "LIVE";
 
   const matches = await db.match.findMany({
     where: {
@@ -80,6 +82,7 @@ const sideSchema = z.object({
 const assignSchema = z.object({
   tournamentId: z.string(),
   bracketId: z.string().optional(),
+  stageId: z.string().optional(),
   stationId: z.string().optional(),
   playerOneId: z.string().optional(),
   playerTwoId: z.string().optional(),
@@ -106,6 +109,10 @@ export async function POST(req: Request) {
   const { getCurrentUser } = await import("@/lib/auth");
   const currentUser = await getCurrentUser();
   if (!currentUser) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  // Reject known read-only users before payload validation so protected write
+  // endpoints consistently return 403 to viewers. Tournament-level RBAC is
+  // still enforced below for authenticated operators/admins.
+  if (currentUser.role === "VIEWER") return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
   const body = await req.json();
   const parsed = assignSchema.safeParse(body);
@@ -158,6 +165,12 @@ export async function POST(req: Request) {
         scoringAdapter: parsed.data.scoringAdapter,
         sides,
       });
+
+      if (parsed.data.stageId) {
+        const stage = await tx.competitionStage.findFirst({ where: { id: parsed.data.stageId, tournamentId: parsed.data.tournamentId } });
+        if (!stage) throw new Error("Stage does not belong to this tournament");
+        await tx.match.update({ where: { id: created.id }, data: { stageId: stage.id } });
+      }
 
       // Keep legacy FGC fields populated when the match was created from the
       // old playerOne/playerTwo API so every existing consumer remains valid.

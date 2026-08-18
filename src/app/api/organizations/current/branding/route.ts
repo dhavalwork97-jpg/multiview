@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { db } from "@/lib/db";
-import { requirePrimaryOrganizationRole } from "@/lib/organization";
+import { getOrCreatePersonalOrganization, requirePrimaryOrganizationRole } from "@/lib/organization";
 
 const schema = z.object({
   name: z.string().trim().min(2).max(120).optional(),
@@ -15,9 +15,10 @@ const schema = z.object({
 export async function GET() {
   try {
     const { user, organizationId } = await requirePrimaryOrganizationRole("VIEWER");
-    const org = organizationId ? await db.organization.findUnique({ where: { id: organizationId } }) : await db.organization.findFirst({ where: { ownerId: user.id } });
+    const org = organizationId ? await db.organization.findUnique({ where: { id: organizationId } }) : await getOrCreatePersonalOrganization(user.id);
+    if (!org) return NextResponse.json({ error: "Organization not found" }, { status: 404 });
     return NextResponse.json({ organization: org });
-  } catch { return NextResponse.json({ error: "Forbidden" }, { status: 403 }); }
+  } catch (error) { return NextResponse.json({ error: error instanceof Error ? error.message : "Forbidden" }, { status: 403 }); }
 }
 
 export async function PATCH(req: Request) {

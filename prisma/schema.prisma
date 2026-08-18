@@ -204,6 +204,7 @@ model Tournament {
   scoringMode       String               @default("points")
   competitionRules  Json?
   brackets          Bracket[]
+  stages            CompetitionStage[]
   matches           Match[]
   notifications     Notification[]
   sponsors          Sponsor[]
@@ -317,6 +318,45 @@ model TournamentEntrant {
   @@map("tournament_entrants")
 }
 
+model CompetitionStage {
+  id             String            @id @default(cuid())
+  tournamentId   String
+  name           String
+  kind           StageKind         @default(KNOCKOUT)
+  orderIndex     Int
+  status         String            @default("SCHEDULED")
+  rules          Json?
+  createdAt      DateTime          @default(now())
+  updatedAt      DateTime          @updatedAt
+  tournament     Tournament        @relation(fields: [tournamentId], references: [id], onDelete: Cascade)
+  matches        Match[]
+  sourceSlots    AdvancementSlot[] @relation("AdvancementSourceStage")
+  @@unique([tournamentId, orderIndex])
+  @@index([tournamentId, kind])
+  @@map("competition_stages")
+}
+
+model AdvancementSlot {
+  id             String               @id @default(cuid())
+  sourceType     AdvancementSourceType @default(MATCH_RESULT)
+  outcome        AdvancementOutcome   @default(WINNER)
+  sourceMatchId  String?
+  sourceStageId  String?
+  sourceRank     Int?
+  targetMatchId  String
+  targetSideKey  String
+  sourceLabel    String?
+  resolvedAt     DateTime?
+  createdAt      DateTime             @default(now())
+  sourceMatch    Match?               @relation("AdvancementSourceMatch", fields: [sourceMatchId], references: [id], onDelete: Cascade)
+  sourceStage    CompetitionStage?    @relation("AdvancementSourceStage", fields: [sourceStageId], references: [id], onDelete: Cascade)
+  targetMatch    Match                @relation("AdvancementTargetMatch", fields: [targetMatchId], references: [id], onDelete: Cascade)
+  @@unique([targetMatchId, targetSideKey])
+  @@index([sourceMatchId, outcome])
+  @@index([sourceStageId, sourceRank])
+  @@map("advancement_slots")
+}
+
 model Bracket {
   id           String     @id @default(cuid())
   tournamentId String
@@ -379,6 +419,7 @@ model Match {
   updatedAt          DateTime            @updatedAt
   roundIndex         Int?
   matchIndex         Int?
+  stageId            String?
   youtubeBroadcastId String?             @unique
   youtubeVideoId     String?
   engineVersion      String              @default("1")
@@ -390,6 +431,9 @@ model Match {
   scoreEvents        MatchScoreEvent[]
   sides              MatchSide[]         @relation("MatchSides")
   bracket            Bracket?            @relation(fields: [bracketId], references: [id])
+  stage              CompetitionStage?   @relation(fields: [stageId], references: [id], onDelete: SetNull)
+  sourceAdvancements AdvancementSlot[]   @relation("AdvancementSourceMatch")
+  targetAdvancements AdvancementSlot[]   @relation("AdvancementTargetMatch")
   playerOne          Player?             @relation("MatchPlayerOne", fields: [playerOneId], references: [id], onDelete: Restrict)
   playerTwo          Player?             @relation("MatchPlayerTwo", fields: [playerTwoId], references: [id], onDelete: Restrict)
   station            Station?            @relation(fields: [stationId], references: [id])
@@ -619,6 +663,29 @@ enum PlanTier {
   STARTER
   PRO
   ENTERPRISE
+}
+
+enum StageKind {
+  QUALIFIER
+  GROUP
+  SWISS
+  LEAGUE
+  KNOCKOUT
+  CONSOLATION
+  FINAL
+  CUSTOM
+}
+
+enum AdvancementSourceType {
+  MATCH_RESULT
+  STAGE_RANK
+  MANUAL
+}
+
+enum AdvancementOutcome {
+  WINNER
+  LOSER
+  RANK
 }
 
 enum TournamentFormat {

@@ -173,6 +173,16 @@ export async function POST(req: Request) {
       },
     });
 
+    const stage = await tx.competitionStage.create({
+      data: {
+        tournamentId: tournament.id,
+        name: parsed.data.format === "ROUND_ROBIN" ? "League Stage" : parsed.data.format === "SWISS" ? "Swiss Stage" : "Main Stage",
+        kind: parsed.data.format === "ROUND_ROBIN" ? "LEAGUE" : parsed.data.format === "SWISS" ? "SWISS" : parsed.data.format === "SINGLE_ELIMINATION" || parsed.data.format === "DOUBLE_ELIMINATION" ? "KNOCKOUT" : "CUSTOM",
+        orderIndex: 0,
+        rules: parsed.data.competitionRules ? parsed.data.competitionRules as any : undefined,
+      },
+    });
+
     for (let roundIndex = 0; roundIndex < bracketStructure.length; roundIndex += 1) {
       for (let index = 0; index < bracketStructure[roundIndex].matches.length; index += 1) {
         const slot = bracketStructure[roundIndex].matches[index];
@@ -181,6 +191,7 @@ export async function POST(req: Request) {
           data: {
             tournamentId: tournament.id,
             bracketId: bracket.id,
+            stageId: stage.id,
             stationId: stations[firstRoundMatches.length % stations.length].id,
             playerOneId: slot.playerOneId,
             playerTwoId: slot.playerTwoId,
@@ -213,6 +224,7 @@ export async function POST(req: Request) {
     return {
       tournament: { id: tournament.id, name: tournament.name, slug: tournament.slug },
       bracket: { id: bracket.id, name: bracket.name },
+      stage: { id: stage.id, name: stage.name },
       stationsCreated: stations.length,
       matchesCreated: firstRoundMatches.length,
       playersCreated: players.length,

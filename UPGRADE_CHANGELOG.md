@@ -136,3 +136,13 @@ Do not add background YouTube polling just to display LIVE status. The applicati
 - Restored the missing `PLAN_LIMITS` import in the tournament creation API.
 - Kept the existing commercial-event platform schema/migration changes intact.
 - This repair is schema/client-generation focused: after extraction, run `npm install` and `npx prisma generate` before typecheck/build so Prisma Client is regenerated from the corrected schema.
+
+## V28 — Persistent Stages & Generic Advancement (2026-08-18)
+- Added persistent CompetitionStage model and Match.stageId.
+- Added AdvancementSlot with MATCH_RESULT, STAGE_RANK and MANUAL sources.
+- Added generic competition progression over MatchSide participants.
+- Added stage-rank resolution through universal standings.
+- Added stage management and advancement APIs.
+- Wired tournament creation and bracket import to persistent stages.
+- Fixed organization branding initialization so users without an existing personal organization are provisioned before settings render.
+- Branding settings now surface clearer API errors and public tournament pages consume primary/accent brand values.

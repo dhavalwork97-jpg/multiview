@@ -1,4 +1,4 @@
-import { auth, currentUser } from "@clerk/nextjs/server";
+import { auth } from "@clerk/nextjs/server";
 import { db } from "@/lib/db";
 import type { OrganizationRole, Role } from "@prisma/client";
 
@@ -9,63 +9,10 @@ const ORG_ROLE_RANK: Record<OrganizationRole, number> = {
   OWNER: 40,
 };
 
-/**
- * Return the application's user record for the active Clerk session.
- *
- * Clerk authentication and our Prisma user mirror are intentionally separate.
- * A newly created Clerk account can reach the app before the Clerk webhook has
- * been delivered, so do not redirect an authenticated user back to /sign-in
- * merely because the mirror row is not present yet. Provision the row from
- * Clerk as a safe fallback, while keeping the webhook as the normal sync path.
- */
 export async function getCurrentUser() {
   const { userId: clerkId } = await auth();
   if (!clerkId) return null;
-
-  const existing = await db.user.findUnique({ where: { clerkId } });
-  if (existing) return existing;
-
-  const clerkUser = await currentUser();
-  if (!clerkUser) return null;
-
-  const email = clerkUser.emailAddresses.find(
-    (item) => item.id === clerkUser.primaryEmailAddressId,
-  )?.emailAddress ?? clerkUser.emailAddresses[0]?.emailAddress;
-  if (!email) return null;
-
-  const username =
-    clerkUser.username?.trim() ||
-    email.split("@")[0]?.trim() ||
-    `user-${clerkId.slice(-8)}`;
-
-  // Username/email are globally unique in our schema. Prefer the existing
-  // record if Clerk has been linked to an already-provisioned account.
-  const byEmail = await db.user.findUnique({ where: { email } });
-  if (byEmail) {
-    return db.user.update({
-      where: { id: byEmail.id },
-      data: { clerkId },
-    });
-  }
-
-  const byUsername = await db.user.findUnique({ where: { username } });
-  if (byUsername) {
-    return db.user.update({
-      where: { id: byUsername.id },
-      data: { clerkId, email },
-    });
-  }
-
-  return db.user.create({
-    data: {
-      clerkId,
-      email,
-      username,
-      displayName:
-        [clerkUser.firstName, clerkUser.lastName].filter(Boolean).join(" ") || null,
-      avatarUrl: clerkUser.imageUrl ?? null,
-    },
-  });
+  return db.user.findUnique({ where: { clerkId } });
 }
 
 export class UnauthorizedError extends Error {
