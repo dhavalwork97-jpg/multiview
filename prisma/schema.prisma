@@ -316,6 +316,11 @@ model Tournament {
   name          String
   slug          String            @unique
   game          String            // "Street Fighter 6", "Tekken 8", "Guilty Gear -STRIVE-"
+  sport            String            @default("esports")
+  competitionType  String            @default("tournament")
+  participantMode  String            @default("individual")
+  scoringMode      String            @default("points")
+  competitionRules Json?
   status        TournamentStatus  @default(DRAFT)
   startDate     DateTime
   endDate       DateTime?
