@@ -5,28 +5,30 @@ import { db } from "@/lib/db";
 // per-test transactions-that-rollback if the suite grows large enough
 // for this to be a speed problem.
 export async function resetDb() {
-  await db.$transaction([
-    db.eventDailyMetric.deleteMany(),
-    db.tournamentIncident.deleteMany(),
-    db.organizationInvitation.deleteMany(),
-    db.organizationMember.deleteMany(),
-    db.clip.deleteMany(),
-    db.matchEvent.deleteMany(),
-    db.recording.deleteMany(),
-    db.watchHistoryEntry.deleteMany(),
-    db.favorite.deleteMany(),
-    db.match.deleteMany(),
-    db.station.deleteMany(),
-    db.bracket.deleteMany(),
-    db.tournamentEntrant.deleteMany(),
-    db.tournament.deleteMany(),
-    db.player.deleteMany(),
-    db.teamMember.deleteMany(),
-    db.tournamentTeam.deleteMany(),
-    db.team.deleteMany(),
-    db.organization.deleteMany(),
-    db.user.deleteMany(),
-  ]);
+  await db.$executeRawUnsafe(`
+    TRUNCATE TABLE
+      "event_daily_metrics",
+      "tournament_incidents",
+      "organization_invitations",
+      "organization_members",
+      "clips",
+      "match_events",
+      "recordings",
+      "watch_history_entries",
+      "favorites",
+      "matches",
+      "stations",
+      "brackets",
+      "tournament_entrants",
+      "tournaments",
+      "players",
+      "team_members",
+      "tournament_teams",
+      "teams",
+      "organizations",
+      "users"
+    RESTART IDENTITY CASCADE
+  `);
 }
 
 export async function createUser(role: "VIEWER" | "ORGANIZER" | "ADMIN" = "VIEWER") {

@@ -5,11 +5,16 @@ export default defineConfig({
   test: {
     environment: "node",
     include: ["tests/unit/**/*.test.ts", "tests/integration/**/*.test.ts"],
-    // Integration tests hit a real (test) Postgres via Prisma — see
-    // tests/integration/README.md — so they can't run in parallel
-    // against the same DB without stepping on each other's data.
+
+    // Integration tests use a real Postgres database (Neon).
+    // The remote DB can take several seconds to establish/reuse connections.
+    testTimeout: 30000,
+    hookTimeout: 30000,
+
+    // Integration tests share one database and reset it between tests.
     fileParallelism: false,
   },
+
   resolve: {
     alias: { "@": path.resolve(__dirname, "./src") },
   },
