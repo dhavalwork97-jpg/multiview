@@ -1,6 +1,8 @@
 import Link from "next/link";
 import { db } from "@/lib/db";
 
+export const dynamic = "force-dynamic";
+
 export default async function TeamsPage() {
   const teams = await db.team.findMany({ orderBy: { name: "asc" }, take: 100, select: { id: true, name: true, logoUrl: true, country: true, _count: { select: { members: true, tournaments: true } } } });
   return <main className="min-h-screen bg-arena-950 px-4 py-8 sm:px-6"><div className="mx-auto max-w-6xl">

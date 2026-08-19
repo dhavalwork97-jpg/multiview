@@ -1,6 +1,8 @@
 import Link from "next/link";
 import { db } from "@/lib/db";
 
+export const dynamic = "force-dynamic";
+
 export default async function PlayersPage() {
   const players = await db.player.findMany({ orderBy: { gamertag: "asc" }, take: 100, select: { id: true, gamertag: true, realName: true, country: true, avatarUrl: true, _count: { select: { matchParticipants: true, entrants: true } } } });
   return <main className="min-h-screen bg-arena-950 px-4 py-8 sm:px-6"><div className="mx-auto max-w-6xl">

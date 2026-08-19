@@ -1,6 +1,8 @@
 import Link from "next/link";
 import { db } from "@/lib/db";
 
+export const dynamic = "force-dynamic";
+
 const STATUS_STYLE: Record<string, string> = {
   LIVE: "text-signal-live",
   SCHEDULED: "text-ink-muted",
