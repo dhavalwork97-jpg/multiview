@@ -4,9 +4,8 @@ import { Nav } from "@/components/layout/Nav";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "FGC Stream — Competition & Live Broadcast Platform",
-  description:
-    "Run tournaments, leagues and competitions for esports, sports and custom formats with live scoring, brackets and broadcast control.",
+  title: "FGC Stream",
+  description: "Universal Esports Competition Platform",
 };
 
 export default function RootLayout({
@@ -16,8 +15,8 @@ export default function RootLayout({
 }) {
   return (
     <ClerkProvider>
-      <html lang="en" className="dark">
-        <body className="min-h-screen bg-arena-950 text-ink">
+      <html lang="en">
+        <body>
           <Nav />
           {children}
         </body>
