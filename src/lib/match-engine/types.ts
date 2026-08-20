@@ -25,6 +25,7 @@ export type MatchRules = {
   scoringAdapter?: string;
   bestOf?: number;
   winCondition?: "highest_score" | "first_to" | "explicit";
+  direction?: "higher_wins" | "lower_wins";
   target?: number;
   allowedMetrics?: string[];
   weights?: Record<string, number>;
