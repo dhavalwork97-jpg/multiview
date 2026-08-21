@@ -60,3 +60,53 @@ export function validateScoreEvent(event: { metric: string; value: number }, rul
   const adapter = getScoringAdapter(rules.scoringAdapter);
   if (!adapter.acceptsMetric(event.metric, rules)) throw new Error(`Metric '${event.metric}' is not supported by ${adapter.id}`);
 }
+
+export function calculateOutcome(
+  scores: { A: number; B: number },
+  rules: MatchRules
+): MatchOutcome {
+  const direction = rules.direction ?? "higher_wins";
+  const winCondition = rules.winCondition ?? "highest_score";
+
+  let winnerSideKey: SideKey | null = null;
+  let completed = false;
+
+  if (winCondition === "highest_score") {
+    if (scores.A !== scores.B) {
+      winnerSideKey =
+        direction === "higher_wins"
+          ? scores.A > scores.B
+            ? "A"
+            : "B"
+          : scores.A < scores.B
+          ? "A"
+          : "B";
+
+      completed = true;
+    }
+  }
+
+  if (winCondition === "first_to") {
+    const target = rules.target ?? 1;
+
+    if (scores.A >= target) {
+      winnerSideKey = "A";
+      completed = true;
+    } else if (scores.B >= target) {
+      winnerSideKey = "B";
+      completed = true;
+    }
+  }
+
+  return {
+    winnerSideKey,
+    scores,
+    isDraw: winnerSideKey === null,
+    reason:
+      winnerSideKey === null
+        ? "Draw"
+        : `Side ${winnerSideKey} wins`,
+    completed,
+  };
+}
+export * from "./runtime";
