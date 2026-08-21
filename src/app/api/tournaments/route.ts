@@ -73,10 +73,13 @@ export async function POST(req: Request) {
   const participantMode =
     parsed.data.participantMode || preset.participantMode;
 
+  const scoringMode = parsed.data.scoringMode || preset.scoringAdapter;
+  const bestOf = parsed.data.bestOf || preset.bestOf;
+
   const competitionRules = normalizeRules(
     parsed.data.sport,
-    parsed.data.scoringMode,
-    parsed.data.bestOf,
+    scoringMode,
+    bestOf,
     parsed.data.competitionRules,
   );
 
@@ -104,14 +107,14 @@ export async function POST(req: Request) {
         sport: parsed.data.sport,
         competitionType,
         participantMode,
-        scoringMode: parsed.data.scoringMode,
+        scoringMode,
         competitionRules: competitionRules as any,
         status: "SCHEDULED",
         startDate: new Date(parsed.data.startDate),
         organizerId: user.id,
         organizationId: organization.id,
         format: parsed.data.format,
-        bestOf: parsed.data.bestOf,
+        bestOf,
       },
     });
 
@@ -218,7 +221,7 @@ export async function POST(req: Request) {
             status: "QUEUED",
             roundIndex,
             matchIndex: index,
-            scoringAdapter: parsed.data.scoringMode,
+            scoringAdapter: scoringMode,
             rulesSnapshot: competitionRules as any,
           },
         });
