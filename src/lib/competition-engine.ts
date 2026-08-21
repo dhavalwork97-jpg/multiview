@@ -9,34 +9,28 @@ export type ParticipantMode =
   | "pair"
   | "mixed";
 
-export type CompetitionPreset = {
-  sport: string;
-  label: string;
-  participantMode: ParticipantMode;
-  scoringMode: string;
-  bestOf: number;
-  rules: Record<string, unknown>;
-};
+export type CompetitionPreset = ReturnType<typeof getCompetitionDefinition>;
 
-/**
- * Compatibility shim for existing V29/V30 pages.
- */
 export function getCompetitionPreset(sport: string): CompetitionPreset {
-  const definition = getCompetitionDefinition(sport);
-
-  return {
-    sport: definition.sport,
-    label: definition.label,
-    participantMode: definition.participantMode,
-    scoringMode: definition.scoringAdapter,
-    bestOf: definition.bestOf,
-    rules: definition.rules,
-  };
+  return getCompetitionDefinition(sport);
 }
 
-/**
- * Universal rules builder used by tournament creation.
- */
+export function getCompetitionPresets() {
+  return [
+    getCompetitionDefinition("esports"),
+    getCompetitionDefinition("football"),
+    getCompetitionDefinition("basketball"),
+    getCompetitionDefinition("cricket"),
+    getCompetitionDefinition("tennis"),
+    getCompetitionDefinition("badminton"),
+    getCompetitionDefinition("volleyball"),
+    getCompetitionDefinition("table-tennis"),
+    getCompetitionDefinition("racing"),
+    getCompetitionDefinition("skills"),
+    getCompetitionDefinition("custom"),
+  ];
+}
+
 export function normalizeRules(
   sport: string,
   scoringMode: string,
@@ -46,6 +40,6 @@ export function normalizeRules(
   return buildCompetitionRules(sport, {
     scoringAdapter: scoringMode,
     bestOf,
-    ...(customRules ?? {}),
+    ...customRules,
   });
 }
