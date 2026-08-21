@@ -4,7 +4,10 @@ import { db } from "@/lib/db";
 import { writeAuditLog } from "@/lib/audit";
 import { getOrCreatePersonalOrganization, requirePrimaryOrganizationRole } from "@/lib/organization";
 import { PLAN_LIMITS } from "@/lib/plan-limits";
-import { normalizeRules } from "@/lib/competition-engine";
+import {
+  getCompetitionPreset,
+  normalizeRules,
+} from "@/lib/competition-engine";
 
 const createTournamentSchema = z.object({
   name: z.string().trim().min(2).max(120),
@@ -12,13 +15,13 @@ const createTournamentSchema = z.object({
   sport: z.string().trim().min(2).max(40).default("esports"),
   competitionType: z.string().trim().min(2).max(40).default("tournament"),
   participantMode: z.enum(["individual", "team", "pair", "mixed"]).default("individual"),
-  scoringMode: z.string().trim().min(2).max(40).default("points"),
+  scoringMode: z.string().trim().min(2).max(40).optional(),
   competitionRules: z.record(z.unknown()).optional(),
   startDate: z.string().datetime(),
   stationCount: z.number().int().min(1).max(64),
   players: z.array(z.string().trim().min(1).max(80)).min(2).max(64),
   format: z.enum(["SINGLE_ELIMINATION", "DOUBLE_ELIMINATION", "ROUND_ROBIN", "SWISS"]).default("SINGLE_ELIMINATION"),
-  bestOf: z.number().int().min(1).max(9).default(3),
+  bestOf: z.number().int().min(1).max(9).optional(),
 });
 
 function slugify(value: string) {
@@ -58,9 +61,28 @@ export async function POST(req: Request) {
 
   const body = await req.json().catch(() => null);
   const parsed = createTournamentSchema.safeParse(body);
-  if (!parsed.success) {
+    if (!parsed.success) {
     return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
   }
+
+  const preset = getCompetitionPreset(parsed.data.sport);
+
+  const competitionType =
+    parsed.data.competitionType || preset.competitionType;
+
+  const participantMode =
+    parsed.data.participantMode || preset.participantMode;
+
+  const scoringMode = parsed.data.scoringMode || preset.scoringAdapter;
+  const bestOf = parsed.data.bestOf || preset.bestOf;
+
+  const competitionRules = normalizeRules(
+    parsed.data.sport,
+    scoringMode,
+    bestOf,
+    parsed.data.competitionRules,
+  );
+
 
   const uniquePlayers = [...new Map(parsed.data.players.map((name) => [name.toLowerCase(), name])).values()];
   const playerCount = uniquePlayers.length;
@@ -83,16 +105,16 @@ export async function POST(req: Request) {
         slug,
         game: parsed.data.game,
         sport: parsed.data.sport,
-        competitionType: parsed.data.competitionType,
-        participantMode: parsed.data.participantMode,
-        scoringMode: parsed.data.scoringMode,
-        competitionRules: normalizeRules(parsed.data.sport, parsed.data.scoringMode, parsed.data.bestOf, parsed.data.competitionRules) as any,
+        competitionType,
+        participantMode,
+        scoringMode,
+        competitionRules: competitionRules as any,
         status: "SCHEDULED",
         startDate: new Date(parsed.data.startDate),
         organizerId: user.id,
         organizationId: organization.id,
         format: parsed.data.format,
-        bestOf: parsed.data.bestOf,
+        bestOf,
       },
     });
 
@@ -179,7 +201,7 @@ export async function POST(req: Request) {
         name: parsed.data.format === "ROUND_ROBIN" ? "League Stage" : parsed.data.format === "SWISS" ? "Swiss Stage" : "Main Stage",
         kind: parsed.data.format === "ROUND_ROBIN" ? "LEAGUE" : parsed.data.format === "SWISS" ? "SWISS" : parsed.data.format === "SINGLE_ELIMINATION" || parsed.data.format === "DOUBLE_ELIMINATION" ? "KNOCKOUT" : "CUSTOM",
         orderIndex: 0,
-        rules: parsed.data.competitionRules ? parsed.data.competitionRules as any : undefined,
+        rules: competitionRules as any,
       },
     });
 
@@ -199,8 +221,8 @@ export async function POST(req: Request) {
             status: "QUEUED",
             roundIndex,
             matchIndex: index,
-            scoringAdapter: parsed.data.scoringMode,
-            rulesSnapshot: normalizeRules(parsed.data.sport, parsed.data.scoringMode, parsed.data.bestOf, parsed.data.competitionRules) as any,
+            scoringAdapter: scoringMode,
+            rulesSnapshot: competitionRules as any,
           },
         });
         await tx.matchSide.createMany({

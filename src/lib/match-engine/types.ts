@@ -25,6 +25,7 @@ export type MatchRules = {
   scoringAdapter?: string;
   bestOf?: number;
   winCondition?: "highest_score" | "first_to" | "explicit";
+  direction?: "higher_wins" | "lower_wins";
   target?: number;
   allowedMetrics?: string[];
   weights?: Record<string, number>;
@@ -32,7 +33,9 @@ export type MatchRules = {
   [key: string]: unknown;
 };
 
-export type ScoreEvent = ScoreEventInput & { sequence: number };
+export type ScoreEvent = ScoreEventInput & {
+  sequence: number;
+};
 
 export type SideState = {
   key: SideKey;
@@ -40,11 +43,17 @@ export type SideState = {
   events: ScoreEvent[];
 };
 
+/**
+ * V31.1.5 Runtime Match Outcome
+ */
 export type MatchOutcome = {
   winnerSideKey: SideKey | null;
   scores: Record<SideKey, number>;
   isDraw: boolean;
   reason: string;
+
+  // Runtime state transition fields
+  completed: boolean;
 };
 
 export type ScoringAdapter = {

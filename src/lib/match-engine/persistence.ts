@@ -1,67 +1,120 @@
-import type { Prisma, PrismaClient } from "@prisma/client";
+import { Prisma } from "@prisma/client";
+import { db } from "@/lib/db";
 import { resolveRules, validateSides } from "./index";
-import type { MatchRules, SideInput } from "./types";
+import type { SideInput } from "./types";
 
-type Tx = PrismaClient | Prisma.TransactionClient;
+type DbClient = typeof db | Prisma.TransactionClient;
 
-function sideId(matchId: string, key: string) {
-  return `side_${matchId}_${key}`;
-}
+export type CreateGenericMatchInput = {
+  tournamentId: string;
+  bracketId?: string;
+  stageId?: string;
+  stationId?: string;
+  round?: string;
+  sport?: string;
+  scoringAdapter?: string;
+  rules?: Record<string, unknown> | null;
+  sides: SideInput[];
+};
 
+/**
+ * V31.1.5
+ *
+ * Generic match persistence.
+ *
+ * - Uses the shared Prisma client.
+ * - Reuses an existing transaction when supplied.
+ * - Never creates nested transactions.
+ * - Uses `sideId` for MatchParticipant.
+ * - Keeps match + sides + participants atomic.
+ */
 export async function createGenericMatch(
-  tx: Tx,
-  input: {
-    tournamentId: string;
-    bracketId?: string;
-    stationId?: string;
-    round?: string;
-    sport?: string;
-    rules?: MatchRules | null;
-    sides: SideInput[];
-    scoringAdapter?: string;
-  },
+  txOrInput: DbClient | CreateGenericMatchInput,
+  maybeInput?: CreateGenericMatchInput,
 ) {
-  validateSides(input.sides);
-  const rules = resolveRules(input.sport, input.rules);
-  const adapter = input.scoringAdapter ?? rules.scoringAdapter ?? "points";
+  const tx =
+    maybeInput === undefined
+      ? db
+      : (txOrInput as Prisma.TransactionClient);
 
-  const match = await tx.match.create({
-    data: {
-      tournamentId: input.tournamentId,
-      bracketId: input.bracketId,
-      stationId: input.stationId,
-      round: input.round,
-      status: "QUEUED",
-      engineVersion: "1",
-      scoringAdapter: adapter,
-      rulesSnapshot: rules as Prisma.InputJsonValue,
-    },
+  const input =
+    maybeInput === undefined
+      ? (txOrInput as CreateGenericMatchInput)
+      : maybeInput;
+
+  const rules = resolveRules(input.sport, {
+    ...(input.rules ?? {}),
+    ...(input.scoringAdapter
+      ? { scoringAdapter: input.scoringAdapter }
+      : {}),
   });
 
-  for (const side of input.sides) {
-    const createdSide = await tx.matchSide.create({
+  validateSides(input.sides);
+
+  const createMatch = async (client: DbClient) => {
+    const match = await client.match.create({
       data: {
-        id: sideId(match.id, side.key),
-        matchId: match.id,
-        sideKey: side.key,
-        label: side.label,
+        tournamentId: input.tournamentId,
+        bracketId: input.bracketId,
+        stageId: input.stageId,
+        stationId: input.stationId,
+        round: input.round,
+        status: "QUEUED",
+        engineVersion: "v31.1.5",
+        scoringAdapter: rules.scoringAdapter ?? "points",
+        rulesSnapshot: rules as Prisma.InputJsonValue,
       },
     });
-    for (const participant of side.participants) {
-      await tx.matchParticipant.create({
+
+    for (const side of input.sides) {
+      const createdSide = await client.matchSide.create({
         data: {
-          sideId: createdSide.id,
-          playerId: participant.playerId,
-          teamId: participant.teamId,
-          role: participant.role,
-          displayName: participant.displayName,
+          matchId: match.id,
+          sideKey: side.key,
+          label: side.label,
+          score: 0,
         },
       });
+
+      if (side.participants.length > 0) {
+        await client.matchParticipant.createMany({
+          data: side.participants.map((participant) => ({
+            sideId: createdSide.id,
+            playerId: participant.playerId ?? null,
+            teamId: participant.teamId ?? null,
+            role: participant.role ?? null,
+            displayName: participant.displayName ?? null,
+          })),
+        });
+      }
     }
+
+    return client.match.findUniqueOrThrow({
+      where: {
+        id: match.id,
+      },
+      include: {
+        sides: {
+          include: {
+            participants: true,
+          },
+        },
+      },
+    });
+  };
+
+  // Existing transaction supplied by caller.
+  // Reuse it; never create a nested transaction.
+  if (maybeInput !== undefined) {
+    return createMatch(tx);
   }
 
-  return tx.match.findUniqueOrThrow({
-    where: { id: match.id },
-    include: { sides: { include: { participants: true } } },
-  });
+  // Standalone caller.
+  return db.$transaction(
+    async (transaction) => createMatch(transaction),
+    {
+      maxWait: 10000,
+      timeout: 15000,
+    },
+  );
 }

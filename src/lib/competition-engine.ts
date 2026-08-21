@@ -1,30 +1,64 @@
-export type ParticipantMode = "individual" | "team" | "pair" | "mixed";
+import {
+  buildCompetitionRules,
+  getCompetitionDefinition,
+  listCompetitionDefinitions,
+} from "@/lib/competition";
 
-export type CompetitionPreset = {
-  sport: string;
-  label: string;
-  participantMode: ParticipantMode;
-  scoringMode: string;
-  bestOf: number;
-  rules: Record<string, unknown>;
-};
+export type ParticipantMode =
+  | "individual"
+  | "team"
+  | "pair"
+  | "mixed";
 
-const PRESETS: CompetitionPreset[] = [
-  { sport: "esports", label: "Esports / Game", participantMode: "individual", scoringMode: "points", bestOf: 3, rules: { winCondition: "series", pointsPerWin: 1 } },
-  { sport: "football", label: "Football / Soccer", participantMode: "team", scoringMode: "goals", bestOf: 1, rules: { winPoints: 3, drawPoints: 1, lossPoints: 0, periodMinutes: 45 } },
-  { sport: "basketball", label: "Basketball", participantMode: "team", scoringMode: "points", bestOf: 1, rules: { periodCount: 4, periodMinutes: 10 } },
-  { sport: "cricket", label: "Cricket", participantMode: "team", scoringMode: "runs", bestOf: 1, rules: { innings: 1, wickets: 10 } },
-  { sport: "tennis", label: "Tennis", participantMode: "individual", scoringMode: "sets", bestOf: 3, rules: { setsToWin: 2, tiebreak: true } },
-  { sport: "badminton", label: "Badminton", participantMode: "individual", scoringMode: "sets", bestOf: 3, rules: { setsToWin: 2, pointsPerSet: 21 } },
-  { sport: "volleyball", label: "Volleyball", participantMode: "team", scoringMode: "sets", bestOf: 5, rules: { setsToWin: 3, pointsPerSet: 25, finalSetPoints: 15 } },
-  { sport: "table-tennis", label: "Table Tennis", participantMode: "individual", scoringMode: "sets", bestOf: 5, rules: { setsToWin: 3, pointsPerSet: 11 } },
-  { sport: "custom", label: "Custom Competition", participantMode: "mixed", scoringMode: "points", bestOf: 1, rules: { metric: "points", direction: "higher_wins" } },
-];
+export type CompetitionPreset = ReturnType<
+  typeof getCompetitionDefinition
+>;
 
-export function getCompetitionPresets() { return PRESETS; }
-export function getCompetitionPreset(sport: string) { return PRESETS.find((p) => p.sport === sport) ?? PRESETS.find((p) => p.sport === "custom")!; }
+export function getCompetitionPreset(
+  sport: string,
+): CompetitionPreset {
+  return getCompetitionDefinition(sport);
+}
 
-export function normalizeRules(sport: string, scoringMode: string, bestOf: number, customRules?: Record<string, unknown>) {
-  const preset = getCompetitionPreset(sport);
-  return { ...preset.rules, ...customRules, sport, scoringMode, bestOf, engine: "generic-match-engine", version: 1 };
+export function getCompetitionPresets(): CompetitionPreset[] {
+  return listCompetitionDefinitions();
+}
+
+/**
+ * Build the complete normalized competition configuration.
+ *
+ * The registry is authoritative for defaults.
+ * Explicit tournament values are allowed to override them.
+ */
+export function normalizeRules(
+  sport: string,
+  scoringMode?: string,
+  bestOf?: number,
+  customRules?: Record<string, unknown>,
+) {
+  const preset = getCompetitionDefinition(sport);
+
+  return buildCompetitionRules(sport, {
+    scoringAdapter: scoringMode || preset.scoringAdapter,
+    bestOf: bestOf ?? preset.bestOf,
+    ...customRules,
+  });
+}
+
+/**
+ * Returns the registry defaults for a sport.
+ */
+export function getCompetitionDefaults(sport: string) {
+  const preset = getCompetitionDefinition(sport);
+
+  return {
+    sport: preset.sport,
+    label: preset.label,
+    competitionType: preset.competitionType,
+    participantMode: preset.participantMode,
+    scoringAdapter: preset.scoringAdapter,
+    bestOf: preset.bestOf,
+    capabilities: preset.capabilities,
+    rules: preset.rules,
+  };
 }

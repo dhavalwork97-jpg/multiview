@@ -1,106 +1,183 @@
-import type { MatchOutcome, MatchRules, ScoringAdapter, SideState } from "./types";
+import type {
+  MatchOutcome,
+  MatchRules,
+  ScoringAdapter,
+  SideState,
+} from "./types";
 
-function highestScore(a: SideState, b: SideState, rules: MatchRules, reason: string): MatchOutcome {
-  const aScore = a.score;
-  const bScore = b.score;
-  if (aScore === bScore) {
-    return { winnerSideKey: rules.allowDraw ? null : null, scores: { A: aScore, B: bScore }, isDraw: true, reason };
-  }
-  return {
-    winnerSideKey: aScore > bScore ? "A" : "B",
-    scores: { A: aScore, B: bScore },
-    isDraw: false,
-    reason,
-  };
-}
-
-function numericAdapter(id: string, label: string, metrics: string[]): ScoringAdapter {
-  return {
-    id,
-    label,
-    acceptsMetric(metric, rules) {
-      const allowed = rules.allowedMetrics ?? metrics;
-      return allowed.includes(metric);
-    },
-    score(side) {
-      return side.score;
-    },
-    resolve(a, b, rules) {
-      return highestScore(a, b, rules, `${id}: higher aggregate score wins`);
-    },
-  };
-}
-
-export const pointsAdapter = numericAdapter("points", "Points", ["points"]);
-export const goalsAdapter = numericAdapter("goals", "Goals", ["goals"]);
-export const runsAdapter = numericAdapter("runs", "Runs", ["runs"]);
-export const roundsAdapter = numericAdapter("rounds", "Rounds", ["rounds"]);
-export const setsAdapter = numericAdapter("sets", "Sets", ["sets"]);
-export const gamesAdapter = numericAdapter("games", "Games", ["games"]);
-
-export const battleRoyaleAdapter: ScoringAdapter = {
-  id: "battle_royale",
-  label: "Battle Royale",
-  acceptsMetric(metric, rules) {
-    const allowed = rules.allowedMetrics ?? ["placement", "kills", "points"];
-    return allowed.includes(metric);
-  },
-  score(side, rules) {
-    const weights: Record<string, number> = { placement: 0, kills: 1, points: 1, ...(rules.weights ?? {}) };
-    return side.events.reduce((total, event) => total + event.value * (weights[event.metric] ?? 0), 0);
-  },
-  resolve(a, b, rules) {
-    const aScore = this.score(a, rules);
-    const bScore = this.score(b, rules);
-    return highestScore({ ...a, score: aScore }, { ...b, score: bScore }, rules, "battle_royale: weighted placement/kills/points");
-  },
+const METRICS: Record<string, string[]> = {
+  points: ["points"],
+  goals: ["goals"],
+  runs: ["runs"],
+  rounds: ["rounds"],
+  sets: ["sets"],
+  games: ["games"],
+  time: ["milliseconds", "seconds"],
+  attempts: ["attempts"],
+  battle_royale: ["placement", "kills", "points"],
+  custom: [],
 };
 
-export const customAdapter: ScoringAdapter = {
-  id: "custom",
-  label: "Custom",
-  acceptsMetric() { return true; },
-  score(side) { return side.score; },
-  resolve(a, b, rules) {
-    if (rules.winCondition === "explicit") {
-      return { winnerSideKey: null, scores: { A: a.score, B: b.score }, isDraw: a.score === b.score, reason: "custom: explicit winner required" };
-    }
-    return highestScore(a, b, rules, "custom: configured aggregate score");
-  },
-};
-
-export const ADAPTERS: Record<string, ScoringAdapter> = {
-  points: pointsAdapter,
-  goals: goalsAdapter,
-  runs: runsAdapter,
-  rounds: roundsAdapter,
-  sets: setsAdapter,
-  games: gamesAdapter,
-  battle_royale: battleRoyaleAdapter,
-  custom: customAdapter,
-};
-
-export function getScoringAdapter(id: string | undefined): ScoringAdapter {
-  return ADAPTERS[id ?? "points"] ?? customAdapter;
-}
-
-export function getAdapterMetrics(id: string | undefined, rules: MatchRules = {}): string[] {
-  const adapter = getScoringAdapter(id);
-  const candidates = rules.allowedMetrics ?? (() => {
-    switch (adapter.id) {
-      case "battle_royale": return ["kills", "placement", "points"];
-      case "goals": return ["goals"];
-      case "runs": return ["runs"];
-      case "rounds": return ["rounds"];
-      case "sets": return ["sets"];
-      case "games": return ["games"];
-      case "points": return ["points"];
-      default: return ["points"];
-    }
-  })();
-  return candidates.filter((metric) => adapter.acceptsMetric(metric, rules));
+export function getAdapterMetrics(
+  adapter = "points",
+  rules: MatchRules = {}
+): string[] {
+  return rules.allowedMetrics ?? METRICS[adapter] ?? ["points"];
 }
 
 export function metricLabel(metric: string): string {
-  return metric.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+  return metric
+    .replace(/_/g, " ")
+    .replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
+function resolveWinner(
+  a: SideState,
+  b: SideState,
+  rules: MatchRules
+): MatchOutcome {
+  const aScore = a.events.reduce((t, e) => t + e.value, 0);
+  const bScore = b.events.reduce((t, e) => t + e.value, 0);
+
+  if (aScore === bScore) {
+    return {
+      winnerSideKey: null,
+      scores: { A: aScore, B: bScore },
+      isDraw: true,
+      reason: "Scores tied.",
+      completed: false,
+    };
+  }
+
+  const higherWins = rules.direction !== "lower_wins";
+
+  return {
+    winnerSideKey:
+      higherWins
+        ? aScore > bScore
+          ? "A"
+          : "B"
+        : aScore < bScore
+        ? "A"
+        : "B",
+    scores: { A: aScore, B: bScore },
+    isDraw: false,
+    reason: "Score comparison.",
+    completed: true,
+  };
+}
+
+function makeAdapter(id: string, label: string): ScoringAdapter {
+  return {
+    id,
+    label,
+
+    acceptsMetric(metric, rules) {
+      return getAdapterMetrics(id, rules).includes(metric);
+    },
+
+    score(side) {
+      // Runtime matches calculate their score from score events.
+      // Unit/API callers may provide an already-calculated side.score.
+      if (side.events.length > 0) {
+        return side.events.reduce((total, event) => total + event.value, 0);
+      }
+
+      return side.score;
+    },
+
+    resolve(a, b, rules) {
+      const aScore = this.score(a, rules);
+      const bScore = this.score(b, rules);
+
+      if (aScore === bScore) {
+        return {
+          winnerSideKey: null,
+          scores: { A: aScore, B: bScore },
+          isDraw: true,
+          reason: "Scores tied.",
+          completed: false,
+        };
+      }
+
+      const higherWins = rules.direction !== "lower_wins";
+
+      return {
+        winnerSideKey:
+          higherWins
+            ? aScore > bScore
+              ? "A"
+              : "B"
+            : aScore < bScore
+              ? "A"
+              : "B",
+        scores: { A: aScore, B: bScore },
+        isDraw: false,
+        reason: "Score comparison.",
+        completed: true,
+      };
+    },
+  };
+}
+
+export const scoringAdapters: Record<string, ScoringAdapter> = {
+  points: makeAdapter("points", "Points"),
+  goals: makeAdapter("goals", "Goals"),
+  runs: makeAdapter("runs", "Runs"),
+  rounds: makeAdapter("rounds", "Rounds"),
+  sets: makeAdapter("sets", "Sets"),
+  games: makeAdapter("games", "Games"),
+  time: makeAdapter("time", "Time"),
+  attempts: makeAdapter("attempts", "Attempts"),
+  battle_royale: {
+  id: "battle_royale",
+  label: "Battle Royale",
+
+  acceptsMetric(metric) {
+    return ["placement", "kills", "points"].includes(metric);
+  },
+
+  score(side, rules) {
+    const weights = {
+      placement: Number(rules.weights?.placement ?? 2),
+      kills: Number(rules.weights?.kills ?? 1),
+      points: Number(rules.weights?.points ?? 1),
+    };
+
+    return side.events.reduce((total, event) => {
+      const weight =
+        weights[event.metric as keyof typeof weights] ?? 1;
+
+      return total + event.value * weight;
+    }, 0);
+  },
+
+  resolve(a, b, rules) {
+    const aScore = this.score(a, rules);
+    const bScore = this.score(b, rules);
+
+    if (aScore === bScore) {
+      return {
+        winnerSideKey: null,
+        scores: { A: aScore, B: bScore },
+        isDraw: true,
+        reason: "Battle Royale tie",
+        completed: false,
+      };
+    }
+
+    return {
+      winnerSideKey: aScore > bScore ? "A" : "B",
+      scores: { A: aScore, B: bScore },
+      isDraw: false,
+      reason: "Battle Royale weighted score",
+      completed: true,
+    };
+  },
+},
+  custom: makeAdapter("custom", "Custom"),
+};
+
+export function getScoringAdapter(id?: string): ScoringAdapter {
+  return scoringAdapters[id ?? "points"] ?? scoringAdapters.points;
 }
