@@ -82,6 +82,20 @@ export async function advanceCompetitionFromMatch(
       continue;
     }
 
+    const claimed = await tx.advancementSlot.updateMany({
+      where: {
+        id: slot.id,
+        resolvedAt: null,
+      },
+      data: {
+        resolvedAt: new Date(),
+      },
+    });
+
+    if (claimed.count !== 1) {
+      continue;
+    }
+
     await tx.matchParticipant.deleteMany({
       where: {
         sideId: targetSide.id,
@@ -98,20 +112,6 @@ export async function advanceCompetitionFromMatch(
           displayName: participant.displayName,
         })),
       });
-    }
-
-    const resolved = await tx.advancementSlot.updateMany({
-      where: {
-        id: slot.id,
-        resolvedAt: null,
-      },
-      data: {
-        resolvedAt: new Date(),
-      },
-    });
-
-    if (resolved.count !== 1) {
-      continue;
     }
 
     results.push({
@@ -242,6 +242,20 @@ export async function resolveStageRankAdvancements(
               displayName: row.label,
             };
 
+    const claimed = await tx.advancementSlot.updateMany({
+      where: {
+        id: slot.id,
+        resolvedAt: null,
+      },
+      data: {
+        resolvedAt: new Date(),
+      },
+    });
+
+    if (claimed.count !== 1) {
+      continue;
+    }
+
     await tx.matchParticipant.deleteMany({
       where: {
         sideId: matchSide.id,
@@ -254,20 +268,6 @@ export async function resolveStageRankAdvancements(
         ...identity,
       },
     });
-
-    const resolved = await tx.advancementSlot.updateMany({
-      where: {
-        id: slot.id,
-        resolvedAt: null,
-      },
-      data: {
-        resolvedAt: new Date(),
-      },
-    });
-
-    if (resolved.count !== 1) {
-      continue;
-    }
 
     results.push({
       slotId: slot.id,
