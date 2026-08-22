@@ -2,19 +2,32 @@ import type { Prisma, PrismaClient } from "@prisma/client";
 
 type Tx = PrismaClient | Prisma.TransactionClient;
 
+/**
+ * V31.4 bracket progression.
+ *
+ * AdvancementSlot.resolvedAt makes this operation idempotent.
+ * A completed match can safely be processed multiple times without
+ * re-populating an already-resolved downstream slot.
+ */
 export async function advanceBracket(
   tx: Tx,
   completedMatchId: string,
 ) {
   const match = await tx.match.findUnique({
-    where: { id: completedMatchId },
+    where: {
+      id: completedMatchId,
+    },
     include: {
       sides: {
         include: {
           participants: true,
         },
       },
-      sourceAdvancements: true,
+      sourceAdvancements: {
+        where: {
+          resolvedAt: null,
+        },
+      },
     },
   });
 
@@ -39,21 +52,24 @@ export async function advanceBracket(
 
   for (const slot of match.sourceAdvancements) {
     const sourceSide =
-      slot.outcome === "LOSER" ? loser : winner;
+      slot.outcome === "LOSER"
+        ? loser
+        : winner;
 
-    if (!sourceSide) continue;
+    if (!sourceSide) {
+      continue;
+    }
 
     const targetSide = await tx.matchSide.findFirst({
       where: {
         matchId: slot.targetMatchId,
         sideKey: slot.targetSideKey,
       },
-      include: {
-        participants: true,
-      },
     });
 
-    if (!targetSide) continue;
+    if (!targetSide) {
+      continue;
+    }
 
     await tx.matchParticipant.deleteMany({
       where: {
@@ -73,12 +89,19 @@ export async function advanceBracket(
       });
     }
 
-    await tx.advancementSlot.update({
-      where: { id: slot.id },
+    const resolved = await tx.advancementSlot.updateMany({
+      where: {
+        id: slot.id,
+        resolvedAt: null,
+      },
       data: {
         resolvedAt: new Date(),
       },
     });
+
+    if (resolved.count !== 1) {
+      continue;
+    }
 
     results.push({
       targetMatchId: slot.targetMatchId,
