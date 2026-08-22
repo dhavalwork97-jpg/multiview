@@ -170,7 +170,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ matchI
           if (stage?.status === "COMPLETED") await db.$transaction((tx) => resolveStageRankAdvancements(tx, result.updated.stageId!));
         }
         for (const downstream of advanced) {
-          await publishEvent({ type: "bracket:advanced", tournamentId: result.updated.tournamentId, bracketId: result.updated.bracketId ?? "", matchId: downstream.targetMatchId, targetSideKey: downstream.targetSideKey });
+          await publishEvent({ type: "bracket:advanced", tournamentId: result.updated.tournamentId, bracketId: result.updated.bracketId ?? "", matchId: downstream.targetMatchId });
         }
       }
       return NextResponse.json({ match: result.updated, engine: { winnerSideKey: result.winnerSideKey, outcome: result.outcome } });
@@ -232,12 +232,17 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ matchI
   }
 
   if (parsed.data.status === "COMPLETED") {
-    if (existing.sides.length !== 2) {
-      return NextResponse.json(
-        { error: "Match requires exactly two sides." },
-        { status: 409 },
-      );
-    }
+    iif (
+  parsed.data.status === "COMPLETED" &&
+  existing.sides.length !== 2
+) {
+  return NextResponse.json(
+    {
+      error: "Match requires exactly two sides.",
+    },
+    { status: 409 },
+  );
+}
     const finalPlayerOneScore = parsed.data.playerOneScore ?? existing.playerOneScore;
     const finalPlayerTwoScore = parsed.data.playerTwoScore ?? existing.playerTwoScore;
     const suppliedWinnerId = parsed.data.winnerId;
@@ -327,7 +332,6 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ matchI
       tournamentId: updated.tournamentId,
       bracketId: updated.bracketId ?? "",
       matchId: next.targetMatchId,
-      targetSideKey: next.targetSideKey,
     });
   }
 }
@@ -337,7 +341,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ matchI
     const stage = await db.competitionStage.findUnique({ where: { id: updated.stageId! }, select: { status: true } });
     if (stage?.status === "COMPLETED") await db.$transaction((tx) => resolveStageRankAdvancements(tx, updated.stageId!));
     for (const downstream of advanced) {
-      await publishEvent({ type: "bracket:advanced", tournamentId: updated.tournamentId, bracketId: updated.bracketId ?? "", matchId: downstream.targetMatchId, targetSideKey: downstream.targetSideKey });
+      await publishEvent({ type: "bracket:advanced", tournamentId: updated.tournamentId, bracketId: updated.bracketId ?? "", matchId: downstream.targetMatchId });
     }
   }
 

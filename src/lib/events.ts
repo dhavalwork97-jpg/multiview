@@ -56,6 +56,7 @@ export type AppEvent =
       tournamentId: string;
       bracketId: string;
       matchId: string;
+      targetSideKey: string;
     };
 
 let connected = false;
