@@ -147,18 +147,20 @@ export async function advanceCompetitionFromMatch(
     }
 
     /*
-     * Claim the slot before mutating the target side.
+     * V31.3.3: claim the slot before mutating the target side, but do not
+     * resolve it until the mutation has completed successfully.
      *
-     * Only the transaction that changes resolvedAt from NULL to a timestamp
-     * owns the slot. Repeated progression calls therefore become no-ops.
+     * claimedByMatchId is the ownership token. The conditional update is the
+     * concurrency boundary: only one caller can acquire an unclaimed,
+     * unresolved slot. claimAttempt records every successful acquisition.
      */
     const claimed = await tx.advancementSlot.updateMany({
       where: {
         id: slot.id,
         resolvedAt: null,
+        claimedByMatchId: null,
       },
       data: {
-        resolvedAt: new Date(),
         claimedByMatchId: match.id,
         claimAttempt: {
           increment: 1,
@@ -170,49 +172,89 @@ export async function advanceCompetitionFromMatch(
       continue;
     }
 
-    await tx.matchParticipant.deleteMany({
-      where: {
-        sideId: targetSide.id,
-      },
-    });
-
-    if (sourceSide.participants.length > 0) {
-      await tx.matchParticipant.createMany({
-        data: sourceSide.participants.map((participant) => ({
+    try {
+      await tx.matchParticipant.deleteMany({
+        where: {
           sideId: targetSide.id,
-          playerId: participant.playerId,
-          teamId: participant.teamId,
-          role: participant.role,
-          displayName: participant.displayName,
-        })),
-      });
-    }
-
-    await tx.progressionEvent.create({
-      data: {
-        tournamentId: match.tournamentId,
-        matchId: match.id,
-        targetMatchId: slot.targetMatchId,
-        targetSideId: targetSide.id,
-        eventType:
-          slot.outcome === "LOSER"
-            ? "LOSER_ADVANCED"
-            : "WINNER_ADVANCED",
-        payload: {
-          advancementSlotId: slot.id,
-          sourceSideId: sourceSide.id,
-          sourceSideKey: sourceSide.sideKey,
-          targetSideKey: slot.targetSideKey,
-          participantCount: sourceSide.participants.length,
         },
-      },
-    });
+      });
 
-    results.push({
-      slotId: slot.id,
-      targetMatchId: slot.targetMatchId,
-      targetSideKey: slot.targetSideKey,
-    });
+      if (sourceSide.participants.length > 0) {
+        await tx.matchParticipant.createMany({
+          data: sourceSide.participants.map((participant) => ({
+            sideId: targetSide.id,
+            playerId: participant.playerId,
+            teamId: participant.teamId,
+            role: participant.role,
+            displayName: participant.displayName,
+          })),
+        });
+      }
+
+      /*
+       * Resolve only if we still own the claim. This conditional update makes
+       * the state transition explicit and prevents another caller from
+       * resolving a slot it did not claim.
+       */
+      const resolved = await tx.advancementSlot.updateMany({
+        where: {
+          id: slot.id,
+          resolvedAt: null,
+          claimedByMatchId: match.id,
+        },
+        data: {
+          resolvedAt: new Date(),
+        },
+      });
+
+      if (resolved.count !== 1) {
+        throw new Error(`Lost advancement slot claim ${slot.id}`);
+      }
+
+      await tx.progressionEvent.create({
+        data: {
+          tournamentId: match.tournamentId,
+          matchId: match.id,
+          targetMatchId: slot.targetMatchId,
+          targetSideId: targetSide.id,
+          eventType:
+            slot.outcome === "LOSER"
+              ? "LOSER_ADVANCED"
+              : "WINNER_ADVANCED",
+          payload: {
+            advancementSlotId: slot.id,
+            sourceSideId: sourceSide.id,
+            sourceSideKey: sourceSide.sideKey,
+            targetSideKey: slot.targetSideKey,
+            participantCount: sourceSide.participants.length,
+            claimAttempt: true,
+          },
+        },
+      });
+
+      results.push({
+        slotId: slot.id,
+        targetMatchId: slot.targetMatchId,
+        targetSideKey: slot.targetSideKey,
+      });
+    } catch (error) {
+      /*
+       * A failed mutation must not leave the slot permanently claimed.
+       * Release only our own unresolved claim so a retry can safely acquire it.
+       */
+      await tx.advancementSlot.updateMany({
+        where: {
+          id: slot.id,
+          resolvedAt: null,
+          claimedByMatchId: match.id,
+        },
+        data: {
+          claimedByMatchId: null,
+        },
+      });
+
+      throw error;
+    }
   }
 
   const touchedTargetMatches = [

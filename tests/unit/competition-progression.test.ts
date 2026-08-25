@@ -41,94 +41,90 @@ function createTx(overrides: Record<string, unknown> = {}) {
 
 describe("competition progression", () => {
   it("does not duplicate MATCH_COMPLETED progression events", async () => {
-  const winner = {
-    id: "winner-side",
-    sideKey: "A",
-    participants: [
-      {
-        playerId: "player-1",
-        teamId: null,
-        role: "PLAYER",
-        displayName: "Player One",
-      },
-    ],
-  };
+    const winner = {
+      id: "winner-side",
+      sideKey: "A",
+      participants: [
+        {
+          playerId: "player-1",
+          teamId: null,
+          role: "PLAYER",
+          displayName: "Player One",
+        },
+      ],
+    };
 
-  const slot = {
-    id: "slot-event-1",
-    sourceType: "MATCH_RESULT",
-    outcome: "WINNER",
-    targetMatchId: "target-match",
-    targetSideKey: "A",
-    resolvedAt: null,
-  };
+    const slot = {
+      id: "slot-event-1",
+      sourceType: "MATCH_RESULT",
+      outcome: "WINNER",
+      targetMatchId: "target-match",
+      targetSideKey: "A",
+      resolvedAt: null,
+    };
 
-  const tx = createTx();
+    const tx = createTx();
 
-  tx.match.findUnique.mockResolvedValue({
-    id: "source-match",
-    tournamentId: "tournament-1",
-    status: "COMPLETED",
-    winnerSideId: winner.id,
-    sides: [
-      winner,
-      {
-        id: "loser-side",
-        sideKey: "B",
-        participants: [],
-      },
-    ],
-    sourceAdvancements: [slot],
-  });
-
-  tx.progressionEvent.findFirst
-    .mockResolvedValueOnce(null)
-    .mockResolvedValueOnce({
-      id: "completion-event-1",
+    tx.match.findUnique.mockResolvedValue({
+      id: "source-match",
+      tournamentId: "tournament-1",
+      status: "COMPLETED",
+      winnerSideId: winner.id,
+      sides: [
+        winner,
+        {
+          id: "loser-side",
+          sideKey: "B",
+          participants: [],
+        },
+      ],
+      sourceAdvancements: [slot],
     });
 
-  tx.matchSide.findFirst.mockResolvedValue({
-    id: "target-side",
-    sideKey: "A",
-  });
+    tx.progressionEvent.findFirst
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce({
+        id: "completion-event-1",
+      });
 
-  tx.advancementSlot.updateMany
-    .mockResolvedValueOnce({ count: 1 })
-    .mockResolvedValueOnce({ count: 0 });
+    tx.matchSide.findFirst.mockResolvedValue({
+      id: "target-side",
+      sideKey: "A",
+    });
 
-  tx.matchSide.findMany.mockResolvedValue([]);
+    // First progression call: claim, then resolve.
+    // Second progression call: the slot can no longer be claimed.
+    tx.advancementSlot.updateMany
+      .mockResolvedValueOnce({ count: 1 })
+      .mockResolvedValueOnce({ count: 1 })
+      .mockResolvedValueOnce({ count: 0 });
 
-  const first = await advanceCompetitionFromMatch(
-    tx as any,
-    "source-match",
-  );
+    tx.matchSide.findMany.mockResolvedValue([]);
 
-  const second = await advanceCompetitionFromMatch(
-    tx as any,
-    "source-match",
-  );
+    const first = await advanceCompetitionFromMatch(tx as any, "source-match");
 
-  expect(first).toHaveLength(1);
-  expect(second).toEqual([]);
+    const second = await advanceCompetitionFromMatch(tx as any, "source-match");
 
-  expect(tx.progressionEvent.findFirst).toHaveBeenCalled();
+    expect(first).toHaveLength(1);
+    expect(second).toEqual([]);
 
-  expect(tx.progressionEvent.create).toHaveBeenCalledWith(
-    expect.objectContaining({
-      data: expect.objectContaining({
-        matchId: "source-match",
-        eventType: "MATCH_COMPLETED",
+    expect(tx.progressionEvent.findFirst).toHaveBeenCalled();
+
+    expect(tx.progressionEvent.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          matchId: "source-match",
+          eventType: "MATCH_COMPLETED",
+        }),
       }),
-    }),
-  );
+    );
 
-  const completionEvents = tx.progressionEvent.create.mock.calls.filter(
-    ([call]) =>
-      call.data?.eventType === "MATCH_COMPLETED",
-  );
+    const completionEvents = tx.progressionEvent.create.mock.calls.filter(
+      ([call]) => call.data?.eventType === "MATCH_COMPLETED",
+    );
 
-  expect(completionEvents).toHaveLength(1);
-});  
+    expect(completionEvents).toHaveLength(1);
+  });
   it("advances the winner to the configured target side", async () => {
     const winner = {
       id: "winner-side",
@@ -235,11 +231,33 @@ describe("competition progression", () => {
       ],
     });
 
-    expect(tx.advancementSlot.updateMany).toHaveBeenCalledWith(
+    expect(tx.advancementSlot.updateMany).toHaveBeenNthCalledWith(
+      1,
       expect.objectContaining({
         where: {
           id: "slot-1",
           resolvedAt: null,
+          claimedByMatchId: null,
+        },
+        data: {
+          claimedByMatchId: "source-match",
+          claimAttempt: {
+            increment: 1,
+          },
+        },
+      }),
+    );
+
+    expect(tx.advancementSlot.updateMany).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({
+        where: {
+          id: "slot-1",
+          resolvedAt: null,
+          claimedByMatchId: "source-match",
+        },
+        data: {
+          resolvedAt: expect.any(Date),
         },
       }),
     );
@@ -370,7 +388,10 @@ describe("competition progression", () => {
       sideKey: "A",
     });
 
+    // First call claims and resolves the slot.
+    // A repeated progression call cannot claim it again.
     tx.advancementSlot.updateMany
+      .mockResolvedValueOnce({ count: 1 })
       .mockResolvedValueOnce({ count: 1 })
       .mockResolvedValueOnce({ count: 0 });
 
