@@ -205,18 +205,27 @@ export async function POST(req: Request) {
       },
     });
 
+    // V31.3.2: create the complete relational match graph up front. Future
+    // matches intentionally have empty participants and are populated through
+    // AdvancementSlots by the progression engine.
+    const createdMatches = new Map<string, string>();
+
     for (let roundIndex = 0; roundIndex < bracketStructure.length; roundIndex += 1) {
       for (let index = 0; index < bracketStructure[roundIndex].matches.length; index += 1) {
         const slot = bracketStructure[roundIndex].matches[index];
-        if (!slot.playerOneId || !slot.playerTwoId) continue;
+        const isInitialMatch = Boolean(slot.playerOneId && slot.playerTwoId);
+
         const match = await tx.match.create({
           data: {
             tournamentId: tournament.id,
             bracketId: bracket.id,
             stageId: stage.id,
-            stationId: stations[firstRoundMatches.length % stations.length].id,
-            playerOneId: slot.playerOneId,
-            playerTwoId: slot.playerTwoId,
+            stationId:
+              isInitialMatch && stations.length > 0
+                ? stations[firstRoundMatches.length % stations.length].id
+                : null,
+            playerOneId: slot.playerOneId ?? null,
+            playerTwoId: slot.playerTwoId ?? null,
             round: slot.round,
             status: "QUEUED",
             roundIndex,
@@ -225,22 +234,76 @@ export async function POST(req: Request) {
             rulesSnapshot: competitionRules as any,
           },
         });
+
         await tx.matchSide.createMany({
           data: [
             { matchId: match.id, sideKey: "A", label: "Side A" },
             { matchId: match.id, sideKey: "B", label: "Side B" },
           ],
         });
-        const sides = await tx.matchSide.findMany({ where: { matchId: match.id }, orderBy: { sideKey: "asc" } });
-        await tx.matchParticipant.createMany({
-          data: [
-            { sideId: sides[0].id, playerId: slot.playerOneId },
-            { sideId: sides[1].id, playerId: slot.playerTwoId },
-          ],
+
+        const sides = await tx.matchSide.findMany({
+          where: { matchId: match.id },
+          orderBy: { sideKey: "asc" },
         });
-        firstRoundMatches.push(match);
+
+        const participants = [];
+        if (slot.playerOneId) {
+          participants.push({ sideId: sides[0].id, playerId: slot.playerOneId });
+        }
+        if (slot.playerTwoId) {
+          participants.push({ sideId: sides[1].id, playerId: slot.playerTwoId });
+        }
+        if (participants.length > 0) {
+          await tx.matchParticipant.createMany({ data: participants });
+        }
+
+        createdMatches.set(`${roundIndex}:${index}`, match.id);
+
+        if (isInitialMatch) {
+          firstRoundMatches.push(match);
+        }
       }
-      if (parsed.data.format !== "ROUND_ROBIN") break;
+    }
+
+    // The current generated elimination topology is a deterministic winner
+    // tree: consecutive matches feed sides A/B of the next-round match.
+    if (
+      parsed.data.format === "SINGLE_ELIMINATION" ||
+      parsed.data.format === "DOUBLE_ELIMINATION"
+    ) {
+      for (
+        let roundIndex = 0;
+        roundIndex < bracketStructure.length - 1;
+        roundIndex += 1
+      ) {
+        const sourceMatches = bracketStructure[roundIndex].matches;
+
+        for (let index = 0; index < sourceMatches.length; index += 1) {
+          const sourceMatchId = createdMatches.get(`${roundIndex}:${index}`);
+          const targetIndex = Math.floor(index / 2);
+          const targetMatchId = createdMatches.get(
+            `${roundIndex + 1}:${targetIndex}`
+          );
+
+          if (!sourceMatchId || !targetMatchId) {
+            throw new Error(
+              `Invalid generated bracket topology at round ${roundIndex}, match ${index}`
+            );
+          }
+
+          await tx.advancementSlot.create({
+            data: {
+              sourceType: "MATCH_RESULT",
+              outcome: "WINNER",
+              sourceMatchId,
+              targetMatchId,
+              targetSideKey: index % 2 === 0 ? "A" : "B",
+              sourceLabel: `Winner of ${sourceMatches[index].round}`,
+            },
+          });
+        }
+      }
     }
 
     return {
