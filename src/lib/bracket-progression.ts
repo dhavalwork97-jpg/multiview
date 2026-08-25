@@ -1,92 +1,113 @@
 import type { Prisma, PrismaClient } from "@prisma/client";
 
-type Target = { roundIndex: number; matchIndex: number; slot: "playerOneId" | "playerTwoId" };
-type StructureSlot = {
-  playerOneId: string | null;
-  playerTwoId: string | null;
-  round: string;
-  winnerTarget?: Target;
-  loserTarget?: Target;
-};
-type StructureRound = { name: string; matches: StructureSlot[] };
-type TxClient = PrismaClient | Prisma.TransactionClient;
+type Tx = PrismaClient | Prisma.TransactionClient;
 
 /**
- * Advances one completed match into every ready downstream slot. The old
- * implementation returned after the first ready target, which meant a
- * double-elimination match with both a winnerTarget and loserTarget could
- * silently create only one downstream match. This version updates the JSON
- * bracket and materializes every newly-ready Match row in one transaction.
+ * V31.4 bracket progression.
+ *
+ * AdvancementSlot.resolvedAt makes this operation idempotent.
+ * A completed match can safely be processed multiple times without
+ * re-populating an already-resolved downstream slot.
  */
 export async function advanceBracket(
-  tx: TxClient,
-  completedMatch: {
-    id: string;
-    tournamentId: string;
-    bracketId: string | null;
-    winnerId: string | null;
-    playerOneId: string;
-    playerTwoId: string;
-    roundIndex: number | null;
-    matchIndex: number | null;
-  },
-): Promise<{ id: string; isNew: boolean }[]> {
-  if (!completedMatch.bracketId || !completedMatch.winnerId || completedMatch.roundIndex == null || completedMatch.matchIndex == null) return [];
+  tx: Tx,
+  completedMatchId: string,
+) {
+  const match = await tx.match.findUnique({
+    where: {
+      id: completedMatchId,
+    },
+    include: {
+      sides: {
+        include: {
+          participants: true,
+        },
+      },
+      sourceAdvancements: {
+        where: {
+          resolvedAt: null,
+        },
+      },
+    },
+  });
 
-  const bracket = await tx.bracket.findUnique({ where: { id: completedMatch.bracketId } });
-  if (!bracket) return [];
-  const rounds = bracket.structure as unknown as StructureRound[];
-  const currentRound = rounds[completedMatch.roundIndex];
-  const currentSlot = currentRound?.matches?.[completedMatch.matchIndex];
-  if (!currentSlot) return [];
-
-  const loserId = completedMatch.playerOneId === completedMatch.winnerId ? completedMatch.playerTwoId : completedMatch.playerOneId;
-  const winnerTarget = currentSlot.winnerTarget ?? {
-    roundIndex: completedMatch.roundIndex + 1,
-    matchIndex: Math.floor(completedMatch.matchIndex / 2),
-    slot: (completedMatch.matchIndex % 2 === 0 ? "playerOneId" : "playerTwoId") as "playerOneId" | "playerTwoId",
-  };
-
-  const targets: Array<{ target: Target; playerId: string }> = [{ target: winnerTarget, playerId: completedMatch.winnerId }];
-  if (currentSlot.loserTarget) targets.push({ target: currentSlot.loserTarget, playerId: loserId });
-
-  const touched = new Map<string, { roundIndex: number; matchIndex: number; slot: StructureSlot }>();
-  for (const { target, playerId } of targets) {
-    const targetRound = rounds[target.roundIndex];
-    const targetSlot = targetRound?.matches?.[target.matchIndex];
-    if (!targetSlot) continue;
-    targetSlot[target.slot] = playerId;
-    touched.set(`${target.roundIndex}:${target.matchIndex}`, { roundIndex: target.roundIndex, matchIndex: target.matchIndex, slot: targetSlot });
+  if (!match || match.status !== "COMPLETED") {
+    return [];
   }
-  if (!touched.size) return [];
 
-  await tx.bracket.update({ where: { id: bracket.id }, data: { structure: rounds as unknown as Prisma.InputJsonValue } });
+  const winner =
+    match.sides.find((side) => side.id === match.winnerSideId) ?? null;
 
-  const results: { id: string; isNew: boolean }[] = [];
-  for (const target of touched.values()) {
-    const slot = target.slot;
-    if (!slot.playerOneId || !slot.playerTwoId) continue;
-    const existing = await tx.match.findFirst({ where: { bracketId: bracket.id, roundIndex: target.roundIndex, matchIndex: target.matchIndex } });
-    if (existing) {
-      if (existing.status === "QUEUED") {
-        const updated = await tx.match.update({ where: { id: existing.id }, data: { playerOneId: slot.playerOneId, playerTwoId: slot.playerTwoId } });
-        results.push({ id: updated.id, isNew: false });
-      }
+  const loser =
+    match.sides.find((side) => side.id !== match.winnerSideId) ?? null;
+
+  if (!winner) {
+    return [];
+  }
+
+  const results: Array<{
+    targetMatchId: string;
+    targetSideKey: string;
+  }> = [];
+
+  for (const slot of match.sourceAdvancements) {
+    const sourceSide =
+      slot.outcome === "LOSER"
+        ? loser
+        : winner;
+
+    if (!sourceSide) {
       continue;
     }
-    const created = await tx.match.create({
-      data: {
-        tournamentId: completedMatch.tournamentId,
-        bracketId: bracket.id,
-        playerOneId: slot.playerOneId,
-        playerTwoId: slot.playerTwoId,
-        round: slot.round ?? rounds[target.roundIndex]?.name,
-        status: "QUEUED",
-        roundIndex: target.roundIndex,
-        matchIndex: target.matchIndex,
+
+    const targetSide = await tx.matchSide.findFirst({
+      where: {
+        matchId: slot.targetMatchId,
+        sideKey: slot.targetSideKey,
       },
     });
-    results.push({ id: created.id, isNew: true });
+
+    if (!targetSide) {
+      continue;
+    }
+
+    const claimed = await tx.advancementSlot.updateMany({
+      where: {
+        id: slot.id,
+        resolvedAt: null,
+      },
+      data: {
+        resolvedAt: new Date(),
+      },
+    });
+
+    if (claimed.count !== 1) {
+      continue;
+    }
+
+    await tx.matchParticipant.deleteMany({
+      where: {
+        sideId: targetSide.id,
+      },
+    });
+
+    if (sourceSide.participants.length > 0) {
+      await tx.matchParticipant.createMany({
+        data: sourceSide.participants.map((participant) => ({
+          sideId: targetSide.id,
+          playerId: participant.playerId,
+          teamId: participant.teamId,
+          role: participant.role,
+          displayName: participant.displayName,
+        })),
+      });
+    }
+
+    results.push({
+      targetMatchId: slot.targetMatchId,
+      targetSideKey: slot.targetSideKey,
+    });
   }
+
   return results;
 }

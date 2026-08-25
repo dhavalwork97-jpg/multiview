@@ -3,6 +3,7 @@ import { db } from "@/lib/db";
 import { requireTournamentManage } from "@/lib/auth";
 import { publishEvent } from "@/lib/events";
 import { writeAuditLog } from "@/lib/audit";
+import { reconcileProgression } from "@/lib/progression-reconciliation";
 
 // Safe DB-only recovery pass. It never calls YouTube. It repairs stale locks,
 // impossible local state, and assigns queued unassigned matches to idle
@@ -17,6 +18,13 @@ export async function POST(_req: Request, { params }: { params: Promise<{ tourna
   const repaired: string[] = [];
   const warnings: string[] = [];
   const autoAssigned: string[] = [];
+
+  const progression = await reconcileProgression(db, tournamentId);
+
+  for (const issue of progression.issues) {
+    const message = `[${issue.type}] ${issue.detail}`;
+    warnings.push(message);
+  }
 
   for (const station of stations) {
     if (station.youtubeProvisioningAt && station.youtubeProvisioningAt < cutoff) {
@@ -45,5 +53,11 @@ export async function POST(_req: Request, { params }: { params: Promise<{ tourna
   }
 
   await writeAuditLog({ tournamentId, actorUserId: actor.id, action: "SYSTEM_RECONCILED", entityType: "tournament", entityId: tournamentId, metadata: { repaired, warnings, autoAssigned } });
-  return NextResponse.json({ repaired, warnings, autoAssigned, checkedAt: new Date().toISOString() });
+  return NextResponse.json({
+    repaired,
+    warnings,
+    autoAssigned,
+    progression,
+    checkedAt: new Date().toISOString(),
+  });
 }
