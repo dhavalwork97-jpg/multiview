@@ -214,6 +214,7 @@ model Tournament {
   teams             TournamentTeam[]
   organization      Organization         @relation(fields: [organizationId], references: [id])
   organizer         User                 @relation("TournamentOrganizer", fields: [organizerId], references: [id])
+  progressionEvents ProgressionEvent[]
 
   @@index([status])
   @@index([slug])
@@ -347,16 +348,47 @@ model AdvancementSlot {
   targetMatchId String
   targetSideKey String
   sourceLabel   String?
-  resolvedAt    DateTime?
-  createdAt     DateTime              @default(now())
-  sourceMatch   Match?                @relation("AdvancementSourceMatch", fields: [sourceMatchId], references: [id], onDelete: Cascade)
-  sourceStage   CompetitionStage?     @relation("AdvancementSourceStage", fields: [sourceStageId], references: [id], onDelete: Cascade)
-  targetMatch   Match                 @relation("AdvancementTargetMatch", fields: [targetMatchId], references: [id], onDelete: Cascade)
+
+  resolvedAt       DateTime?
+  claimedByMatchId String?
+  claimAttempt     Int       @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  sourceMatch Match?            @relation("AdvancementSourceMatch", fields: [sourceMatchId], references: [id], onDelete: Cascade)
+  sourceStage CompetitionStage? @relation("AdvancementSourceStage", fields: [sourceStageId], references: [id], onDelete: Cascade)
+  targetMatch Match             @relation("AdvancementTargetMatch", fields: [targetMatchId], references: [id], onDelete: Cascade)
 
   @@unique([targetMatchId, targetSideKey])
   @@index([sourceMatchId, outcome])
   @@index([sourceStageId, sourceRank])
+  @@index([resolvedAt])
+  @@index([claimedByMatchId])
   @@map("advancement_slots")
+}
+
+model ProgressionEvent {
+  id String @id @default(cuid())
+
+  tournamentId String
+  matchId      String
+
+  targetMatchId String?
+  targetSideId  String?
+
+  eventType ProgressionEventType
+  payload   Json?
+
+  createdAt DateTime @default(now())
+
+  tournament Tournament @relation(fields: [tournamentId], references: [id], onDelete: Cascade)
+  match      Match      @relation(fields: [matchId], references: [id], onDelete: Cascade)
+
+  @@index([tournamentId])
+  @@index([matchId])
+  @@index([eventType])
+  @@index([createdAt])
 }
 
 model Bracket {
@@ -443,6 +475,7 @@ model Match {
   winnerSide         MatchSide?          @relation("MatchWinnerSide", fields: [winnerSideId], references: [id])
   recording          Recording?
   watchHistory       WatchHistoryEntry[]
+  progressionEvents  ProgressionEvent[]
 
   @@index([tournamentId, status])
   @@index([stationId])
@@ -650,6 +683,11 @@ enum MatchStatus {
   DISPUTED
 }
 
+enum AdvancementKind {
+  WINNER
+  LOSER
+}
+
 enum StreamProtocol {
   WEBRTC
   HLS
@@ -689,6 +727,16 @@ enum AdvancementOutcome {
   WINNER
   LOSER
   RANK
+}
+
+enum ProgressionEventType {
+  MATCH_COMPLETED
+  WINNER_ADVANCED
+  LOSER_ADVANCED
+  SLOT_CLAIMED
+  SLOT_SKIPPED
+  BRACKET_COMPLETED
+  STAGE_COMPLETED
 }
 
 enum TournamentFormat {

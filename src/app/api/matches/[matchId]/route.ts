@@ -150,6 +150,30 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ matchI
           await db.station.update({ where: { id: result.updated.stationId }, data: { status: "IDLE", lastHeartbeatAt: new Date() } });
         }
       }
+      if (result.updated.status === "COMPLETED") {
+  try {
+    await endBroadcastForMatch(matchId);
+  } catch (error) {
+    console.error("[youtube broadcast] generic match end failed", error);
+    return NextResponse.json(
+      {
+        error:
+          error instanceof Error
+            ? error.message
+            : "Failed to end YouTube broadcast",
+      },
+      { status: 503 }
+    );
+  }
+
+  if (result.updated.stationId) {
+    await db.station.update({
+      where: { id: result.updated.stationId },
+      data: { status: "IDLE", lastHeartbeatAt: new Date() },
+    });
+  }
+}
+
 
       await publishEvent({
         type: "match:updated",

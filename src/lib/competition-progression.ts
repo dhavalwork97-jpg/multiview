@@ -54,6 +54,18 @@ export async function advanceCompetitionFromMatch(
     return [];
   }
 
+  await tx.progressionEvent.create({
+    data: {
+      tournamentId: match.tournamentId,
+      matchId: match.id,
+      eventType: "MATCH_COMPLETED",
+      payload: {
+        winnerSideId: winner.id,
+        winnerSideKey: winner.sideKey,
+      },
+    },
+  });
+
   const results: Array<{
     slotId: string;
     targetMatchId: string;
@@ -68,6 +80,20 @@ export async function advanceCompetitionFromMatch(
     const sourceSide = slot.outcome === "LOSER" ? loser : winner;
 
     if (!sourceSide) {
+      await tx.progressionEvent.create({
+        data: {
+          tournamentId: match.tournamentId,
+          matchId: match.id,
+          targetMatchId: slot.targetMatchId,
+          eventType: "SLOT_SKIPPED",
+          payload: {
+            advancementSlotId: slot.id,
+            outcome: slot.outcome,
+            reason: "Source side is unavailable",
+          },
+        },
+      });
+
       continue;
     }
 
@@ -79,6 +105,21 @@ export async function advanceCompetitionFromMatch(
     });
 
     if (!targetSide) {
+      await tx.progressionEvent.create({
+        data: {
+          tournamentId: match.tournamentId,
+          matchId: match.id,
+          targetMatchId: slot.targetMatchId,
+          eventType: "SLOT_SKIPPED",
+          payload: {
+            advancementSlotId: slot.id,
+            outcome: slot.outcome,
+            targetSideKey: slot.targetSideKey,
+            reason: "Target side does not exist",
+          },
+        },
+      });
+
       continue;
     }
 
@@ -89,12 +130,31 @@ export async function advanceCompetitionFromMatch(
       },
       data: {
         resolvedAt: new Date(),
+        claimedByMatchId: match.id,
+        claimAttempt: {
+          increment: 1,
+        },
       },
     });
 
     if (claimed.count !== 1) {
       continue;
     }
+
+    await tx.progressionEvent.create({
+      data: {
+        tournamentId: match.tournamentId,
+        matchId: match.id,
+        targetMatchId: slot.targetMatchId,
+        targetSideId: targetSide.id,
+        eventType: "SLOT_CLAIMED",
+        payload: {
+          advancementSlotId: slot.id,
+          outcome: slot.outcome,
+          targetSideKey: slot.targetSideKey,
+        },
+      },
+    });
 
     await tx.matchParticipant.deleteMany({
       where: {
@@ -113,6 +173,26 @@ export async function advanceCompetitionFromMatch(
         })),
       });
     }
+
+    await tx.progressionEvent.create({
+      data: {
+        tournamentId: match.tournamentId,
+        matchId: match.id,
+        targetMatchId: slot.targetMatchId,
+        targetSideId: targetSide.id,
+        eventType:
+          slot.outcome === "LOSER"
+            ? "LOSER_ADVANCED"
+            : "WINNER_ADVANCED",
+        payload: {
+          advancementSlotId: slot.id,
+          sourceSideId: sourceSide.id,
+          sourceSideKey: sourceSide.sideKey,
+          targetSideKey: slot.targetSideKey,
+          participantCount: sourceSide.participants.length,
+        },
+      },
+    });
 
     results.push({
       slotId: slot.id,
