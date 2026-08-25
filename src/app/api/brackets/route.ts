@@ -67,36 +67,108 @@ export async function POST(req: Request) {
       },
     });
 
-    const createdMatchIds: string[] = [];
+    const createdMatches = new Map<string, string>();
 
-    // Only create a Match row where both players are already known —
-    // slots that are still "winner of match X" (playerId === null) get
-    // populated by advanceBracket() (src/lib/bracket-progression.ts) once
-    // that earlier match actually completes, not at import time.
+    // V31.3.2: materialize the complete imported match graph, including future
+    // matches whose participants will be supplied by progression.
     for (let roundIndex = 0; roundIndex < rounds.length; roundIndex++) {
       const round = rounds[roundIndex];
       for (let matchIndex = 0; matchIndex < round.matches.length; matchIndex++) {
         const slot = round.matches[matchIndex];
-        if (slot.playerOneId && slot.playerTwoId) {
-          const match = await tx.match.create({
+
+        const match = await tx.match.create({
+          data: {
+            tournamentId,
+            bracketId: bracket.id,
+            stageId: stage.id,
+            playerOneId: slot.playerOneId ?? null,
+            playerTwoId: slot.playerTwoId ?? null,
+            round: slot.round,
+            status: "QUEUED",
+            roundIndex,
+            matchIndex,
+          },
+        });
+
+        await tx.matchSide.createMany({
+          data: [
+            { matchId: match.id, sideKey: "A", label: "Side A" },
+            { matchId: match.id, sideKey: "B", label: "Side B" },
+          ],
+        });
+
+        const sides = await tx.matchSide.findMany({
+          where: { matchId: match.id },
+          orderBy: { sideKey: "asc" },
+        });
+
+        const participants = [];
+        if (slot.playerOneId) {
+          participants.push({ sideId: sides[0].id, playerId: slot.playerOneId });
+        }
+        if (slot.playerTwoId) {
+          participants.push({ sideId: sides[1].id, playerId: slot.playerTwoId });
+        }
+        if (participants.length > 0) {
+          await tx.matchParticipant.createMany({ data: participants });
+        }
+
+        createdMatches.set(`${roundIndex}:${matchIndex}`, match.id);
+      }
+    }
+
+    // Convert explicit imported topology into the relational advancement graph.
+    for (let roundIndex = 0; roundIndex < rounds.length; roundIndex++) {
+      const round = rounds[roundIndex];
+
+      for (let matchIndex = 0; matchIndex < round.matches.length; matchIndex++) {
+        const slot = round.matches[matchIndex];
+        const sourceMatchId = createdMatches.get(
+          `${roundIndex}:${matchIndex}`
+        );
+
+        if (!sourceMatchId) {
+          throw new Error("Generated source match is missing");
+        }
+
+        const targets = [
+          { outcome: "WINNER" as const, target: slot.winnerTarget },
+          { outcome: "LOSER" as const, target: slot.loserTarget },
+        ];
+
+        for (const { outcome, target } of targets) {
+          if (!target) continue;
+
+          const targetMatchId = createdMatches.get(
+            `${target.roundIndex}:${target.matchIndex}`
+          );
+
+          if (!targetMatchId) {
+            throw new Error(
+              `Invalid ${outcome.toLowerCase()} advancement target from round ${roundIndex}, match ${matchIndex}`
+            );
+          }
+
+          if (targetMatchId === sourceMatchId) {
+            throw new Error("A match cannot advance into itself");
+          }
+
+          await tx.advancementSlot.create({
             data: {
-              tournamentId,
-              bracketId: bracket.id,
-              stageId: stage.id,
-              playerOneId: slot.playerOneId,
-              playerTwoId: slot.playerTwoId,
-              round: slot.round,
-              status: "QUEUED",
-              roundIndex,
-              matchIndex,
+              sourceType: "MATCH_RESULT",
+              outcome,
+              sourceMatchId,
+              targetMatchId,
+              targetSideKey:
+                target.slot === "playerOneId" ? "A" : "B",
+              sourceLabel: `${outcome} of ${slot.round}`,
             },
           });
-          createdMatchIds.push(match.id);
         }
       }
     }
 
-    return { bracket, createdMatchCount: createdMatchIds.length };
+    return { bracket, createdMatchCount: createdMatches.size };
   });
 
   return NextResponse.json(result, { status: 201 });
