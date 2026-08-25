@@ -43,28 +43,48 @@ export async function advanceCompetitionFromMatch(
   }
 
   const winner = match.winnerSideId
-    ? match.sides.find((s) => s.id === match.winnerSideId)
+    ? match.sides.find((side) => side.id === match.winnerSideId)
     : null;
 
   const loser = match.winnerSideId
-    ? match.sides.find((s) => s.id !== match.winnerSideId)
+    ? match.sides.find((side) => side.id !== match.winnerSideId)
     : null;
 
   if (!winner) {
     return [];
   }
 
-  await tx.progressionEvent.create({
-    data: {
-      tournamentId: match.tournamentId,
-      matchId: match.id,
-      eventType: "MATCH_COMPLETED",
-      payload: {
-        winnerSideId: winner.id,
-        winnerSideKey: winner.sideKey,
+  /*
+   * MATCH_COMPLETED is a match-level event.
+   *
+   * It must be emitted at most once regardless of how many advancement
+   * slots this match has and regardless of how many times progression is
+   * invoked for the same completed match.
+   */
+  const existingCompletionEvent =
+    await tx.progressionEvent.findFirst({
+      where: {
+        matchId: match.id,
+        eventType: "MATCH_COMPLETED",
       },
-    },
-  });
+      select: {
+        id: true,
+      },
+    });
+
+  if (!existingCompletionEvent) {
+    await tx.progressionEvent.create({
+      data: {
+        tournamentId: match.tournamentId,
+        matchId: match.id,
+        eventType: "MATCH_COMPLETED",
+        payload: {
+          winnerSideId: winner.id,
+          winnerSideKey: winner.sideKey,
+        },
+      },
+    });
+  }
 
   const results: Array<{
     slotId: string;
@@ -77,7 +97,10 @@ export async function advanceCompetitionFromMatch(
       continue;
     }
 
-    const sourceSide = slot.outcome === "LOSER" ? loser : winner;
+    const sourceSide =
+      slot.outcome === "LOSER"
+        ? loser
+        : winner;
 
     if (!sourceSide) {
       await tx.progressionEvent.create({
@@ -123,6 +146,12 @@ export async function advanceCompetitionFromMatch(
       continue;
     }
 
+    /*
+     * Claim the slot before mutating the target side.
+     *
+     * Only the transaction that changes resolvedAt from NULL to a timestamp
+     * owns the slot. Repeated progression calls therefore become no-ops.
+     */
     const claimed = await tx.advancementSlot.updateMany({
       where: {
         id: slot.id,
@@ -140,21 +169,6 @@ export async function advanceCompetitionFromMatch(
     if (claimed.count !== 1) {
       continue;
     }
-
-    await tx.progressionEvent.create({
-      data: {
-        tournamentId: match.tournamentId,
-        matchId: match.id,
-        targetMatchId: slot.targetMatchId,
-        targetSideId: targetSide.id,
-        eventType: "SLOT_CLAIMED",
-        payload: {
-          advancementSlotId: slot.id,
-          outcome: slot.outcome,
-          targetSideKey: slot.targetSideKey,
-        },
-      },
-    });
 
     await tx.matchParticipant.deleteMany({
       where: {
@@ -201,11 +215,13 @@ export async function advanceCompetitionFromMatch(
     });
   }
 
-  const touched = [
-    ...new Set(results.map((result) => result.targetMatchId)),
+  const touchedTargetMatches = [
+    ...new Set(
+      results.map((result) => result.targetMatchId),
+    ),
   ];
 
-  for (const targetMatchId of touched) {
+  for (const targetMatchId of touchedTargetMatches) {
     const sides = await tx.matchSide.findMany({
       where: {
         matchId: targetMatchId,
@@ -217,7 +233,9 @@ export async function advanceCompetitionFromMatch(
 
     if (
       sides.length >= 2 &&
-      sides.every((side) => side.participants.length > 0)
+      sides.every(
+        (side) => side.participants.length > 0,
+      )
     ) {
       await tx.match.updateMany({
         where: {
