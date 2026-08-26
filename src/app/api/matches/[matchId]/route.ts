@@ -4,6 +4,7 @@ import { db } from "@/lib/db";
 import { requireTournamentManage } from "@/lib/auth";
 import { publishEvent } from "@/lib/events";
 import { progressMatchTransaction } from "@/lib/progression/progression-engine";
+import { resolveCompetitionCompletion } from "@/lib/progression/completion-engine";
 import {
   createBroadcastForMatch,
   endBroadcastForMatch,
@@ -549,6 +550,13 @@ export async function PATCH(
             result.updated.id,
           );
 
+        await db.$transaction((tx) =>
+          resolveCompetitionCompletion(
+            tx,
+            result.updated.id,
+          ),
+        );
+
         for (const downstream of progression.advanced as Array<{
           targetMatchId: string;
           targetSideKey: string;
@@ -969,6 +977,13 @@ export async function PATCH(
         db,
         updated.id,
       );
+
+    await db.$transaction((tx) =>
+      resolveCompetitionCompletion(
+        tx,
+        updated.id,
+      ),
+    );
 
     for (
       const downstream of
