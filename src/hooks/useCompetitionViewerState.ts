@@ -50,6 +50,18 @@ export function useCompetitionViewerState(
     };
   }, [socket, refresh]);
 
+  useEffect(() => {
+    const handleConnect = () => {
+      void refresh();
+    };
+
+    socket.on("connect", handleConnect);
+
+    return () => {
+      socket.off("connect", handleConnect);
+    };
+  }, [socket, refresh]);
+
   return {
     state,
     refreshing,
