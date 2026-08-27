@@ -215,6 +215,8 @@ model Tournament {
   organization      Organization         @relation(fields: [organizationId], references: [id])
   organizer         User                 @relation("TournamentOrganizer", fields: [organizerId], references: [id])
   progressionEvents ProgressionEvent[]
+  broadcastState    BroadcastState?
+  broadcastCommands BroadcastCommand[]
 
   @@index([status])
   @@index([slug])
@@ -391,6 +393,41 @@ model ProgressionEvent {
   @@index([createdAt])
 }
 
+model BroadcastState {
+  id           String         @id @default(cuid())
+  tournamentId String         @unique
+  scene        BroadcastScene @default(OFFLINE)
+  stationId    String?
+  matchId      String?
+  overlay      Json?
+  updatedAt    DateTime       @updatedAt
+  createdAt    DateTime       @default(now())
+
+  tournament Tournament @relation(fields: [tournamentId], references: [id], onDelete: Cascade)
+  station    Station?   @relation(fields: [stationId], references: [id], onDelete: SetNull)
+  match      Match?     @relation(fields: [matchId], references: [id], onDelete: SetNull)
+
+  @@index([scene])
+  @@index([stationId])
+  @@index([matchId])
+  @@map("broadcast_states")
+}
+
+model BroadcastCommand {
+  id           String               @id @default(cuid())
+  tournamentId String
+  actorUserId  String?
+  type         BroadcastCommandType
+  payload      Json?
+  createdAt    DateTime             @default(now())
+
+  tournament Tournament @relation(fields: [tournamentId], references: [id], onDelete: Cascade)
+
+  @@index([tournamentId, createdAt])
+  @@index([type])
+  @@map("broadcast_commands")
+}
+
 model Bracket {
   id           String     @id @default(cuid())
   tournamentId String
@@ -404,20 +441,20 @@ model Bracket {
 }
 
 model Station {
-  id                          String        @id @default(cuid())
+  id                          String           @id @default(cuid())
   tournamentId                String
   label                       String
-  status                      StationStatus @default(OFFLINE)
-  streamKey                   String        @unique @default(cuid())
+  status                      StationStatus    @default(OFFLINE)
+  streamKey                   String           @unique @default(cuid())
   ingressId                   String?
   ingestUrl                   String?
   playbackIdHls               String?
   playbackIdWebrtc            String?
   lastHeartbeatAt             DateTime?
   currentBitrateKbps          Int?
-  droppedFrames               Int?          @default(0)
-  createdAt                   DateTime      @default(now())
-  updatedAt                   DateTime      @updatedAt
+  droppedFrames               Int?             @default(0)
+  createdAt                   DateTime         @default(now())
+  updatedAt                   DateTime         @updatedAt
   youtubeStreamId             String?
   youtubeBroadcastId          String?
   youtubeVideoId              String?
@@ -427,7 +464,8 @@ model Station {
   youtubeProvisioningAt       DateTime?
   youtubeStreamProvisioningAt DateTime?
   matches                     Match[]
-  tournament                  Tournament    @relation(fields: [tournamentId], references: [id], onDelete: Cascade)
+  broadcastStates             BroadcastState[]
+  tournament                  Tournament       @relation(fields: [tournamentId], references: [id], onDelete: Cascade)
 
   @@unique([tournamentId, label])
   @@index([status])
@@ -476,6 +514,7 @@ model Match {
   recording          Recording?
   watchHistory       WatchHistoryEntry[]
   progressionEvents  ProgressionEvent[]
+  BroadcastState     BroadcastState[]
 
   @@index([tournamentId, status])
   @@index([stationId])
@@ -674,6 +713,23 @@ enum StationStatus {
   IDLE
   LIVE
   ERROR
+}
+
+enum BroadcastScene {
+  OFFLINE
+  WAITING
+  MATCH
+  BREAK
+  INTERMISSION
+  RESULTS
+}
+
+enum BroadcastCommandType {
+  SET_SCENE
+  SELECT_STATION
+  SELECT_MATCH
+  UPDATE_OVERLAY
+  CLEAR_SELECTION
 }
 
 enum MatchStatus {

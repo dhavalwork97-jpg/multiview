@@ -1,12 +1,10 @@
 import { redisPub, EVENTS_CHANNEL } from "@/lib/redis";
 
-
 export { EVENTS_CHANNEL };
 
 // The full set of real-time events the platform pushes. Keeping this as a
-// discriminated union (rather than stringly-typed channel names per event)
-// means the socket server and any future consumer get autocomplete/type
-// safety on payload shape.
+// discriminated union means the socket server and any future consumer get
+// autocomplete and type safety on payload shape.
 export type AppEvent =
   | {
       type: "match:updated";
@@ -45,23 +43,30 @@ export type AppEvent =
       s3Key: string;
     }
   | {
-      // Fired alongside match:updated when advanceBracket() (see
-      // src/lib/bracket-progression.ts) instantiates or updates the next
-      // round's Match row. InteractiveBracket already refetches on
-      // match:updated, so no client currently needs to handle this
-      // separately — it exists so a future consumer (e.g. a toast, or an
-      // analytics hook) doesn't have to infer "the bracket changed" from
-      // match:updated's shape.
       type: "bracket:advanced";
       tournamentId: string;
       bracketId: string;
       matchId: string;
       targetSideKey: string;
+    }
+  | {
+      // Published after persistent broadcast director state changes.
+      // OBS integration is intentionally not coupled here: a future
+      // broadcast agent can consume this event or the command history.
+      type: "broadcast:updated";
+      tournamentId: string;
+      scene: string;
+      stationId: string | null;
+      matchId: string | null;
+      overlay: Record<string, unknown> | null;
+      commandType: string;
     };
 
 let connected = false;
+
 async function ensureConnected() {
   if (!redisPub) return false;
+
   if (!connected) {
     try {
       await redisPub.connect();
@@ -70,11 +75,13 @@ async function ensureConnected() {
       return false;
     }
   }
+
   return true;
 }
 
 export async function publishEvent(event: AppEvent) {
   if (!(await ensureConnected()) || !redisPub) return;
+
   try {
     await redisPub.publish(EVENTS_CHANNEL, JSON.stringify(event));
   } catch (error) {
