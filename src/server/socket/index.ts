@@ -62,6 +62,9 @@ eventsSubscriber.on("message", (_channel, raw) => {
   }
 
   switch (event.type) {
+	  case "broadcast:updated":
+      io.to(`tournament:${event.tournamentId}`).emit("broadcast:updated", event);
+      break;
     case "match:updated":
       // Two rooms: the tournament room (for the live grid, which cares
       // about every match) and the match room (for viewers on the watch
