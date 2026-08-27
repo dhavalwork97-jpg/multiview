@@ -139,11 +139,16 @@ export function InteractiveBracket({
             const isLive = match?.status === "LIVE";
             const isSelected = !!match && match.id === selectedMatchId;
             const p1Name =
-              match?.playerOne.gamertag ??
-              (slot.playerOneId ? gamertagByPlayerId[slot.playerOneId] ?? "…" : "TBD");
+              match?.playerOne?.gamertag ??
+             (slot.playerOneId
+               ? gamertagByPlayerId[slot.playerOneId] ?? "…"
+               : "TBD");
+
             const p2Name =
-              match?.playerTwo.gamertag ??
-              (slot.playerTwoId ? gamertagByPlayerId[slot.playerTwoId] ?? "…" : "TBD");
+              match?.playerTwo?.gamertag ??
+             (slot.playerTwoId
+               ? gamertagByPlayerId[slot.playerTwoId] ?? "…"
+               : "TBD");
 
             return (
               <div
