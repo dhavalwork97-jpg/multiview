@@ -1,14 +1,14 @@
 "use client";
 
 import { usePathname } from "next/navigation";
-import { Nav } from "@/components/layout/Nav";
+import type { ReactNode } from "react";
 
-export function NavGate() {
+export function NavGate({ children }: { children: ReactNode }) {
   const pathname = usePathname();
 
   if (pathname.startsWith("/overlay/")) {
     return null;
   }
 
-  return <Nav />;
+  return <>{children}</>;
 }

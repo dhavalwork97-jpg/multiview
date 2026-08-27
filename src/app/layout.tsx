@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { ClerkProvider } from "@clerk/nextjs";
 import { NavGate } from "@/components/layout/NavGate";
 import "./globals.css";
+import { Nav } from "@/components/layout/Nav";
 
 export const metadata: Metadata = {
   title: "FGC Stream",
@@ -17,8 +18,10 @@ export default function RootLayout({
     <ClerkProvider>
       <html lang="en">
         <body>
-          <NavGate />
-          {children}
+       <NavGate>
+         <Nav />
+       </NavGate>
+       {children}
         </body>
       </html>
     </ClerkProvider>
