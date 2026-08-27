@@ -40,8 +40,8 @@ type Match = {
   playerOneScore: number;
   playerTwoScore: number;
   startedAt?: string | null;
-  playerOne: { id: string; gamertag: string };
-  playerTwo: { id: string; gamertag: string };
+  playerOne: { id: string; gamertag: string } | null;
+  playerTwo: { id: string; gamertag: string } | null;
   station?: { id: string; label: string; youtubeVideoId?: string | null; status?: string } | null;
 };
 
@@ -479,14 +479,14 @@ async function sendBroadcastCommand(
         {stations.flatMap((station) =>
           station.matches.map((match) => (
             <option key={match.id} value={match.id}>
-              {match.playerOne.gamertag} vs {match.playerTwo.gamertag}
+              {match.playerOne?.gamertag ?? "TBD"} vs {match.playerTwo?.gamertag ?? "TBD"}
             </option>
           )),
         )}
 
         {queued.map((match) => (
           <option key={match.id} value={match.id}>
-            {match.playerOne.gamertag} vs {match.playerTwo.gamertag}
+            {match.playerOne?.gamertag ?? "TBD"} vs {match.playerTwo?.gamertag ?? "TBD"}
           </option>
         ))}
       </select>
@@ -634,7 +634,7 @@ async function sendBroadcastCommand(
           {queued.filter((m) => !m.station).map((match) => (
             <div key={match.id} className="flex flex-col gap-3 rounded-card border border-arena-600 bg-arena-800 p-3 sm:flex-row sm:items-center sm:justify-between">
               <div>
-                <p className="font-medium"><span className="text-corner-p1">{match.playerOne.gamertag}</span> <span className="text-ink-faint">vs</span> <span className="text-corner-p2">{match.playerTwo.gamertag}</span></p>
+                <p className="font-medium"><span className="text-corner-p1">{match.playerOne?.gamertag ?? "TBD"}</span> <span className="text-ink-faint">vs</span> <span className="text-corner-p2">{match.playerTwo?.gamertag ?? "TBD"}</span></p>
                 <p className="mt-0.5 font-mono text-[10px] uppercase text-ink-faint">{match.round ?? "Upcoming"}</p>
               </div>
               <select
@@ -774,7 +774,7 @@ function StationCard({
         {match ? (
           <>
             <p className="font-mono text-[10px] uppercase tracking-widest text-ink-faint">Current match</p>
-            <p className="mt-1 font-medium"><span className="text-corner-p1">{match.playerOne.gamertag}</span> <span className="text-ink-faint">vs</span> <span className="text-corner-p2">{match.playerTwo.gamertag}</span></p>
+            <p className="mt-1 font-medium"><span className="text-corner-p1">{match.playerOne?.gamertag ?? "TBD"}</span> <span className="text-ink-faint">vs</span> <span className="text-corner-p2">{match.playerTwo?.gamertag ?? "TBD"}</span></p>
             <p className="mt-1 font-mono text-[10px] text-ink-faint">{match.round ?? "Match"} · {match.status}</p>
             <div className="mt-3 flex gap-2">
               {match.status === "QUEUED" && <button disabled={!canOperate || busy === match.id} onClick={() => onStart(match.id)} className="rounded-card border border-signal-live/50 px-3 py-1.5 font-mono text-[10px] uppercase text-signal-live disabled:opacity-40">Start match</button>}
@@ -782,17 +782,17 @@ function StationCard({
                 <div className="flex flex-wrap gap-2">
                   <button
                     disabled={!canOperate || busy === match.id}
-                    onClick={() => onEnd(match.id, match.playerOne.id)}
+                    onClick={() => match.playerOne && onEnd(match.id, match.playerOne.id)}
                     className="rounded-card border border-corner-p1/50 px-3 py-1.5 font-mono text-[10px] uppercase text-corner-p1 disabled:opacity-40"
                   >
-                    End · {match.playerOne.gamertag} wins
+                    End · {match.playerOne?.gamertag ?? "TBD"} wins
                   </button>
                   <button
                     disabled={!canOperate || busy === match.id}
-                    onClick={() => onEnd(match.id, match.playerTwo.id)}
+                    onClick={() => match.playerTwo && onEnd(match.id, match.playerTwo.id)}
                     className="rounded-card border border-corner-p2/50 px-3 py-1.5 font-mono text-[10px] uppercase text-corner-p2 disabled:opacity-40"
                   >
-                    End · {match.playerTwo.gamertag} wins
+                    End · {match.playerTwo?.gamertag ?? "TBD"} wins
                   </button>
                 </div>
               )}
@@ -806,7 +806,7 @@ function StationCard({
             <p className="text-sm text-ink-faint">No match on this station.</p>
             <select defaultValue="" disabled={!canOperate} onChange={(e) => e.target.value && onAssign(e.target.value)} className="mt-2 w-full rounded-card border border-arena-600 bg-arena-900 px-3 py-2 text-xs">
               <option value="" disabled>Assign next match…</option>
-              {queued.map((m) => <option key={m.id} value={m.id}>{m.playerOne.gamertag} vs {m.playerTwo.gamertag}</option>)}
+              {queued.map((m) => <option key={m.id} value={m.id}>{m.playerOne?.gamertag ?? "TBD"} vs {m.playerTwo?.gamertag ?? "TBD"}</option>)}
             </select>
           </>
         )}
