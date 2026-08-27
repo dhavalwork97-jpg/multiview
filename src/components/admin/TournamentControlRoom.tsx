@@ -55,6 +55,9 @@ export function TournamentControlRoom({ tournamentId }: { tournamentId: string }
   overlay: null,
 });
   const [broadcastBusy, setBroadcastBusy] = useState(false);
+  const [rundown, setRundown] = useState<Array<{ id: string; title: string; cueType: string; status: "PENDING" | "LIVE" | "COMPLETED" | "SKIPPED"; position: number; durationSec: number | null }>>([]);
+  const [newCueTitle, setNewCueTitle] = useState("");
+  const [newCueType, setNewCueType] = useState("CUSTOM");
   const [overlayTitle, setOverlayTitle] = useState("");
   const [overlaySponsor, setOverlaySponsor] = useState("");
   const [overlayMessage, setOverlayMessage] = useState("");
@@ -76,9 +79,10 @@ export function TournamentControlRoom({ tournamentId }: { tournamentId: string }
 
   const refresh = useCallback(async () => {
     try {
-      const [snapshotRes, healthRes] = await Promise.all([
+      const [snapshotRes, healthRes, rundownRes] = await Promise.all([
         fetch(`/api/tournaments/${tournamentId}/control-room`, { cache: "no-store" }),
         fetch(`/api/tournaments/${tournamentId}/health`, { cache: "no-store" }),
+        fetch(`/api/tournaments/${tournamentId}/broadcast/rundown`, { cache: "no-store" }),
       ]);
       if (!snapshotRes.ok) throw new Error("Failed to load control room");
       const snapshot = await snapshotRes.json();
@@ -96,6 +100,7 @@ export function TournamentControlRoom({ tournamentId }: { tournamentId: string }
       overlay: null,
     });
       if (healthRes.ok) setHealth(await healthRes.json());
+      if (rundownRes.ok) { const data = await rundownRes.json(); setRundown(data.cues ?? []); }
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to refresh control room");
     } finally {
@@ -135,6 +140,28 @@ export function TournamentControlRoom({ tournamentId }: { tournamentId: string }
     }
     return result;
   }, [stations]);
+
+  async function createCue() {
+    if (!newCueTitle.trim()) return;
+    setBusy("rundown:create"); setError(null);
+    try {
+      const res = await fetch(`/api/tournaments/${tournamentId}/broadcast/rundown`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ title: newCueTitle.trim(), cueType: newCueType }) });
+      const data = await res.json().catch(() => ({})); if (!res.ok) throw new Error(data.error ?? "Failed to create cue");
+      setNewCueTitle(""); await refresh();
+    } catch (e) { setError(e instanceof Error ? e.message : "Failed to create cue"); } finally { setBusy(null); }
+  }
+
+  async function updateCue(id: string, update: Record<string, unknown>) {
+    setBusy(`cue:${id}`); setError(null);
+    try { const res = await fetch(`/api/tournaments/${tournamentId}/broadcast/rundown/${id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(update) }); const data = await res.json().catch(() => ({})); if (!res.ok) throw new Error(data.error ?? "Failed to update cue"); await refresh(); }
+    catch (e) { setError(e instanceof Error ? e.message : "Failed to update cue"); } finally { setBusy(null); }
+  }
+
+  async function deleteCue(id: string) {
+    setBusy(`cue:${id}`); setError(null);
+    try { const res = await fetch(`/api/tournaments/${tournamentId}/broadcast/rundown/${id}`, { method: "DELETE" }); const data = await res.json().catch(() => ({})); if (!res.ok) throw new Error(data.error ?? "Failed to delete cue"); await refresh(); }
+    catch (e) { setError(e instanceof Error ? e.message : "Failed to delete cue"); } finally { setBusy(null); }
+  }
 
   async function createStation() {
     const label = newStation.trim();
@@ -371,6 +398,11 @@ async function sendBroadcastCommand(
           </div>
         </section>
       )}
+
+<section className="rounded-card border border-arena-600 bg-arena-900 p-4">
+  <div className="mb-4 flex flex-wrap items-end justify-between gap-3"><div><p className="font-mono text-[10px] uppercase tracking-[0.2em] text-ink-faint">Production rundown</p><h2 className="font-display text-xl uppercase tracking-wide">On air & up next</h2></div><div className="flex gap-2"><input value={newCueTitle} onChange={(e)=>setNewCueTitle(e.target.value)} onKeyDown={(e)=>e.key === "Enter" && void createCue()} placeholder="Add production cue" className="rounded-card border border-arena-600 bg-arena-950 px-3 py-2 text-xs"/><select value={newCueType} onChange={(e)=>setNewCueType(e.target.value)} className="rounded-card border border-arena-600 bg-arena-950 px-2 py-2 text-xs"><option value="MATCH">Match</option><option value="BREAK">Break</option><option value="SPONSOR">Sponsor</option><option value="RESULTS">Results</option><option value="VIDEO">Video</option><option value="CUSTOM">Custom</option></select><button disabled={!canOperate || busy === "rundown:create" || !newCueTitle.trim()} onClick={()=>void createCue()} className="rounded-card border border-signal-live/50 px-3 py-2 font-mono text-[10px] uppercase text-signal-live disabled:opacity-40">Add</button></div></div>
+  <div className="space-y-2">{rundown.length === 0 ? <p className="rounded-card border border-dashed border-arena-600 p-4 text-center text-xs text-ink-faint">Build the show rundown: matches, breaks, sponsors, graphics and custom segments.</p> : rundown.map((cue,index)=><div key={cue.id} className={`flex flex-wrap items-center gap-3 rounded-card border p-3 ${cue.status === "LIVE" ? "border-signal-live bg-signal-live/5" : "border-arena-700 bg-arena-950"}`}><span className="font-mono text-[10px] text-ink-faint">{index+1}</span><div className="min-w-[150px] flex-1"><p className="text-sm font-medium">{cue.title}</p><p className="font-mono text-[9px] uppercase text-ink-faint">{cue.cueType}{cue.durationSec ? ` · ${cue.durationSec}s` : ""}</p></div><span className={`font-mono text-[9px] uppercase ${cue.status === "LIVE" ? "text-signal-live" : "text-ink-faint"}`}>{cue.status === "LIVE" ? "● ON AIR" : cue.status}</span><div className="flex gap-1"><button disabled={!canOperate || busy===`cue:${cue.id}`} onClick={()=>void updateCue(cue.id,{status:"LIVE"})} className="rounded border border-signal-live/40 px-2 py-1 font-mono text-[9px] uppercase text-signal-live disabled:opacity-40">Take</button><button disabled={!canOperate || busy===`cue:${cue.id}`} onClick={()=>void updateCue(cue.id,{status:"COMPLETED"})} className="rounded border border-arena-600 px-2 py-1 font-mono text-[9px] uppercase">Done</button><button disabled={!canOperate || busy===`cue:${cue.id}`} onClick={()=>void updateCue(cue.id,{status:"SKIPPED"})} className="rounded border border-arena-600 px-2 py-1 font-mono text-[9px] uppercase text-ink-faint">Skip</button><button disabled={!canOperate || busy===`cue:${cue.id}`} onClick={()=>void deleteCue(cue.id)} className="rounded border border-arena-600 px-2 py-1 font-mono text-[9px] uppercase text-ink-faint">×</button></div></div>)}</div>
+</section>
 
 <section className="rounded-card border border-arena-600 bg-arena-900 p-4">
   <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">

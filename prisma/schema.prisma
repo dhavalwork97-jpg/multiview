@@ -217,6 +217,7 @@ model Tournament {
   progressionEvents ProgressionEvent[]
   broadcastState    BroadcastState?
   broadcastCommands BroadcastCommand[]
+  broadcastCues     BroadcastCue[]
 
   @@index([status])
   @@index([slug])
@@ -426,6 +427,27 @@ model BroadcastCommand {
   @@index([tournamentId, createdAt])
   @@index([type])
   @@map("broadcast_commands")
+}
+
+model BroadcastCue {
+  id           String            @id @default(cuid())
+  tournamentId String
+  title        String
+  cueType      BroadcastCueType @default(CUSTOM)
+  status       BroadcastCueStatus @default(PENDING)
+  durationSec  Int?
+  position     Int               @default(0)
+  payload      Json?
+  startedAt    DateTime?
+  completedAt  DateTime?
+  createdAt    DateTime          @default(now())
+  updatedAt    DateTime          @updatedAt
+
+  tournament Tournament @relation(fields: [tournamentId], references: [id], onDelete: Cascade)
+
+  @@index([tournamentId, position])
+  @@index([tournamentId, status])
+  @@map("broadcast_cues")
 }
 
 model Bracket {
@@ -722,6 +744,24 @@ enum BroadcastScene {
   BREAK
   INTERMISSION
   RESULTS
+}
+
+enum BroadcastCueType {
+  MATCH
+  BREAK
+  INTERMISSION
+  RESULTS
+  SPONSOR
+  LOWER_THIRD
+  VIDEO
+  CUSTOM
+}
+
+enum BroadcastCueStatus {
+  PENDING
+  LIVE
+  COMPLETED
+  SKIPPED
 }
 
 enum BroadcastCommandType {
