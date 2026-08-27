@@ -55,6 +55,9 @@ export function TournamentControlRoom({ tournamentId }: { tournamentId: string }
   overlay: null,
 });
   const [broadcastBusy, setBroadcastBusy] = useState(false);
+  const [overlayTitle, setOverlayTitle] = useState("");
+  const [overlaySponsor, setOverlaySponsor] = useState("");
+  const [overlayMessage, setOverlayMessage] = useState("");
   const [stations, setStations] = useState<Station[]>([]);
   const [queued, setQueued] = useState<Match[]>([]);
   const [loading, setLoading] = useState(true);
@@ -489,6 +492,62 @@ async function sendBroadcastCommand(
       </select>
     </div>
   </div>
+
+<div className="mt-4 rounded-card border border-arena-700 bg-arena-950 p-3">
+  <div className="mb-3">
+    <p className="font-mono text-[10px] uppercase tracking-widest text-ink-faint">
+      Broadcast overlay
+    </p>
+    <p className="mt-1 text-[10px] text-ink-faint">
+      Optional information for the active broadcast graphics.
+    </p>
+  </div>
+
+  <div className="grid gap-3 md:grid-cols-3">
+    <input
+      value={overlayTitle}
+      onChange={(e) => setOverlayTitle(e.target.value)}
+      disabled={!canOperate || broadcastBusy}
+      placeholder="Overlay title"
+      className="w-full rounded-card border border-arena-600 bg-arena-900 px-3 py-2 text-xs disabled:opacity-40"
+    />
+
+    <input
+      value={overlaySponsor}
+      onChange={(e) => setOverlaySponsor(e.target.value)}
+      disabled={!canOperate || broadcastBusy}
+      placeholder="Sponsor"
+      className="w-full rounded-card border border-arena-600 bg-arena-900 px-3 py-2 text-xs disabled:opacity-40"
+    />
+
+    <input
+      value={overlayMessage}
+      onChange={(e) => setOverlayMessage(e.target.value)}
+      disabled={!canOperate || broadcastBusy}
+      placeholder="Custom message"
+      className="w-full rounded-card border border-arena-600 bg-arena-900 px-3 py-2 text-xs disabled:opacity-40"
+    />
+  </div>
+
+  <div className="mt-3 flex justify-end">
+    <button
+      disabled={!canOperate || broadcastBusy}
+      onClick={() =>
+        void sendBroadcastCommand({
+          type: "UPDATE_OVERLAY",
+          overlay: {
+            title: overlayTitle,
+            sponsor: overlaySponsor,
+            message: overlayMessage,
+          },
+        })
+      }
+      className="rounded-card border border-arena-600 px-3 py-2 font-mono text-[10px] uppercase transition hover:border-arena-500 disabled:opacity-40"
+    >
+      Apply overlay
+    </button>
+  </div>
+</div>
 
   <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-arena-700 pt-4">
     <div className="font-mono text-[10px] uppercase text-ink-faint">
