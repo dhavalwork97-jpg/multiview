@@ -4,6 +4,22 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useSocket } from "@/hooks/useSocket";
 import Link from "next/link";
 
+type BroadcastScene =
+  | "OFFLINE"
+  | "WAITING"
+  | "MATCH"
+  | "BREAK"
+  | "INTERMISSION"
+  | "RESULTS";
+
+type BroadcastState = {
+  scene: BroadcastScene;
+  stationId: string | null;
+  matchId: string | null;
+  overlay: Record<string, unknown> | null;
+  updatedAt?: string | null;
+};
+
 type Station = {
   id: string;
   label: string;
@@ -32,6 +48,13 @@ type Match = {
 type Credentials = { ingestUrl: string; streamKey: string };
 
 export function TournamentControlRoom({ tournamentId }: { tournamentId: string }) {
+  const [broadcast, setBroadcast] = useState<BroadcastState>({
+  scene: "OFFLINE",
+  stationId: null,
+  matchId: null,
+  overlay: null,
+});
+  const [broadcastBusy, setBroadcastBusy] = useState(false);
   const [stations, setStations] = useState<Station[]>([]);
   const [queued, setQueued] = useState<Match[]>([]);
   const [loading, setLoading] = useState(true);
@@ -63,6 +86,12 @@ export function TournamentControlRoom({ tournamentId }: { tournamentId: string }
       setMetrics(snapshot.metrics ?? { views: 0, watchSeconds: 0, watchHours: 0 });
       setIncidents(snapshot.incidents ?? []);
       setIncidentCount((snapshot.incidents ?? []).length);
+	  setBroadcast(snapshot.broadcast ?? {
+      scene: "OFFLINE",
+      stationId: null,
+      matchId: null,
+      overlay: null,
+    });
       if (healthRes.ok) setHealth(await healthRes.json());
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to refresh control room");
@@ -72,19 +101,26 @@ export function TournamentControlRoom({ tournamentId }: { tournamentId: string }
   }, [tournamentId]);
 
   useEffect(() => {
-    void refresh();
-    const onUpdate = () => void refresh();
-    socket.on("station:status", onUpdate);
-    socket.on("match:updated", onUpdate);
-    socket.on("match:assigned", onUpdate);
-    const timer = setInterval(onUpdate, 10000);
-    return () => {
-      clearInterval(timer);
-      socket.off("station:status", onUpdate);
-      socket.off("match:updated", onUpdate);
-      socket.off("match:assigned", onUpdate);
-    };
-  }, [refresh, socket]);
+  void refresh();
+
+  const onUpdate = () => void refresh();
+  const onBroadcastUpdate = () => void refresh();
+
+  socket.on("station:status", onUpdate);
+  socket.on("match:updated", onUpdate);
+  socket.on("match:assigned", onUpdate);
+  socket.on("broadcast:updated", onBroadcastUpdate);
+
+  const timer = setInterval(onUpdate, 10000);
+
+  return () => {
+    clearInterval(timer);
+    socket.off("station:status", onUpdate);
+    socket.off("match:updated", onUpdate);
+    socket.off("match:assigned", onUpdate);
+    socket.off("broadcast:updated", onBroadcastUpdate);
+  };
+}, [refresh, socket]);
 
   const counts = useMemo(() => {
     const result = { live: 0, ready: 0, offline: 0, alerts: 0 };
@@ -235,6 +271,49 @@ export function TournamentControlRoom({ tournamentId }: { tournamentId: string }
     }
   }
 
+async function sendBroadcastCommand(
+  command:
+    | { type: "SET_SCENE"; scene: BroadcastScene }
+    | { type: "SELECT_STATION"; stationId: string }
+    | { type: "SELECT_MATCH"; matchId: string }
+    | { type: "UPDATE_OVERLAY"; overlay: Record<string, unknown> }
+    | { type: "CLEAR_SELECTION" },
+) {
+  setBroadcastBusy(true);
+  setError(null);
+
+  try {
+    const res = await fetch(
+      `/api/tournaments/${tournamentId}/broadcast`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(command),
+      },
+    );
+
+    const data = await res.json().catch(() => ({}));
+
+    if (!res.ok) {
+      throw new Error(data.error ?? "Broadcast command failed");
+    }
+
+    if (data.state) {
+      setBroadcast(data.state);
+    }
+
+    await refresh();
+  } catch (e) {
+    setError(
+      e instanceof Error
+        ? e.message
+        : "Failed to update broadcast director",
+    );
+  } finally {
+    setBroadcastBusy(false);
+  }
+}
+
   if (loading) return <p className="text-sm text-ink-faint">Loading control room…</p>;
 
   return (
@@ -282,6 +361,157 @@ export function TournamentControlRoom({ tournamentId }: { tournamentId: string }
           </div>
         </section>
       )}
+
+<section className="rounded-card border border-arena-600 bg-arena-900 p-4">
+  <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+    <div>
+      <p className="font-mono text-[10px] uppercase tracking-[0.2em] text-ink-faint">
+        Broadcast director
+      </p>
+      <h2 className="font-display text-xl uppercase tracking-wide">
+        Program control
+      </h2>
+    </div>
+
+    <div className="flex items-center gap-2">
+      <span className="font-mono text-[10px] uppercase text-ink-faint">
+        Current scene
+      </span>
+      <span className="rounded-card border border-signal-live/40 px-2 py-1 font-mono text-[10px] uppercase text-signal-live">
+        {broadcast.scene}
+      </span>
+    </div>
+  </div>
+
+  <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 xl:grid-cols-6">
+    {(
+      [
+        "OFFLINE",
+        "WAITING",
+        "MATCH",
+        "BREAK",
+        "INTERMISSION",
+        "RESULTS",
+      ] as BroadcastScene[]
+    ).map((scene) => (
+      <button
+        key={scene}
+        disabled={!canOperate || broadcastBusy}
+        onClick={() =>
+          void sendBroadcastCommand({
+            type: "SET_SCENE",
+            scene,
+          })
+        }
+        className={`rounded-card border px-3 py-3 font-mono text-[10px] uppercase tracking-wide transition disabled:opacity-40 ${
+          broadcast.scene === scene
+            ? "border-signal-live bg-signal-live/10 text-signal-live"
+            : "border-arena-600 bg-arena-950 text-ink-faint hover:border-arena-500"
+        }`}
+      >
+        {scene}
+      </button>
+    ))}
+  </div>
+
+  <div className="mt-4 grid gap-4 lg:grid-cols-2">
+    <div className="rounded-card border border-arena-700 bg-arena-950 p-3">
+      <p className="mb-2 font-mono text-[10px] uppercase tracking-widest text-ink-faint">
+        Program station
+      </p>
+
+      <select
+        value={broadcast.stationId ?? ""}
+        disabled={!canOperate || broadcastBusy}
+        onChange={(e) => {
+          if (e.target.value) {
+            void sendBroadcastCommand({
+              type: "SELECT_STATION",
+              stationId: e.target.value,
+            });
+          }
+        }}
+        className="w-full rounded-card border border-arena-600 bg-arena-900 px-3 py-2 text-xs"
+      >
+        <option value="" disabled>
+          Select station…
+        </option>
+
+        {stations.map((station) => (
+          <option key={station.id} value={station.id}>
+            {station.label} · {station.status}
+          </option>
+        ))}
+      </select>
+
+      {broadcast.stationId && (
+        <p className="mt-2 text-[10px] text-ink-faint">
+          Selected station controls the current program source.
+        </p>
+      )}
+    </div>
+
+    <div className="rounded-card border border-arena-700 bg-arena-950 p-3">
+      <p className="mb-2 font-mono text-[10px] uppercase tracking-widest text-ink-faint">
+        Featured match
+      </p>
+
+      <select
+        value={broadcast.matchId ?? ""}
+        disabled={!canOperate || broadcastBusy}
+        onChange={(e) => {
+          if (e.target.value) {
+            void sendBroadcastCommand({
+              type: "SELECT_MATCH",
+              matchId: e.target.value,
+            });
+          }
+        }}
+        className="w-full rounded-card border border-arena-600 bg-arena-900 px-3 py-2 text-xs"
+      >
+        <option value="" disabled>
+          Select match…
+        </option>
+
+        {stations.flatMap((station) =>
+          station.matches.map((match) => (
+            <option key={match.id} value={match.id}>
+              {match.playerOne.gamertag} vs {match.playerTwo.gamertag}
+            </option>
+          )),
+        )}
+
+        {queued.map((match) => (
+          <option key={match.id} value={match.id}>
+            {match.playerOne.gamertag} vs {match.playerTwo.gamertag}
+          </option>
+        ))}
+      </select>
+    </div>
+  </div>
+
+  <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-arena-700 pt-4">
+    <div className="font-mono text-[10px] uppercase text-ink-faint">
+      {broadcastBusy ? "Applying broadcast command…" : "Persistent director state"}
+    </div>
+
+    <button
+      disabled={
+        !canOperate ||
+        broadcastBusy ||
+        (!broadcast.stationId && !broadcast.matchId)
+      }
+      onClick={() =>
+        void sendBroadcastCommand({
+          type: "CLEAR_SELECTION",
+        })
+      }
+      className="rounded-card border border-arena-600 px-3 py-2 font-mono text-[10px] uppercase disabled:opacity-40"
+    >
+      Clear selection
+    </button>
+  </div>
+</section>
 
       <section className="rounded-card border border-arena-600 bg-arena-900 p-4">
         <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
