@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { ClerkProvider } from "@clerk/nextjs";
-import { Nav } from "@/components/layout/Nav";
+import { NavGate } from "@/components/layout/NavGate";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -17,7 +17,7 @@ export default function RootLayout({
     <ClerkProvider>
       <html lang="en">
         <body>
-          <Nav />
+          <NavGate />
           {children}
         </body>
       </html>
