@@ -126,15 +126,18 @@ export default async function DashboardPage() {
                     View public page
                   </Link>
                   <Link
-                    href={`/admin/tournaments/${t.id}/analytics`}
-                    className="font-mono text-xs uppercase tracking-wide text-ink-faint hover:text-signal-live"
-                  >Analytics</Link>
-                  <Link
-                    href={`/admin/tournaments/${t.id}`}
-                    className="rounded-card border border-arena-600 px-3 py-1.5 font-mono text-xs uppercase tracking-wide text-ink hover:border-signal-live hover:text-signal-live"
-                  >
-                    Manage stations
-                  </Link>
+  href={`/admin/tournaments/${t.id}/analytics`}
+  className="font-mono text-xs uppercase tracking-wide text-ink-faint hover:text-signal-live"
+>
+  Analytics
+</Link>
+
+<Link
+  href={`/admin/tournaments/${t.id}/control-room`}
+  className="rounded-card border border-arena-600 px-3 py-1.5 font-mono text-xs uppercase tracking-wide text-ink hover:border-signal-live hover:text-signal-live"
+>
+  Manage stations
+</Link>
                 </div>
               </li>
             ))}
