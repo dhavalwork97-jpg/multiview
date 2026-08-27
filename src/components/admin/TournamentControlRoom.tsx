@@ -177,14 +177,21 @@ export function TournamentControlRoom({ tournamentId }: { tournamentId: string }
     }
   }
 
-  async function setMatchStatus(matchId: string, status: "LIVE" | "COMPLETED", winnerId?: string) {
+  async function setMatchStatus(
+  matchId: string,
+  status: "LIVE" | "COMPLETED",
+  winnerSideKey?: "A" | "B",
+) {
     setBusy(matchId);
     setError(null);
     try {
       const res = await fetch(`/api/matches/${matchId}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ status, ...(winnerId ? { winnerId } : {}) }),
+        body: JSON.stringify({
+  status,
+  ...(winnerSideKey ? { winnerSideKey } : {}),
+}),
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data.error ?? `Failed to mark match ${status.toLowerCase()}`);
@@ -610,7 +617,9 @@ async function sendBroadcastCommand(
                 busy={busy}
                 onAssign={(matchId) => void assign(matchId, station.id)}
                 onStart={(matchId) => void setMatchStatus(matchId, "LIVE")}
-                onEnd={(matchId, winnerId) => void setMatchStatus(matchId, "COMPLETED", winnerId)}
+                onEnd={(matchId, winnerSideKey) =>
+                  void setMatchStatus(matchId, "COMPLETED", winnerSideKey)
+                }
                 onCredentials={() => void getCredentials(station.id)}
                 onEndStation={() => void endStationStream(station.id)}
                 onToggleKey={() => setShowKeys((old) => ({ ...old, [station.id]: !old[station.id] }))}
@@ -747,7 +756,7 @@ function StationCard({
   busy: string | null;
   onAssign: (matchId: string) => void;
   onStart: (matchId: string) => void;
-  onEnd: (matchId: string, winnerId: string) => void;
+  onEnd: (matchId: string, winnerSideKey: "A" | "B") => void;
   onCredentials: () => void;
   onEndStation: () => void;
   onToggleKey: () => void;
@@ -782,14 +791,14 @@ function StationCard({
                 <div className="flex flex-wrap gap-2">
                   <button
                     disabled={!canOperate || busy === match.id}
-                    onClick={() => match.playerOne && onEnd(match.id, match.playerOne.id)}
+                    onClick={() => onEnd(match.id, "A")}
                     className="rounded-card border border-corner-p1/50 px-3 py-1.5 font-mono text-[10px] uppercase text-corner-p1 disabled:opacity-40"
                   >
                     End · {match.playerOne?.gamertag ?? "TBD"} wins
                   </button>
                   <button
                     disabled={!canOperate || busy === match.id}
-                    onClick={() => match.playerTwo && onEnd(match.id, match.playerTwo.id)}
+                    onClick={() => onEnd(match.id, "B")}
                     className="rounded-card border border-corner-p2/50 px-3 py-1.5 font-mono text-[10px] uppercase text-corner-p2 disabled:opacity-40"
                   >
                     End · {match.playerTwo?.gamertag ?? "TBD"} wins
