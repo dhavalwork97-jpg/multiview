@@ -85,6 +85,12 @@ eventsSubscriber.on("message", (_channel, raw) => {
       io.to(`match:${event.matchId}`).emit("clip:ready", event);
       io.to(`tournament:${event.tournamentId}`).emit("clip:ready", event);
       break;
+	      case "competition:updated":
+      io.to(`tournament:${event.tournamentId}`).emit(
+        "competition:updated",
+        event,
+      );
+      break;
   }
 });
 
