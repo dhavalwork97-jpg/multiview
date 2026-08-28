@@ -7,6 +7,19 @@ export { EVENTS_CHANNEL };
 // autocomplete and type safety on payload shape.
 export type AppEvent =
   | {
+      // A competition-level invalidation event. Viewers fetch the
+      // canonical snapshot rather than attempting to reconstruct
+      // tournament state from individual mutation events.
+      type: "competition:updated";
+      tournamentId: string;
+      reason:
+        | "MATCH_UPDATED"
+        | "RESULT_UPDATED"
+        | "STANDINGS_UPDATED"
+        | "BRACKET_UPDATED"
+        | "LIVE_STATE_UPDATED";
+    }
+  | {
       type: "match:updated";
       tournamentId: string;
       matchId: string;

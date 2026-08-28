@@ -359,6 +359,11 @@ const overlay =
     overlay: serializedState.overlay,
     commandType: command.type,
   });
+  await publishEvent({
+  type: "competition:updated",
+  tournamentId,
+  reason: "LIVE_STATE_UPDATED",
+});
 
   return NextResponse.json({
     state: serializedState,
