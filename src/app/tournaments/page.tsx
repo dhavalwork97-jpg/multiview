@@ -18,7 +18,10 @@ const STATUS_STYLE: Record<string, string> = {
 // an ID you can't otherwise discover.
 export default async function TournamentsPage() {
   const tournaments = await db.tournament.findMany({
-    where: { status: { not: "DRAFT" } },
+    where: {
+  status: { not: "DRAFT" },
+  publicEnabled: true,
+},
     orderBy: [{ status: "asc" }, { startDate: "desc" }],
     select: {
       id: true,
