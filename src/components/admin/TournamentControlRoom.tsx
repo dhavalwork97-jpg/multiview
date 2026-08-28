@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useSocket } from "@/hooks/useSocket";
 import Link from "next/link";
+import { LiveKitPlayer } from "@/components/watch/LiveKitPlayer";
 
 type BroadcastScene =
   "OFFLINE" | "WAITING" | "MATCH" | "BREAK" | "INTERMISSION" | "RESULTS";
@@ -59,6 +60,7 @@ export function TournamentControlRoom({
     overlay: null,
   });
   const [broadcastBusy, setBroadcastBusy] = useState(false);
+  const [previewStationId, setPreviewStationId] = useState<string | null>(null);
   const [overlayTitle, setOverlayTitle] = useState("");
   const [overlaySponsor, setOverlaySponsor] = useState("");
   const [overlayMessage, setOverlayMessage] = useState("");
@@ -172,6 +174,27 @@ export function TournamentControlRoom({
       socket.off("broadcast:updated", onBroadcastUpdate);
     };
   }, [refresh, socket]);
+
+  const programStation = useMemo(
+    () =>
+      stations.find((station) => station.id === broadcast.stationId) ?? null,
+    [stations, broadcast.stationId],
+  );
+  const previewStation = useMemo(
+    () => stations.find((station) => station.id === previewStationId) ?? null,
+    [stations, previewStationId],
+  );
+
+  useEffect(() => {
+    if (
+      previewStationId &&
+      stations.some((station) => station.id === previewStationId)
+    )
+      return;
+    const fallback =
+      stations.find((station) => station.id !== broadcast.stationId) ?? null;
+    setPreviewStationId(fallback?.id ?? null);
+  }, [stations, previewStationId, broadcast.stationId]);
 
   const counts = useMemo(() => {
     const result = { live: 0, ready: 0, offline: 0, alerts: 0 };
@@ -532,6 +555,128 @@ export function TournamentControlRoom({
               {broadcast.scene}
             </span>
           </div>
+        </div>
+
+        <div className="mb-4 grid gap-4 xl:grid-cols-3">
+          <div className="xl:col-span-2 rounded-card border border-signal-live/40 bg-arena-950 p-3">
+            <div className="mb-2 flex items-center justify-between gap-2">
+              <span className="font-mono text-[10px] uppercase tracking-[0.2em] text-signal-live">
+                Program
+              </span>
+              <span className="font-mono text-[10px] uppercase text-ink-faint">
+                {programStation?.label ?? "No station selected"}
+              </span>
+            </div>
+            {programStation ? (
+              <LiveKitPlayer
+                stationId={programStation.id}
+                muted={false}
+                controls
+              />
+            ) : (
+              <MonitorPlaceholder label="Select a program station to begin monitoring" />
+            )}
+          </div>
+
+          <div className="rounded-card border border-arena-700 bg-arena-950 p-3">
+            <div className="mb-2 flex items-center justify-between gap-2">
+              <span className="font-mono text-[10px] uppercase tracking-[0.2em] text-yellow-300">
+                Preview
+              </span>
+              <span className="font-mono text-[10px] uppercase text-ink-faint">
+                {previewStation?.label ?? "Select source"}
+              </span>
+            </div>
+            {previewStation ? (
+              <LiveKitPlayer
+                stationId={previewStation.id}
+                muted
+                controls={false}
+              />
+            ) : (
+              <MonitorPlaceholder label="Choose a station from multiview" />
+            )}
+            {previewStation && canOperate && (
+              <button
+                type="button"
+                disabled={
+                  broadcastBusy || previewStation.id === broadcast.stationId
+                }
+                onClick={() =>
+                  void sendBroadcastCommand({
+                    type: "SELECT_STATION",
+                    stationId: previewStation.id,
+                  })
+                }
+                className="mt-3 w-full rounded-card border border-yellow-300/40 px-3 py-2 font-mono text-[10px] uppercase tracking-wide text-yellow-300 disabled:opacity-40"
+              >
+                {previewStation.id === broadcast.stationId
+                  ? "On program"
+                  : "Take preview to program"}
+              </button>
+            )}
+          </div>
+        </div>
+
+        <div className="mb-4 rounded-card border border-arena-700 bg-arena-950 p-3">
+          <div className="mb-3 flex items-center justify-between gap-3">
+            <div>
+              <p className="font-mono text-[10px] uppercase tracking-[0.2em] text-ink-faint">
+                Multiview
+              </p>
+              <p className="mt-1 text-xs text-ink-faint">
+                Click a station to load it into Preview. Program remains
+                persistent.
+              </p>
+            </div>
+            <span className="font-mono text-[10px] uppercase text-ink-faint">
+              {stations.length} sources
+            </span>
+          </div>
+          {stations.length ? (
+            <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+              {stations.map((station) => {
+                const isProgram = station.id === broadcast.stationId;
+                const isPreview = station.id === previewStationId;
+                return (
+                  <button
+                    key={station.id}
+                    type="button"
+                    onClick={() => setPreviewStationId(station.id)}
+                    className={`overflow-hidden rounded-card border text-left transition ${
+                      isProgram
+                        ? "border-signal-live"
+                        : isPreview
+                          ? "border-yellow-300"
+                          : "border-arena-600 hover:border-arena-500"
+                    }`}
+                  >
+                    <LiveKitPlayer
+                      stationId={station.id}
+                      muted
+                      controls={false}
+                    />
+                    <div className="flex items-center justify-between gap-2 bg-arena-900 px-3 py-2">
+                      <span className="truncate text-xs font-medium">
+                        {station.label}
+                      </span>
+                      <span
+                        className={`font-mono text-[9px] uppercase ${isProgram ? "text-signal-live" : isPreview ? "text-yellow-300" : "text-ink-faint"}`}
+                      >
+                        {isProgram
+                          ? "Program"
+                          : isPreview
+                            ? "Preview"
+                            : station.status}
+                      </span>
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+          ) : (
+            <MonitorPlaceholder label="Create a station to populate multiview" />
+          )}
         </div>
 
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 xl:grid-cols-6">
@@ -984,6 +1129,14 @@ export function TournamentControlRoom({
         a match advances the bracket without touching YouTube; use “End station
         stream” only when that physical station is finished for the event.
       </p>
+    </div>
+  );
+}
+
+function MonitorPlaceholder({ label }: { label: string }) {
+  return (
+    <div className="flex aspect-video items-center justify-center rounded-card border border-dashed border-arena-600 bg-arena-900 px-4 text-center font-mono text-[10px] uppercase tracking-wide text-ink-faint">
+      {label}
     </div>
   );
 }
