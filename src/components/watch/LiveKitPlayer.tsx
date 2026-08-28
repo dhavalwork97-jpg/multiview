@@ -3,9 +3,23 @@
 import { useEffect, useRef, useState } from "react";
 import { Room, RoomEvent, Track, type RemoteTrack } from "livekit-client";
 
-export function LiveKitPlayer({ stationId }: { stationId: string }) {
+export function LiveKitPlayer({
+  stationId,
+  muted = false,
+  controls = true,
+  className = "",
+}: {
+  stationId: string;
+  /** Mute secondary Program/Preview/Multiview monitors to avoid competing audio. */
+  muted?: boolean;
+  /** Hide native controls for compact operator monitors. */
+  controls?: boolean;
+  className?: string;
+}) {
   const videoRef = useRef<HTMLVideoElement>(null);
-  const [status, setStatus] = useState<"connecting" | "connected" | "error">("connecting");
+  const [status, setStatus] = useState<"connecting" | "connected" | "error">(
+    "connecting",
+  );
   const [retryNonce, setRetryNonce] = useState(0);
 
   useEffect(() => {
@@ -18,14 +32,22 @@ export function LiveKitPlayer({ stationId }: { stationId: string }) {
       if (cancelled) return;
       setStatus("connecting");
       try {
-        const res = await fetch(`/api/stations/${stationId}/token`, { cache: "no-store" });
-        if (!res.ok) throw new Error(`Playback token request failed (${res.status})`);
+        const res = await fetch(`/api/stations/${stationId}/token`, {
+          cache: "no-store",
+        });
+        if (!res.ok)
+          throw new Error(`Playback token request failed (${res.status})`);
         const { token, wsUrl } = await res.json();
-        if (!token || !wsUrl) throw new Error("LiveKit token response is incomplete");
+        if (!token || !wsUrl)
+          throw new Error("LiveKit token response is incomplete");
 
         room = new Room();
         room.on(RoomEvent.TrackSubscribed, (track: RemoteTrack) => {
-          if ((track.kind === Track.Kind.Video || track.kind === Track.Kind.Audio) && videoRef.current) {
+          if (
+            (track.kind === Track.Kind.Video ||
+              track.kind === Track.Kind.Audio) &&
+            videoRef.current
+          ) {
             track.attach(videoRef.current);
           }
         });
@@ -50,7 +72,12 @@ export function LiveKitPlayer({ stationId }: { stationId: string }) {
         for (const publication of room.remoteParticipants.values()) {
           for (const pub of publication.trackPublications.values()) {
             const track = pub.track;
-            if (track && (track.kind === Track.Kind.Video || track.kind === Track.Kind.Audio) && videoRef.current) {
+            if (
+              track &&
+              (track.kind === Track.Kind.Video ||
+                track.kind === Track.Kind.Audio) &&
+              videoRef.current
+            ) {
               track.attach(videoRef.current);
             }
           }
@@ -77,8 +104,17 @@ export function LiveKitPlayer({ stationId }: { stationId: string }) {
   }, [stationId, retryNonce]);
 
   return (
-    <div className="relative aspect-video w-full overflow-hidden rounded-card bg-arena-900">
-      <video ref={videoRef} autoPlay playsInline controls className="h-full w-full" />
+    <div
+      className={`relative aspect-video w-full overflow-hidden rounded-card bg-arena-900 ${className}`}
+    >
+      <video
+        ref={videoRef}
+        autoPlay
+        playsInline
+        muted={muted}
+        controls={controls}
+        className="h-full w-full object-contain"
+      />
       {status === "connecting" && (
         <p className="absolute inset-0 flex items-center justify-center text-sm text-ink-muted">
           Connecting to live stream…
