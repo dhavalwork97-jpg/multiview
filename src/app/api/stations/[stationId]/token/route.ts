@@ -9,7 +9,10 @@ import { mintViewerToken, roomNameForStation } from "@/lib/livekit";
 // public — see STREAMING_ARCHITECTURE.md on why we don't sign HLS URLs
 // yet). Signed-out viewers get an anonymous identity so low-latency mode
 // still works without requiring an account.
-export async function GET(_req: Request, { params }: { params: Promise<{ stationId: string }> }) {
+export async function GET(
+  _req: Request,
+  { params }: { params: Promise<{ stationId: string }> },
+) {
   const { stationId } = await params;
 
   const station = await db.station.findUnique({ where: { id: stationId } });
@@ -26,7 +29,10 @@ export async function GET(_req: Request, { params }: { params: Promise<{ station
   const wsUrl = process.env.LIVEKIT_WS_URL;
   if (!wsUrl) {
     console.error("[livekit token] LIVEKIT_WS_URL is not configured");
-    return NextResponse.json({ error: "LiveKit playback is not configured" }, { status: 503 });
+    return NextResponse.json(
+      { error: "LiveKit playback is not configured" },
+      { status: 503 },
+    );
   }
 
   const user = await getCurrentUser();
