@@ -33,10 +33,9 @@ export function useCompetitionViewerState(
   useEffect(() => {
     let timer: ReturnType<typeof setTimeout> | undefined;
 
-    // Debounce because one result can generate match + bracket +
-    // competition events within milliseconds.
     const handleUpdate = () => {
       if (timer) clearTimeout(timer);
+
       timer = setTimeout(() => {
         void refresh();
       }, 150);
@@ -46,6 +45,7 @@ export function useCompetitionViewerState(
 
     return () => {
       socket.off("competition:updated", handleUpdate);
+
       if (timer) clearTimeout(timer);
     };
   }, [socket, refresh]);
