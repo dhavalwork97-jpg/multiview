@@ -633,11 +633,13 @@ export function TournamentControlRoom({
               {stations.length} sources
             </span>
           </div>
+
           {stations.length ? (
             <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
               {stations.map((station) => {
                 const isProgram = station.id === broadcast.stationId;
                 const isPreview = station.id === previewStationId;
+
                 return (
                   <button
                     key={station.id}
@@ -651,17 +653,38 @@ export function TournamentControlRoom({
                           : "border-arena-600 hover:border-arena-500"
                     }`}
                   >
-                    <LiveKitPlayer
-                      stationId={station.id}
-                      muted
-                      controls={false}
-                    />
+                    {isProgram || isPreview ? (
+                      <div className="flex aspect-video items-center justify-center bg-arena-900 px-4 text-center">
+                        <span
+                          className={`font-mono text-[10px] uppercase tracking-[0.16em] ${
+                            isProgram ? "text-signal-live" : "text-yellow-300"
+                          }`}
+                        >
+                          {isProgram
+                            ? "Currently on Program monitor"
+                            : "Currently on Preview monitor"}
+                        </span>
+                      </div>
+                    ) : (
+                      <LiveKitPlayer
+                        stationId={station.id}
+                        muted
+                        controls={false}
+                      />
+                    )}
+
                     <div className="flex items-center justify-between gap-2 bg-arena-900 px-3 py-2">
                       <span className="truncate text-xs font-medium">
                         {station.label}
                       </span>
                       <span
-                        className={`font-mono text-[9px] uppercase ${isProgram ? "text-signal-live" : isPreview ? "text-yellow-300" : "text-ink-faint"}`}
+                        className={`font-mono text-[9px] uppercase ${
+                          isProgram
+                            ? "text-signal-live"
+                            : isPreview
+                              ? "text-yellow-300"
+                              : "text-ink-faint"
+                        }`}
                       >
                         {isProgram
                           ? "Program"
