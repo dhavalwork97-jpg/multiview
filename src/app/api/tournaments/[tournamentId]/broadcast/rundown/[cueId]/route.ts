@@ -7,8 +7,7 @@ import { requireTournamentManage } from "@/lib/auth";
 const schema = z
   .object({
     title: z.string().min(1).max(160).optional(),
-    action: z.enum(["TAKE", "COMPLETE", "SKIP"]).optional(),
-    position: z.number().int().min(0).optional(),
+    action: z.enum(["TAKE", "COMPLETE", "SKIP", "MOVE_UP", "MOVE_DOWN"]).optional(),
     durationSec: z
       .number()
       .int()
@@ -65,7 +64,6 @@ export async function PATCH(req: Request, { params }: Ctx) {
     ...(input.durationSec !== undefined
       ? { durationSec: input.durationSec }
       : {}),
-    ...(input.position !== undefined ? { position: input.position } : {}),
     ...(input.payload !== undefined
       ? {
           payload:
@@ -78,6 +76,34 @@ export async function PATCH(req: Request, { params }: Ctx) {
 
   if (input.action) {
     const now = new Date();
+
+    if (input.action === "MOVE_UP" || input.action === "MOVE_DOWN") {
+      if (cue.status === "LIVE") {
+        return NextResponse.json({ error: "The live cue cannot be reordered" }, { status: 409 });
+      }
+
+      const ordered = await db.broadcastCue.findMany({
+        where: { tournamentId },
+        orderBy: [{ position: "asc" }, { createdAt: "asc" }],
+        select: { id: true, position: true },
+      });
+      const index = ordered.findIndex((item) => item.id === cueId);
+      const targetIndex = input.action === "MOVE_UP" ? index - 1 : index + 1;
+
+      if (index < 0 || targetIndex < 0 || targetIndex >= ordered.length) {
+        return NextResponse.json({ cue });
+      }
+
+      const neighbor = ordered[targetIndex];
+      if (!neighbor) return NextResponse.json({ cue });
+      if (ordered.some((item) => item.id === neighbor.id && item.id !== cueId)) {
+        const [updated] = await db.$transaction([
+          db.broadcastCue.update({ where: { id: cueId }, data: { position: neighbor.position } }),
+          db.broadcastCue.update({ where: { id: neighbor.id }, data: { position: cue.position } }),
+        ]);
+        return NextResponse.json({ cue: updated });
+      }
+    }
 
     if (input.action === "TAKE") {
       if (cue.status !== "PENDING") {

@@ -234,7 +234,7 @@ export function TournamentControlRoom({
     return result;
   }, [stations]);
 
-  async function operateCue(cueId: string, action: "TAKE" | "COMPLETE" | "SKIP") {
+  async function operateCue(cueId: string, action: "TAKE" | "COMPLETE" | "SKIP" | "MOVE_UP" | "MOVE_DOWN") {
     setRundownBusy(cueId);
     setError(null);
     try {
@@ -650,7 +650,7 @@ export function TournamentControlRoom({
                     {canOperate && <div className="flex flex-wrap gap-2">
                       {cue.status === "PENDING" && <><button type="button" disabled={isBusy} onClick={() => void operateCue(cue.id, "TAKE")} className="rounded-card border border-signal-live/40 px-3 py-2 font-mono text-[10px] uppercase text-signal-live disabled:opacity-40">{isBusy ? "Working…" : "Take"}</button><button type="button" disabled={isBusy} onClick={() => void operateCue(cue.id, "SKIP")} className="rounded-card border border-arena-600 px-3 py-2 font-mono text-[10px] uppercase text-ink-faint disabled:opacity-40">Skip</button></>}
                       {cue.status === "LIVE" && <button type="button" disabled={isBusy} onClick={() => void operateCue(cue.id, "COMPLETE")} className="rounded-card border border-signal-live/40 px-3 py-2 font-mono text-[10px] uppercase text-signal-live disabled:opacity-40">{isBusy ? "Working…" : "Complete"}</button>}
-                      {cue.status !== "LIVE" && <><button type="button" disabled={isBusy} onClick={() => beginEditCue(cue)} className="rounded-card border border-arena-600 px-3 py-2 font-mono text-[10px] uppercase text-ink-faint">Edit</button><button type="button" disabled={isBusy} onClick={() => void deleteCue(cue.id)} className="rounded-card border border-signal-error/40 px-3 py-2 font-mono text-[10px] uppercase text-signal-error disabled:opacity-40">Delete</button></>}
+                      {cue.status !== "LIVE" && <><button type="button" disabled={isBusy || index === 0} onClick={() => void operateCue(cue.id, "MOVE_UP")} className="rounded-card border border-arena-600 px-3 py-2 font-mono text-[10px] uppercase text-ink-faint disabled:opacity-40" aria-label={`Move ${cue.title} up`}>↑</button><button type="button" disabled={isBusy || index === rundown.length - 1} onClick={() => void operateCue(cue.id, "MOVE_DOWN")} className="rounded-card border border-arena-600 px-3 py-2 font-mono text-[10px] uppercase text-ink-faint disabled:opacity-40" aria-label={`Move ${cue.title} down`}>↓</button><button type="button" disabled={isBusy} onClick={() => beginEditCue(cue)} className="rounded-card border border-arena-600 px-3 py-2 font-mono text-[10px] uppercase text-ink-faint">Edit</button><button type="button" disabled={isBusy} onClick={() => void deleteCue(cue.id)} className="rounded-card border border-signal-error/40 px-3 py-2 font-mono text-[10px] uppercase text-signal-error disabled:opacity-40">Delete</button></>}
                     </div>}
                   </div>
                 </div>
