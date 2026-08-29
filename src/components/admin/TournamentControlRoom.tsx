@@ -74,6 +74,13 @@ export function TournamentControlRoom({
   const [rundown, setRundown] = useState<BroadcastCue[]>([]);
   const [rundownLoading, setRundownLoading] = useState(true);
   const [rundownBusy, setRundownBusy] = useState<string | null>(null);
+  const [newCueTitle, setNewCueTitle] = useState("");
+  const [newCueType, setNewCueType] = useState("CUSTOM");
+  const [newCueDuration, setNewCueDuration] = useState("");
+  const [showCueForm, setShowCueForm] = useState(false);
+  const [editingCueId, setEditingCueId] = useState<string | null>(null);
+  const [editCueTitle, setEditCueTitle] = useState("");
+  const [editCueDuration, setEditCueDuration] = useState("");
   const [previewStationId, setPreviewStationId] = useState<string | null>(null);
   const [overlayTitle, setOverlayTitle] = useState("");
   const [overlaySponsor, setOverlaySponsor] = useState("");
@@ -244,6 +251,37 @@ export function TournamentControlRoom({
     } finally {
       setRundownBusy(null);
     }
+  }
+
+  async function createCue() {
+    const title = newCueTitle.trim();
+    if (!title) return setError("Cue title is required");
+    const durationSec = newCueDuration.trim() ? Number(newCueDuration) : null;
+    if (durationSec !== null && (!Number.isInteger(durationSec) || durationSec <= 0)) return setError("Duration must be a positive whole number of seconds");
+    setRundownBusy("create"); setError(null);
+    try {
+      const res = await fetch(`/api/tournaments/${tournamentId}/broadcast/rundown`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ title, cueType: newCueType, durationSec }) });
+      const data = await res.json().catch(() => ({})); if (!res.ok) throw new Error(data.error ?? "Failed to create rundown cue");
+      setNewCueTitle(""); setNewCueType("CUSTOM"); setNewCueDuration(""); setShowCueForm(false); await refresh();
+    } catch (e) { setError(e instanceof Error ? e.message : "Failed to create rundown cue"); } finally { setRundownBusy(null); }
+  }
+
+  function beginEditCue(cue: BroadcastCue) { setEditingCueId(cue.id); setEditCueTitle(cue.title); setEditCueDuration(cue.durationSec?.toString() ?? ""); setError(null); }
+
+  async function saveCue(cueId: string) {
+    const title = editCueTitle.trim(); if (!title) return setError("Cue title is required");
+    const durationSec = editCueDuration.trim() ? Number(editCueDuration) : null;
+    if (durationSec !== null && (!Number.isInteger(durationSec) || durationSec <= 0)) return setError("Duration must be a positive whole number of seconds");
+    setRundownBusy(cueId); setError(null);
+    try { const res = await fetch(`/api/tournaments/${tournamentId}/broadcast/rundown/${cueId}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ title, durationSec }) }); const data = await res.json().catch(() => ({})); if (!res.ok) throw new Error(data.error ?? "Failed to save rundown cue"); setEditingCueId(null); await refresh(); }
+    catch (e) { setError(e instanceof Error ? e.message : "Failed to save rundown cue"); } finally { setRundownBusy(null); }
+  }
+
+  async function deleteCue(cueId: string) {
+    if (!window.confirm("Delete this rundown cue?")) return;
+    setRundownBusy(cueId); setError(null);
+    try { const res = await fetch(`/api/tournaments/${tournamentId}/broadcast/rundown/${cueId}`, { method: "DELETE" }); const data = await res.json().catch(() => ({})); if (!res.ok) throw new Error(data.error ?? "Failed to delete rundown cue"); if (editingCueId === cueId) setEditingCueId(null); await refresh(); }
+    catch (e) { setError(e instanceof Error ? e.message : "Failed to delete rundown cue"); } finally { setRundownBusy(null); }
   }
 
   async function createStation() {
@@ -581,12 +619,17 @@ export function TournamentControlRoom({
             <p className="font-mono text-[10px] uppercase tracking-[0.2em] text-ink-faint">Broadcast rundown</p>
             <h2 className="font-display text-xl uppercase tracking-wide">Director queue</h2>
           </div>
-          <span className="font-mono text-[10px] uppercase text-ink-faint">{rundown.length} cues</span>
+          <div className="flex items-center gap-3"><span className="font-mono text-[10px] uppercase text-ink-faint">{rundown.length} cues</span>{canOperate && <button type="button" onClick={() => setShowCueForm((value) => !value)} className="rounded-card border border-signal-live/40 px-3 py-2 font-mono text-[10px] uppercase text-signal-live">{showCueForm ? "Cancel" : "+ Add cue"}</button>}</div>
         </div>
+        {showCueForm && <div className="mb-4 grid gap-3 rounded-card border border-arena-700 bg-arena-950 p-3 sm:grid-cols-4">
+          <input value={newCueTitle} onChange={(e) => setNewCueTitle(e.target.value)} placeholder="Cue title" className="rounded-card border border-arena-600 bg-arena-900 px-3 py-2 text-sm sm:col-span-2" />
+          <select value={newCueType} onChange={(e) => setNewCueType(e.target.value)} className="rounded-card border border-arena-600 bg-arena-900 px-3 py-2 text-sm">{["MATCH","BREAK","INTERMISSION","RESULTS","SPONSOR","LOWER_THIRD","VIDEO","CUSTOM"].map((type) => <option key={type}>{type}</option>)}</select>
+          <div className="flex gap-2"><input value={newCueDuration} onChange={(e) => setNewCueDuration(e.target.value)} inputMode="numeric" placeholder="Seconds" className="min-w-0 flex-1 rounded-card border border-arena-600 bg-arena-900 px-3 py-2 text-sm" /><button type="button" disabled={rundownBusy === "create"} onClick={() => void createCue()} className="rounded-card border border-signal-live/40 px-3 py-2 font-mono text-[10px] uppercase text-signal-live disabled:opacity-40">{rundownBusy === "create" ? "Adding…" : "Add"}</button></div>
+        </div>}
         {rundownLoading ? (
           <p className="text-sm text-ink-faint">Loading rundown…</p>
         ) : rundown.length === 0 ? (
-          <p className="rounded-card border border-dashed border-arena-700 p-4 text-sm text-ink-faint">No cues in the rundown yet. Cue creation will be added in the next V31.5 increment.</p>
+          <p className="rounded-card border border-dashed border-arena-700 p-4 text-sm text-ink-faint">No cues in the rundown yet. Add the first item to build the show.</p>
         ) : (
           <div className="space-y-2">
             {rundown.map((cue, index) => {
@@ -607,6 +650,7 @@ export function TournamentControlRoom({
                     {canOperate && <div className="flex flex-wrap gap-2">
                       {cue.status === "PENDING" && <><button type="button" disabled={isBusy} onClick={() => void operateCue(cue.id, "TAKE")} className="rounded-card border border-signal-live/40 px-3 py-2 font-mono text-[10px] uppercase text-signal-live disabled:opacity-40">{isBusy ? "Working…" : "Take"}</button><button type="button" disabled={isBusy} onClick={() => void operateCue(cue.id, "SKIP")} className="rounded-card border border-arena-600 px-3 py-2 font-mono text-[10px] uppercase text-ink-faint disabled:opacity-40">Skip</button></>}
                       {cue.status === "LIVE" && <button type="button" disabled={isBusy} onClick={() => void operateCue(cue.id, "COMPLETE")} className="rounded-card border border-signal-live/40 px-3 py-2 font-mono text-[10px] uppercase text-signal-live disabled:opacity-40">{isBusy ? "Working…" : "Complete"}</button>}
+                      {cue.status !== "LIVE" && <><button type="button" disabled={isBusy} onClick={() => beginEditCue(cue)} className="rounded-card border border-arena-600 px-3 py-2 font-mono text-[10px] uppercase text-ink-faint">Edit</button><button type="button" disabled={isBusy} onClick={() => void deleteCue(cue.id)} className="rounded-card border border-signal-error/40 px-3 py-2 font-mono text-[10px] uppercase text-signal-error disabled:opacity-40">Delete</button></>}
                     </div>}
                   </div>
                 </div>
