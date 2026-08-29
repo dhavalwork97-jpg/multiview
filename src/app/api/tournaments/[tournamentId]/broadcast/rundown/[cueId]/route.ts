@@ -19,6 +19,7 @@ const schema = z
       .record(z.string(), z.unknown())
       .nullable()
       .optional(),
+    matchId: z.string().min(1).nullable().optional(),
   })
   .refine((v) => Object.keys(v).length > 0);
 
@@ -59,17 +60,31 @@ export async function PATCH(req: Request, { params }: Ctx) {
 
   const input = parsed.data;
 
+  if (input.matchId !== undefined) {
+    if (cue.cueType !== "MATCH") {
+      return NextResponse.json({ error: "Only MATCH cues can reference a match" }, { status: 400 });
+    }
+    if (!input.matchId) {
+      return NextResponse.json({ error: "A match cue requires a tournament match" }, { status: 400 });
+    }
+    const match = await db.match.findFirst({ where: { id: input.matchId, tournamentId }, select: { id: true } });
+    if (!match) return NextResponse.json({ error: "Match not found in this tournament" }, { status: 400 });
+  }
+
   const updateData: Prisma.BroadcastCueUpdateInput = {
     ...(input.title !== undefined ? { title: input.title } : {}),
     ...(input.durationSec !== undefined
       ? { durationSec: input.durationSec }
       : {}),
-    ...(input.payload !== undefined
+    ...(input.payload !== undefined || input.matchId !== undefined
       ? {
           payload:
             input.payload === null
               ? Prisma.JsonNull
-              : (input.payload as Prisma.InputJsonValue),
+              : ({
+                  ...((input.payload ?? (cue.payload as Record<string, unknown> | null) ?? {}) as Record<string, unknown>),
+                  ...(input.matchId !== undefined ? { matchId: input.matchId } : {}),
+                } as Prisma.InputJsonValue),
         }
       : {}),
   };

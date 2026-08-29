@@ -57,6 +57,7 @@ type BroadcastCue = {
   durationSec: number | null;
   startedAt: string | null;
   completedAt: string | null;
+  payload?: Record<string, unknown> | null;
 };
 
 export function TournamentControlRoom({
@@ -78,10 +79,12 @@ export function TournamentControlRoom({
   const [newCueTitle, setNewCueTitle] = useState("");
   const [newCueType, setNewCueType] = useState("CUSTOM");
   const [newCueDuration, setNewCueDuration] = useState("");
+  const [newCueMatchId, setNewCueMatchId] = useState("");
   const [showCueForm, setShowCueForm] = useState(false);
   const [editingCueId, setEditingCueId] = useState<string | null>(null);
   const [editCueTitle, setEditCueTitle] = useState("");
   const [editCueDuration, setEditCueDuration] = useState("");
+  const [editCueMatchId, setEditCueMatchId] = useState("");
   const [previewStationId, setPreviewStationId] = useState<string | null>(null);
   const [overlayTitle, setOverlayTitle] = useState("");
   const [overlaySponsor, setOverlaySponsor] = useState("");
@@ -232,6 +235,11 @@ export function TournamentControlRoom({
     return () => window.clearInterval(timer);
   }, [rundown]);
 
+  function formatMatchLabel(match: Match) {
+    const players = `${match.playerOne?.gamertag ?? "TBD"} vs ${match.playerTwo?.gamertag ?? "TBD"}`;
+    return [match.round, players].filter(Boolean).join(" · ");
+  }
+
   function formatRundownTime(totalSeconds: number) {
     const safeSeconds = Math.max(0, Math.floor(totalSeconds));
     const hours = Math.floor(safeSeconds / 3600);
@@ -275,24 +283,26 @@ export function TournamentControlRoom({
   async function createCue() {
     const title = newCueTitle.trim();
     if (!title) return setError("Cue title is required");
+    if (newCueType === "MATCH" && !newCueMatchId) return setError("Select a tournament match for a MATCH cue");
     const durationSec = newCueDuration.trim() ? Number(newCueDuration) : null;
     if (durationSec !== null && (!Number.isInteger(durationSec) || durationSec <= 0)) return setError("Duration must be a positive whole number of seconds");
     setRundownBusy("create"); setError(null);
     try {
-      const res = await fetch(`/api/tournaments/${tournamentId}/broadcast/rundown`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ title, cueType: newCueType, durationSec }) });
+      const res = await fetch(`/api/tournaments/${tournamentId}/broadcast/rundown`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ title, cueType: newCueType, durationSec, ...(newCueType === "MATCH" ? { matchId: newCueMatchId } : {}) }) });
       const data = await res.json().catch(() => ({})); if (!res.ok) throw new Error(data.error ?? "Failed to create rundown cue");
-      setNewCueTitle(""); setNewCueType("CUSTOM"); setNewCueDuration(""); setShowCueForm(false); await refresh();
+      setNewCueTitle(""); setNewCueType("CUSTOM"); setNewCueDuration(""); setNewCueMatchId(""); setShowCueForm(false); await refresh();
     } catch (e) { setError(e instanceof Error ? e.message : "Failed to create rundown cue"); } finally { setRundownBusy(null); }
   }
 
-  function beginEditCue(cue: BroadcastCue) { setEditingCueId(cue.id); setEditCueTitle(cue.title); setEditCueDuration(cue.durationSec?.toString() ?? ""); setError(null); }
+  function beginEditCue(cue: BroadcastCue) { setEditingCueId(cue.id); setEditCueTitle(cue.title); setEditCueDuration(cue.durationSec?.toString() ?? ""); setEditCueMatchId(typeof cue.payload?.matchId === "string" ? cue.payload.matchId : ""); setError(null); }
 
   async function saveCue(cueId: string) {
     const title = editCueTitle.trim(); if (!title) return setError("Cue title is required");
+    if (rundown.find((cue) => cue.id === cueId)?.cueType === "MATCH" && !editCueMatchId) return setError("Select a tournament match for a MATCH cue");
     const durationSec = editCueDuration.trim() ? Number(editCueDuration) : null;
     if (durationSec !== null && (!Number.isInteger(durationSec) || durationSec <= 0)) return setError("Duration must be a positive whole number of seconds");
     setRundownBusy(cueId); setError(null);
-    try { const res = await fetch(`/api/tournaments/${tournamentId}/broadcast/rundown/${cueId}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ title, durationSec }) }); const data = await res.json().catch(() => ({})); if (!res.ok) throw new Error(data.error ?? "Failed to save rundown cue"); setEditingCueId(null); await refresh(); }
+    try { const res = await fetch(`/api/tournaments/${tournamentId}/broadcast/rundown/${cueId}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ title, durationSec, ...(rundown.find((cue) => cue.id === cueId)?.cueType === "MATCH" ? { matchId: editCueMatchId } : {}) }) }); const data = await res.json().catch(() => ({})); if (!res.ok) throw new Error(data.error ?? "Failed to save rundown cue"); setEditingCueId(null); await refresh(); }
     catch (e) { setError(e instanceof Error ? e.message : "Failed to save rundown cue"); } finally { setRundownBusy(null); }
   }
 
@@ -642,8 +652,9 @@ export function TournamentControlRoom({
         </div>
         {showCueForm && <div className="mb-4 grid gap-3 rounded-card border border-arena-700 bg-arena-950 p-3 sm:grid-cols-4">
           <input value={newCueTitle} onChange={(e) => setNewCueTitle(e.target.value)} placeholder="Cue title" className="rounded-card border border-arena-600 bg-arena-900 px-3 py-2 text-sm sm:col-span-2" />
-          <select value={newCueType} onChange={(e) => setNewCueType(e.target.value)} className="rounded-card border border-arena-600 bg-arena-900 px-3 py-2 text-sm">{["MATCH","BREAK","INTERMISSION","RESULTS","SPONSOR","LOWER_THIRD","VIDEO","CUSTOM"].map((type) => <option key={type}>{type}</option>)}</select>
+          <select value={newCueType} onChange={(e) => { setNewCueType(e.target.value); if (e.target.value !== "MATCH") setNewCueMatchId(""); }} className="rounded-card border border-arena-600 bg-arena-900 px-3 py-2 text-sm">{["MATCH","BREAK","INTERMISSION","RESULTS","SPONSOR","LOWER_THIRD","VIDEO","CUSTOM"].map((type) => <option key={type}>{type}</option>)}</select>
           <div className="flex gap-2"><input value={newCueDuration} onChange={(e) => setNewCueDuration(e.target.value)} inputMode="numeric" placeholder="Seconds" className="min-w-0 flex-1 rounded-card border border-arena-600 bg-arena-900 px-3 py-2 text-sm" /><button type="button" disabled={rundownBusy === "create"} onClick={() => void createCue()} className="rounded-card border border-signal-live/40 px-3 py-2 font-mono text-[10px] uppercase text-signal-live disabled:opacity-40">{rundownBusy === "create" ? "Adding…" : "Add"}</button></div>
+          {newCueType === "MATCH" && <select value={newCueMatchId} onChange={(e) => setNewCueMatchId(e.target.value)} className="rounded-card border border-arena-600 bg-arena-900 px-3 py-2 text-sm sm:col-span-4"><option value="">Select tournament match…</option>{queued.map((match) => <option key={match.id} value={match.id}>{formatMatchLabel(match)}</option>)}</select>}
         </div>}
         {rundownLoading ? (
           <p className="text-sm text-ink-faint">Loading rundown…</p>
@@ -671,6 +682,7 @@ export function TournamentControlRoom({
                         {cue.status === "LIVE" && <span className="rounded px-2 py-0.5 font-mono text-[9px] uppercase text-signal-live border border-signal-live/40">ON AIR</span>}
                         {next && <span className="font-mono text-[9px] uppercase text-yellow-300">Next</span>}
                       </div>
+                      {cue.cueType === "MATCH" && (() => { const match = queued.find((item) => item.id === cue.payload?.matchId); return match ? <div className="mt-1 text-xs text-ink-faint">{formatMatchLabel(match)}</div> : <div className="mt-1 text-xs text-signal-error">Linked match unavailable</div>; })()}
                       <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 font-mono text-[10px] uppercase text-ink-faint">
                         <span>{cue.cueType} · {cue.status}</span>
                         {cue.durationSec !== null && <span>Plan {formatRundownTime(cue.durationSec)}</span>}
@@ -684,6 +696,7 @@ export function TournamentControlRoom({
                       {cue.status !== "LIVE" && <><button type="button" disabled={isBusy || index === 0} onClick={() => void operateCue(cue.id, "MOVE_UP")} className="rounded-card border border-arena-600 px-3 py-2 font-mono text-[10px] uppercase text-ink-faint disabled:opacity-40" aria-label={`Move ${cue.title} up`}>↑</button><button type="button" disabled={isBusy || index === rundown.length - 1} onClick={() => void operateCue(cue.id, "MOVE_DOWN")} className="rounded-card border border-arena-600 px-3 py-2 font-mono text-[10px] uppercase text-ink-faint disabled:opacity-40" aria-label={`Move ${cue.title} down`}>↓</button><button type="button" disabled={isBusy} onClick={() => beginEditCue(cue)} className="rounded-card border border-arena-600 px-3 py-2 font-mono text-[10px] uppercase text-ink-faint">Edit</button><button type="button" disabled={isBusy} onClick={() => void deleteCue(cue.id)} className="rounded-card border border-signal-error/40 px-3 py-2 font-mono text-[10px] uppercase text-signal-error disabled:opacity-40">Delete</button></>}
                     </div>}
                   </div>
+                  {editingCueId === cue.id && <div className="mt-3 grid gap-2 border-t border-arena-700 pt-3 sm:grid-cols-3"><input value={editCueTitle} onChange={(e) => setEditCueTitle(e.target.value)} placeholder="Cue title" className="rounded-card border border-arena-600 bg-arena-900 px-3 py-2 text-sm" /><input value={editCueDuration} onChange={(e) => setEditCueDuration(e.target.value)} inputMode="numeric" placeholder="Seconds" className="rounded-card border border-arena-600 bg-arena-900 px-3 py-2 text-sm" />{cue.cueType === "MATCH" && <select value={editCueMatchId} onChange={(e) => setEditCueMatchId(e.target.value)} className="rounded-card border border-arena-600 bg-arena-900 px-3 py-2 text-sm"><option value="">Select tournament match…</option>{queued.map((match) => <option key={match.id} value={match.id}>{formatMatchLabel(match)}</option>)}</select>}<div className="flex gap-2"><button type="button" disabled={isBusy} onClick={() => void saveCue(cue.id)} className="rounded-card border border-signal-live/40 px-3 py-2 font-mono text-[10px] uppercase text-signal-live">Save</button><button type="button" onClick={() => setEditingCueId(null)} className="rounded-card border border-arena-600 px-3 py-2 font-mono text-[10px] uppercase text-ink-faint">Cancel</button></div></div>}
                 </div>
               );
             })}

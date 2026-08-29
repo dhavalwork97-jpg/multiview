@@ -20,6 +20,7 @@ const createSchema = z.object({
     .default("CUSTOM"),
   durationSec: z.number().int().positive().max(86400).nullable().optional(),
   payload: z.record(z.string(), z.unknown()).optional(),
+  matchId: z.string().min(1).optional(),
 });
 
 type Ctx = {
@@ -63,12 +64,24 @@ export async function POST(req: Request, { params }: Ctx) {
     );
   }
 
+  const input = parsed.data;
+
+  if (input.cueType === "MATCH") {
+    if (!input.matchId) {
+      return NextResponse.json({ error: "A match cue requires a tournament match" }, { status: 400 });
+    }
+    const match = await db.match.findFirst({ where: { id: input.matchId, tournamentId }, select: { id: true } });
+    if (!match) {
+      return NextResponse.json({ error: "Match not found in this tournament" }, { status: 400 });
+    }
+  } else if (input.matchId) {
+    return NextResponse.json({ error: "Only MATCH cues can reference a match" }, { status: 400 });
+  }
+
   const last = await db.broadcastCue.aggregate({
     where: { tournamentId },
     _max: { position: true },
   });
-
-  const input = parsed.data;
 
   const cue = await db.broadcastCue.create({
     data: {
@@ -77,9 +90,9 @@ export async function POST(req: Request, { params }: Ctx) {
       title: input.title,
       cueType: input.cueType,
       durationSec: input.durationSec ?? undefined,
-      ...(input.payload !== undefined
+      ...(input.payload !== undefined || input.matchId !== undefined
         ? {
-            payload: input.payload as Prisma.InputJsonValue,
+            payload: { ...(input.payload ?? {}), ...(input.matchId ? { matchId: input.matchId } : {}) } as Prisma.InputJsonValue,
           }
         : {}),
     },
