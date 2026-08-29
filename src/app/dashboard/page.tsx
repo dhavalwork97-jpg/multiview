@@ -10,6 +10,9 @@ import { RecommendedStrip } from "@/components/dashboard/RecommendedStrip";
 import { getPrimaryOrganizationMembership } from "@/lib/organization";
 import { NotificationBell } from "@/components/notifications/NotificationBell";
 
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
+
 export default async function DashboardPage() {
   const user = await getCurrentUser();
   if (!user) redirect("/sign-in");
