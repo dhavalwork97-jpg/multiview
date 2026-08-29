@@ -803,71 +803,74 @@ export function TournamentControlRoom({
           </div>
 
           {stations.length ? (
-            <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-              {stations.map((station) => {
-                const isProgram = station.id === broadcast.stationId;
-                const isPreview = station.id === previewStationId;
+  <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+    {stations.map((station) => {
+      const isProgram = station.id === broadcast.stationId;
+      const isPreview = station.id === previewStationId;
 
-                return (
-                  <button
-                    key={station.id}
-                    type="button"
-                    onClick={() => setPreviewStationId(station.id)}
-                    className={`overflow-hidden rounded-card border text-left transition ${
-                      isProgram
-                        ? "border-signal-live"
-                        : isPreview
-                          ? "border-yellow-300"
-                          : "border-arena-600 hover:border-arena-500"
-                    }`}
-                  >
-                    {isProgram || isPreview ? (
-                      <div className="flex aspect-video items-center justify-center bg-arena-900 px-4 text-center">
-                        <span
-                          className={`font-mono text-[10px] uppercase tracking-[0.16em] ${
-                            isProgram ? "text-signal-live" : "text-yellow-300"
-                          }`}
-                        >
-                          {isProgram
-                            ? "Currently on Program monitor"
-                            : "Currently on Preview monitor"}
-                        </span>
-                      </div>
-                    ) : (
-                      <LiveKitPlayer
-                        stationId={station.id}
-                        muted
-                        controls={false}
-                      />
-                    )}
-
-                    <div className="flex items-center justify-between gap-2 bg-arena-900 px-3 py-2">
-                      <span className="truncate text-xs font-medium">
-                        {station.label}
-                      </span>
-                      <span
-                        className={`font-mono text-[9px] uppercase ${
-                          isProgram
-                            ? "text-signal-live"
-                            : isPreview
-                              ? "text-yellow-300"
-                              : "text-ink-faint"
-                        }`}
-                      >
-                        {isProgram
-                          ? "Program"
-                          : isPreview
-                            ? "Preview"
-                            : station.status}
-                      </span>
-                    </div>
-                  </button>
-                );
-              })}
+      return (
+        <div
+          key={station.id}
+          role="button"
+          tabIndex={0}
+          onClick={() => setPreviewStationId(station.id)}
+          onKeyDown={(event) => {
+            if (event.key === "Enter" || event.key === " ") {
+              event.preventDefault();
+              setPreviewStationId(station.id);
+            }
+          }}
+          className={`cursor-pointer overflow-hidden rounded-card border text-left transition ${
+            isProgram
+              ? "border-signal-live"
+              : isPreview
+                ? "border-yellow-300"
+                : "border-arena-600 hover:border-arena-500"
+          }`}
+        >
+          {isProgram || isPreview ? (
+            <div className="flex aspect-video items-center justify-center bg-arena-900 px-4 text-center">
+              <span className={`font-mono text-[10px] uppercase tracking-[0.16em] ${
+                isProgram ? "text-signal-live" : "text-yellow-300"
+              }`}>
+                {isProgram
+                  ? "Currently on Program monitor"
+                  : "Currently on Preview monitor"}
+              </span>
             </div>
           ) : (
-            <MonitorPlaceholder label="Create a station to populate multiview" />
+            <LiveKitPlayer
+              stationId={station.id}
+              muted
+              controls={false}
+            />
           )}
+
+          <div className="flex items-center justify-between gap-2 bg-arena-900 px-3 py-2">
+            <span className="truncate text-xs font-medium">
+              {station.label}
+            </span>
+            <span className={`font-mono text-[9px] uppercase ${
+              isProgram
+                ? "text-signal-live"
+                : isPreview
+                  ? "text-yellow-300"
+                  : "text-ink-faint"
+            }`}>
+              {isProgram
+                ? "Program"
+                : isPreview
+                  ? "Preview"
+                  : station.status}
+            </span>
+          </div>
+        </div>
+      );
+    })}
+  </div>
+) : (
+  <MonitorPlaceholder label="Create a station to populate multiview" />
+)}
         </div>
 
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 xl:grid-cols-6">
