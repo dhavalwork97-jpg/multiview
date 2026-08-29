@@ -3,6 +3,7 @@ import { Prisma } from "@prisma/client";
 import { z } from "zod";
 import { db } from "@/lib/db";
 import { requireTournamentManage } from "@/lib/auth";
+import { canTransition, canReorder } from "@/lib/rundown-policy";
 
 const schema = z
   .object({
@@ -93,7 +94,7 @@ export async function PATCH(req: Request, { params }: Ctx) {
     const now = new Date();
 
     if (input.action === "MOVE_UP" || input.action === "MOVE_DOWN") {
-      if (cue.status === "LIVE") {
+      if (!canReorder(cue.status)) {
         return NextResponse.json({ error: "The live cue cannot be reordered" }, { status: 409 });
       }
 
@@ -121,7 +122,7 @@ export async function PATCH(req: Request, { params }: Ctx) {
     }
 
     if (input.action === "TAKE") {
-      if (cue.status !== "PENDING") {
+      if (!canTransition(cue.status, "TAKE")) {
         return NextResponse.json({ error: "Only pending cues can be taken live" }, { status: 409 });
       }
 
@@ -139,7 +140,7 @@ export async function PATCH(req: Request, { params }: Ctx) {
     }
 
     if (input.action === "COMPLETE") {
-      if (cue.status !== "LIVE") {
+      if (!canTransition(cue.status, "COMPLETE")) {
         return NextResponse.json({ error: "Only the live cue can be completed" }, { status: 409 });
       }
       const updated = await db.broadcastCue.update({
@@ -149,7 +150,7 @@ export async function PATCH(req: Request, { params }: Ctx) {
       return NextResponse.json({ cue: updated });
     }
 
-    if (cue.status !== "PENDING") {
+    if (!canTransition(cue.status, "SKIP")) {
       return NextResponse.json({ error: "Only pending cues can be skipped" }, { status: 409 });
     }
     const updated = await db.broadcastCue.update({
