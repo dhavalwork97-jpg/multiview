@@ -48,6 +48,17 @@ type Match = {
 
 type Credentials = { ingestUrl: string; streamKey: string };
 
+type BroadcastCue = {
+  id: string;
+  title: string;
+  cueType: string;
+  status: "PENDING" | "LIVE" | "COMPLETED" | "SKIPPED";
+  position: number;
+  durationSec: number | null;
+  startedAt: string | null;
+  completedAt: string | null;
+};
+
 export function TournamentControlRoom({
   tournamentId,
 }: {
@@ -60,6 +71,9 @@ export function TournamentControlRoom({
     overlay: null,
   });
   const [broadcastBusy, setBroadcastBusy] = useState(false);
+  const [rundown, setRundown] = useState<BroadcastCue[]>([]);
+  const [rundownLoading, setRundownLoading] = useState(true);
+  const [rundownBusy, setRundownBusy] = useState<string | null>(null);
   const [previewStationId, setPreviewStationId] = useState<string | null>(null);
   const [overlayTitle, setOverlayTitle] = useState("");
   const [overlaySponsor, setOverlaySponsor] = useState("");
@@ -144,12 +158,18 @@ export function TournamentControlRoom({
         },
       );
       if (healthRes.ok) setHealth(await healthRes.json());
+      const rundownRes = await fetch(`/api/tournaments/${tournamentId}/broadcast/rundown`, { cache: "no-store" });
+      if (rundownRes.ok) {
+        const rundownData = await rundownRes.json();
+        setRundown(rundownData.cues ?? []);
+      }
     } catch (e) {
       setError(
         e instanceof Error ? e.message : "Failed to refresh control room",
       );
     } finally {
       setLoading(false);
+      setRundownLoading(false);
     }
   }, [tournamentId]);
 
@@ -206,6 +226,25 @@ export function TournamentControlRoom({
     }
     return result;
   }, [stations]);
+
+  async function operateCue(cueId: string, action: "TAKE" | "COMPLETE" | "SKIP") {
+    setRundownBusy(cueId);
+    setError(null);
+    try {
+      const res = await fetch(`/api/tournaments/${tournamentId}/broadcast/rundown/${cueId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error ?? "Failed to update rundown cue");
+      await refresh();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Rundown update failed");
+    } finally {
+      setRundownBusy(null);
+    }
+  }
 
   async function createStation() {
     const label = newStation.trim();
@@ -535,6 +574,47 @@ export function TournamentControlRoom({
           </div>
         </section>
       )}
+
+      <section className="rounded-card border border-arena-600 bg-arena-900 p-4">
+        <div className="mb-4 flex items-end justify-between gap-3">
+          <div>
+            <p className="font-mono text-[10px] uppercase tracking-[0.2em] text-ink-faint">Broadcast rundown</p>
+            <h2 className="font-display text-xl uppercase tracking-wide">Director queue</h2>
+          </div>
+          <span className="font-mono text-[10px] uppercase text-ink-faint">{rundown.length} cues</span>
+        </div>
+        {rundownLoading ? (
+          <p className="text-sm text-ink-faint">Loading rundown…</p>
+        ) : rundown.length === 0 ? (
+          <p className="rounded-card border border-dashed border-arena-700 p-4 text-sm text-ink-faint">No cues in the rundown yet. Cue creation will be added in the next V31.5 increment.</p>
+        ) : (
+          <div className="space-y-2">
+            {rundown.map((cue, index) => {
+              const next = cue.status === "PENDING" && rundown.slice(0, index).every((item) => item.status !== "PENDING");
+              const isBusy = rundownBusy === cue.id;
+              return (
+                <div key={cue.id} className={`rounded-card border p-3 ${cue.status === "LIVE" ? "border-signal-live/60 bg-signal-live/5" : "border-arena-700 bg-arena-950"}`}>
+                  <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-2">
+                        <span className="font-mono text-[10px] text-ink-faint">{String(cue.position + 1).padStart(2, "0")}</span>
+                        <span className="truncate font-semibold">{cue.title}</span>
+                        {cue.status === "LIVE" && <span className="rounded px-2 py-0.5 font-mono text-[9px] uppercase text-signal-live border border-signal-live/40">ON AIR</span>}
+                        {next && <span className="font-mono text-[9px] uppercase text-yellow-300">Next</span>}
+                      </div>
+                      <div className="mt-1 font-mono text-[10px] uppercase text-ink-faint">{cue.cueType} · {cue.status}{cue.durationSec ? ` · ${Math.floor(cue.durationSec / 60)}:${String(cue.durationSec % 60).padStart(2, "0")}` : ""}</div>
+                    </div>
+                    {canOperate && <div className="flex flex-wrap gap-2">
+                      {cue.status === "PENDING" && <><button type="button" disabled={isBusy} onClick={() => void operateCue(cue.id, "TAKE")} className="rounded-card border border-signal-live/40 px-3 py-2 font-mono text-[10px] uppercase text-signal-live disabled:opacity-40">{isBusy ? "Working…" : "Take"}</button><button type="button" disabled={isBusy} onClick={() => void operateCue(cue.id, "SKIP")} className="rounded-card border border-arena-600 px-3 py-2 font-mono text-[10px] uppercase text-ink-faint disabled:opacity-40">Skip</button></>}
+                      {cue.status === "LIVE" && <button type="button" disabled={isBusy} onClick={() => void operateCue(cue.id, "COMPLETE")} className="rounded-card border border-signal-live/40 px-3 py-2 font-mono text-[10px] uppercase text-signal-live disabled:opacity-40">{isBusy ? "Working…" : "Complete"}</button>}
+                    </div>}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </section>
 
       <section className="rounded-card border border-arena-600 bg-arena-900 p-4">
         <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
