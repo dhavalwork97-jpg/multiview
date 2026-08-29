@@ -74,6 +74,7 @@ export function TournamentControlRoom({
   const [rundown, setRundown] = useState<BroadcastCue[]>([]);
   const [rundownLoading, setRundownLoading] = useState(true);
   const [rundownBusy, setRundownBusy] = useState<string | null>(null);
+  const [rundownNow, setRundownNow] = useState(() => Date.now());
   const [newCueTitle, setNewCueTitle] = useState("");
   const [newCueType, setNewCueType] = useState("CUSTOM");
   const [newCueDuration, setNewCueDuration] = useState("");
@@ -222,6 +223,24 @@ export function TournamentControlRoom({
       stations.find((station) => station.id !== broadcast.stationId) ?? null;
     setPreviewStationId(fallback?.id ?? null);
   }, [stations, previewStationId, broadcast.stationId]);
+
+  useEffect(() => {
+    const liveCue = rundown.find((cue) => cue.status === "LIVE" && cue.startedAt);
+    if (!liveCue) return;
+    setRundownNow(Date.now());
+    const timer = window.setInterval(() => setRundownNow(Date.now()), 1000);
+    return () => window.clearInterval(timer);
+  }, [rundown]);
+
+  function formatRundownTime(totalSeconds: number) {
+    const safeSeconds = Math.max(0, Math.floor(totalSeconds));
+    const hours = Math.floor(safeSeconds / 3600);
+    const minutes = Math.floor((safeSeconds % 3600) / 60);
+    const seconds = safeSeconds % 60;
+    return hours > 0
+      ? `${hours}:${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`
+      : `${minutes}:${String(seconds).padStart(2, "0")}`;
+  }
 
   const counts = useMemo(() => {
     const result = { live: 0, ready: 0, offline: 0, alerts: 0 };
@@ -635,6 +654,13 @@ export function TournamentControlRoom({
             {rundown.map((cue, index) => {
               const next = cue.status === "PENDING" && rundown.slice(0, index).every((item) => item.status !== "PENDING");
               const isBusy = rundownBusy === cue.id;
+              const elapsedSec = cue.status === "LIVE" && cue.startedAt
+                ? Math.max(0, Math.floor((rundownNow - new Date(cue.startedAt).getTime()) / 1000))
+                : null;
+              const overrunSec = elapsedSec !== null && cue.durationSec !== null
+                ? elapsedSec - cue.durationSec
+                : null;
+              const isOverrun = overrunSec !== null && overrunSec > 0;
               return (
                 <div key={cue.id} className={`rounded-card border p-3 ${cue.status === "LIVE" ? "border-signal-live/60 bg-signal-live/5" : "border-arena-700 bg-arena-950"}`}>
                   <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -645,7 +671,12 @@ export function TournamentControlRoom({
                         {cue.status === "LIVE" && <span className="rounded px-2 py-0.5 font-mono text-[9px] uppercase text-signal-live border border-signal-live/40">ON AIR</span>}
                         {next && <span className="font-mono text-[9px] uppercase text-yellow-300">Next</span>}
                       </div>
-                      <div className="mt-1 font-mono text-[10px] uppercase text-ink-faint">{cue.cueType} · {cue.status}{cue.durationSec ? ` · ${Math.floor(cue.durationSec / 60)}:${String(cue.durationSec % 60).padStart(2, "0")}` : ""}</div>
+                      <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 font-mono text-[10px] uppercase text-ink-faint">
+                        <span>{cue.cueType} · {cue.status}</span>
+                        {cue.durationSec !== null && <span>Plan {formatRundownTime(cue.durationSec)}</span>}
+                        {elapsedSec !== null && <span className={isOverrun ? "text-signal-error" : "text-signal-live"}>Live {formatRundownTime(elapsedSec)}</span>}
+                        {isOverrun && overrunSec !== null && <span className="rounded border border-signal-error/40 px-1.5 py-0.5 text-signal-error">Overrun +{formatRundownTime(overrunSec)}</span>}
+                      </div>
                     </div>
                     {canOperate && <div className="flex flex-wrap gap-2">
                       {cue.status === "PENDING" && <><button type="button" disabled={isBusy} onClick={() => void operateCue(cue.id, "TAKE")} className="rounded-card border border-signal-live/40 px-3 py-2 font-mono text-[10px] uppercase text-signal-live disabled:opacity-40">{isBusy ? "Working…" : "Take"}</button><button type="button" disabled={isBusy} onClick={() => void operateCue(cue.id, "SKIP")} className="rounded-card border border-arena-600 px-3 py-2 font-mono text-[10px] uppercase text-ink-faint disabled:opacity-40">Skip</button></>}
