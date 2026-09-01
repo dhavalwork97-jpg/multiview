@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useSocket } from "@/hooks/useSocket";
 import Link from "next/link";
 import { LiveKitPlayer } from "@/components/watch/LiveKitPlayer";
+import { ObserverAssistant } from "@/components/admin/ObserverAssistant";
 
 type BroadcastScene =
   "OFFLINE" | "WAITING" | "MATCH" | "BREAK" | "INTERMISSION" | "RESULTS";
@@ -1060,6 +1061,10 @@ export function TournamentControlRoom({
           </button>
         </div>
       </section>
+
+      {broadcast.matchId && (stations.flatMap((station) => station.matches).find((match) => match.id === broadcast.matchId)?.scoringAdapter === "battle_royale" || queued.find((match) => match.id === broadcast.matchId)?.scoringAdapter === "battle_royale") && (
+        <ObserverAssistant tournamentId={tournamentId} matchId={broadcast.matchId} />
+      )}
 
       <section className="rounded-card border border-arena-600 bg-arena-900 p-4">
         <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
