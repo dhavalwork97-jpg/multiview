@@ -9,8 +9,8 @@ export type MatchCardData = {
   playerTwoScore: number;
   hypeScore: number | null;
   youtubeVideoId?: string | null;
-  playerOne: { gamertag: string; country: string | null };
-  playerTwo: { gamertag: string; country: string | null };
+  playerOne: { gamertag: string } | null;
+  playerTwo: { gamertag: string } | null;
   station: { id: string; label: string } | null;
 };
 
@@ -50,16 +50,16 @@ export function MatchCard({ match }: { match: MatchCardData }) {
       <div className="flex items-stretch text-sm">
         <div className="flex flex-1 items-center gap-2 border-l-2 border-corner-p1 px-3 py-2">
           <span className="truncate font-display text-base uppercase tracking-wide">
-            {match.playerOne.gamertag}
-          </span>
+  {match.playerOne?.gamertag ?? "TBD"}
+</span>
         </div>
         <div className="flex items-center px-2 font-mono text-base text-ink">
           {match.playerOneScore}–{match.playerTwoScore}
         </div>
         <div className="flex flex-1 items-center justify-end gap-2 border-r-2 border-corner-p2 px-3 py-2">
           <span className="truncate font-display text-base uppercase tracking-wide">
-            {match.playerTwo.gamertag}
-          </span>
+  {match.playerTwo?.gamertag ?? "TBD"}
+</span>
         </div>
       </div>
 
