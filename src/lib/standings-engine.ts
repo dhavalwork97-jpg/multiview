@@ -169,27 +169,6 @@ export function calculateStandings(
       continue;
     }
 
-    const a = match.sides.find(
-      (side) => side.sideKey === "A",
-    );
-
-    const b = match.sides.find(
-      (side) => side.sideKey === "B",
-    );
-
-    if (!a || !b) {
-      continue;
-    }
-
-    const aRow = ensure(a);
-    const bRow = ensure(b);
-
-    const aScore =
-      a.score ?? match.playerOneScore ?? 0;
-
-    const bScore =
-      b.score ?? match.playerTwoScore ?? 0;
-
     const rules = rulesFor(match.rulesSnapshot);
     const adapter =
       rules.scoringAdapter ?? "points";
@@ -267,6 +246,7 @@ export function calculateStandings(
         row.kills += kills;
         row.points += totalScore;
         row.scoreFor += totalScore;
+        row.scoreAgainst = 0;
 
         if (placement === 1) {
           row.firstPlaceFinishes += 1;
@@ -276,6 +256,27 @@ export function calculateStandings(
 
       continue;
     }
+
+    const a = match.sides.find(
+      (side) => side.sideKey === "A",
+    );
+
+    const b = match.sides.find(
+      (side) => side.sideKey === "B",
+    );
+
+    if (!a || !b) {
+      continue;
+    }
+
+    const aRow = ensure(a);
+    const bRow = ensure(b);
+
+    const aScore =
+      a.score ?? match.playerOneScore ?? 0;
+
+    const bScore =
+      b.score ?? match.playerTwoScore ?? 0;
 
     /*
      * Normal two-side standings.

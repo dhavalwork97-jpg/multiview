@@ -16,6 +16,7 @@ export default async function StandingsPage({ params }: { params: Promise<{ tour
         where: { status: "COMPLETED" },
         select: {
           id: true, status: true, playerOneScore: true, playerTwoScore: true, winnerSideId: true, rulesSnapshot: true,
+          scoreEvents: { select: { sideId: true, metric: true, value: true } },
           sides: { select: { id: true, sideKey: true, score: true, participants: { select: { playerId: true, teamId: true, displayName: true, player: { select: { gamertag: true } }, team: { select: { name: true } } } } } },
         },
         orderBy: { endedAt: "asc" },

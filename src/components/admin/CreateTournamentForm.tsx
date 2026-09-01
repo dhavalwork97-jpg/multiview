@@ -82,7 +82,11 @@ export function CreateTournamentForm() {
     [participantText],
   );
 
-  const validCount = COUNTS.includes(participants.length);
+  const isBattleRoyale = sport === "bgmi" || scoringMode === "battle_royale";
+  const isKnockoutFormat = format === "SINGLE_ELIMINATION" || format === "DOUBLE_ELIMINATION";
+  const validCount = isBattleRoyale || !isKnockoutFormat
+    ? participants.length >= 2 && participants.length <= 64
+    : COUNTS.includes(participants.length);
 
   const preset = useMemo(
     () => getCompetitionDefinition(sport),
@@ -124,6 +128,7 @@ export function CreateTournamentForm() {
     setParticipantMode(nextPreset.participantMode);
     setScoringMode(nextPreset.scoringAdapter);
     setBestOf(nextPreset.bestOf);
+    if (value === "bgmi") setFormat("ROUND_ROBIN");
 
     if (value === "esports") {
       setGame("Street Fighter 6");
@@ -158,7 +163,9 @@ export function CreateTournamentForm() {
 
     if (!validCount) {
       setError(
-        "Use exactly 2, 4, 8, 16, 32 or 64 competitors for automatic draw generation.",
+        isKnockoutFormat
+          ? "Knockout formats require 2, 4, 8, 16, 32 or 64 competitors."
+          : "Enter between 2 and 64 competitors.",
       );
       return;
     }
@@ -368,6 +375,7 @@ export function CreateTournamentForm() {
             <option value="sets">Sets</option>
             <option value="time">Time</option>
             <option value="attempts">Attempts</option>
+            <option value="battle_royale">Battle Royale</option>
             <option value="custom">Custom metric</option>
           </select>
         </label>
@@ -378,7 +386,8 @@ export function CreateTournamentForm() {
           <select
             value={format}
             onChange={(e) => setFormat(e.target.value)}
-            className="field-input"
+            disabled={isBattleRoyale}
+            className="field-input disabled:opacity-60"
           >
             {FORMATS.map(([value, label]) => (
               <option key={value} value={value}>

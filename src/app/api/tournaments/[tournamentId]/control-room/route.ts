@@ -59,6 +59,7 @@ export async function GET(
             playerOneScore: true,
             playerTwoScore: true,
             startedAt: true,
+            scoringAdapter: true,
             playerOne: {
               select: { id: true, gamertag: true },
             },
@@ -81,6 +82,7 @@ export async function GET(
         id: true,
         round: true,
         status: true,
+        scoringAdapter: true,
         stationId: true,
         playerOneScore: true,
         playerTwoScore: true,

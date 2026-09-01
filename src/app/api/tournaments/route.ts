@@ -68,20 +68,22 @@ export async function POST(req: Request) {
 
   const preset = getCompetitionPreset(parsed.data.sport);
 
-  const competitionType =
+  const requestedCompetitionType =
     parsed.data.competitionType || preset.competitionType;
 
   const participantMode =
     parsed.data.participantMode || preset.participantMode;
 
-  const scoringMode = parsed.data.scoringMode || preset.scoringAdapter;
+  const requestedScoringMode = parsed.data.scoringMode || preset.scoringAdapter;
   const bestOf = parsed.data.bestOf || preset.bestOf;
 
   // Battle Royale competitions are standings-driven, not bracket-driven.
-  // Keep this based on both sport and scoring adapter so BGMI/BR remains
-  // bracket-free even if a caller explicitly supplies the scoring mode.
+  // BGMI always normalizes to the BR adapter so an API caller cannot create
+  // a BR event with an incompatible scoring engine or bracket format.
   const isBattleRoyale =
-    parsed.data.sport === "bgmi" || scoringMode === "battle_royale";
+    parsed.data.sport === "bgmi" || requestedScoringMode === "battle_royale";
+  const scoringMode = isBattleRoyale ? "battle_royale" : requestedScoringMode;
+  const competitionType = isBattleRoyale ? "league" : requestedCompetitionType;
 
   const competitionRules = normalizeRules(
     parsed.data.sport,
@@ -96,6 +98,11 @@ export async function POST(req: Request) {
   if (playerCount < 2 || playerCount > 64) {
     return NextResponse.json({ error: "Enter between 2 and 64 competitors." }, { status: 400 });
   }
+
+  const isKnockout = !isBattleRoyale &&
+    (parsed.data.format === "SINGLE_ELIMINATION" || parsed.data.format === "DOUBLE_ELIMINATION");
+  const isLeague = !isBattleRoyale && parsed.data.format === "ROUND_ROBIN";
+  const isSwiss = !isBattleRoyale && parsed.data.format === "SWISS";
 
   const organization = await getOrCreatePersonalOrganization(user.id);
   const currentTournamentCount = await db.tournament.count({ where: { organizationId: organization.id, status: { not: "ARCHIVED" } } });
@@ -125,7 +132,7 @@ export async function POST(req: Request) {
       },
     });
 
-    const players = [];
+    const players: Array<{ id: string; gamertag: string }> = [];
     for (let index = 0; index < uniquePlayers.length; index += 1) {
       const gamertag = uniquePlayers[index];
       const player = await tx.player.upsert({
@@ -156,27 +163,42 @@ export async function POST(req: Request) {
     let bracketStructure: any[] = [];
     let firstRoundMatches: any[] = [];
 
-    if (!isBattleRoyale && parsed.data.format === "ROUND_ROBIN") {
-      const roundCount = playerCount - 1;
+    if (isLeague) {
+      const schedule: Array<(typeof players)[number] | null> = [...players];
+      if (schedule.length % 2 !== 0) schedule.push(null);
+      const roundCount = schedule.length - 1;
+      const matchesPerRound = schedule.length / 2;
       bracketStructure = Array.from({ length: roundCount }, (_, roundIndex) => ({
         name: `Round ${roundIndex + 1}`,
         matches: [],
       }));
-      const rotation = [...players];
+      const rotation = [...schedule];
       for (let roundIndex = 0; roundIndex < roundCount; roundIndex += 1) {
-        const matches = [];
-        for (let i = 0; i < playerCount / 2; i += 1) {
+        for (let i = 0; i < matchesPerRound; i += 1) {
           const a = rotation[i];
-          const b = rotation[playerCount - 1 - i];
-          matches.push({ playerOneId: a.id, playerTwoId: b.id, round: `Round ${roundIndex + 1}` });
+          const b = rotation[rotation.length - 1 - i];
+          if (!a || !b) continue;
+          bracketStructure[roundIndex].matches.push({
+            playerOneId: a.id, playerTwoId: b.id, round: `Round ${roundIndex + 1}`,
+          });
         }
-        bracketStructure[roundIndex].matches = matches;
         const fixed = rotation[0];
         const rest = rotation.slice(1);
         rest.unshift(rest.pop()!);
         rotation.splice(0, rotation.length, fixed, ...rest);
       }
-    } else if (!isBattleRoyale) {
+    } else if (isSwiss) {
+      // Swiss pairings are result-driven. Seed round one only; later rounds are
+      // generated from standings by the organizer instead of being a bracket.
+      bracketStructure = [{
+        name: "Swiss Round 1",
+        matches: Array.from({ length: Math.floor(playerCount / 2) }, (_, index) => ({
+          playerOneId: players[index * 2]?.id ?? null,
+          playerTwoId: players[index * 2 + 1]?.id ?? null,
+          round: "Swiss Round 1",
+        })),
+      }];
+    } else if (isKnockout) {
       const bracketSize = 2 ** Math.ceil(Math.log2(playerCount));
       const totalRounds = Math.log2(bracketSize);
       bracketStructure = Array.from({ length: totalRounds }, (_, roundIndex) => ({
@@ -197,20 +219,19 @@ export async function POST(req: Request) {
       data: {
         tournamentId: tournament.id,
         name: isBattleRoyale
-          ? "Battle Royale Standings"
-          : parsed.data.format === "ROUND_ROBIN"
+          ? "Battle Royale · Lobbies & Standings"
+          : isLeague
             ? "League Stage"
-            : parsed.data.format === "SWISS"
+            : isSwiss
               ? "Swiss Stage"
               : "Main Stage",
         kind: isBattleRoyale
           ? "LEAGUE"
-          : parsed.data.format === "ROUND_ROBIN"
+          : isLeague
             ? "LEAGUE"
-            : parsed.data.format === "SWISS"
+            : isSwiss
               ? "SWISS"
-              : parsed.data.format === "SINGLE_ELIMINATION" ||
-                  parsed.data.format === "DOUBLE_ELIMINATION"
+              : isKnockout
                 ? "KNOCKOUT"
                 : "CUSTOM",
         orderIndex: 0,
@@ -220,18 +241,11 @@ export async function POST(req: Request) {
 
     let bracket: { id: string; name: string } | null = null;
 
-    if (!isBattleRoyale) {
+    if (isKnockout) {
       const createdBracket = await tx.bracket.create({
         data: {
           tournamentId: tournament.id,
-          name:
-            parsed.data.format === "ROUND_ROBIN"
-              ? "Round Robin"
-              : parsed.data.format === "SWISS"
-                ? "Swiss Stage"
-                : parsed.data.format === "DOUBLE_ELIMINATION"
-                  ? "Double Elimination"
-                  : "Winners Bracket",
+          name: parsed.data.format === "DOUBLE_ELIMINATION" ? "Double Elimination" : "Winners Bracket",
           format: parsed.data.format.toLowerCase(),
           structure: bracketStructure,
         },
@@ -239,123 +253,87 @@ export async function POST(req: Request) {
       });
       bracket = createdBracket;
 
-      // V31.3.2: create the complete relational match graph up front. Future
-      // matches intentionally have empty participants and are populated through
-      // AdvancementSlots by the progression engine.
       const createdMatches = new Map<string, string>();
-
-      for (
-        let roundIndex = 0;
-        roundIndex < bracketStructure.length;
-        roundIndex += 1
-      ) {
-        for (
-          let index = 0;
-          index < bracketStructure[roundIndex].matches.length;
-          index += 1
-        ) {
+      for (let roundIndex = 0; roundIndex < bracketStructure.length; roundIndex += 1) {
+        for (let index = 0; index < bracketStructure[roundIndex].matches.length; index += 1) {
           const slot = bracketStructure[roundIndex].matches[index];
-          const isInitialMatch = Boolean(
-            slot.playerOneId && slot.playerTwoId
-          );
-
+          const isInitialMatch = Boolean(slot.playerOneId && slot.playerTwoId);
           const match = await tx.match.create({
             data: {
-              tournamentId: tournament.id,
-              bracketId: createdBracket.id,
-              stageId: stage.id,
-              stationId:
-                isInitialMatch && stations.length > 0
-                  ? stations[firstRoundMatches.length % stations.length].id
-                  : null,
-              playerOneId: slot.playerOneId ?? null,
-              playerTwoId: slot.playerTwoId ?? null,
-              round: slot.round,
-              status: "QUEUED",
-              roundIndex,
-              matchIndex: index,
-              scoringAdapter: scoringMode,
-              rulesSnapshot: competitionRules as any,
+              tournamentId: tournament.id, bracketId: createdBracket.id, stageId: stage.id,
+              stationId: isInitialMatch && stations.length > 0 ? stations[firstRoundMatches.length % stations.length].id : null,
+              playerOneId: slot.playerOneId ?? null, playerTwoId: slot.playerTwoId ?? null,
+              round: slot.round, status: "QUEUED", roundIndex, matchIndex: index,
+              scoringAdapter: scoringMode, rulesSnapshot: competitionRules as any,
             },
           });
-
-          await tx.matchSide.createMany({
-            data: [
-              { matchId: match.id, sideKey: "A", label: "Side A" },
-              { matchId: match.id, sideKey: "B", label: "Side B" },
-            ],
-          });
-
-          const sides = await tx.matchSide.findMany({
-            where: { matchId: match.id },
-            orderBy: { sideKey: "asc" },
-          });
-
+          await tx.matchSide.createMany({ data: [
+            { matchId: match.id, sideKey: "A", label: "Side A" },
+            { matchId: match.id, sideKey: "B", label: "Side B" },
+          ] });
+          const sides = await tx.matchSide.findMany({ where: { matchId: match.id }, orderBy: { sideKey: "asc" } });
           const participants = [];
-          if (slot.playerOneId) {
-            participants.push({
-              sideId: sides[0].id,
-              playerId: slot.playerOneId,
-            });
-          }
-          if (slot.playerTwoId) {
-            participants.push({
-              sideId: sides[1].id,
-              playerId: slot.playerTwoId,
-            });
-          }
-          if (participants.length > 0) {
-            await tx.matchParticipant.createMany({ data: participants });
-          }
-
+          if (slot.playerOneId) participants.push({ sideId: sides[0].id, playerId: slot.playerOneId });
+          if (slot.playerTwoId) participants.push({ sideId: sides[1].id, playerId: slot.playerTwoId });
+          if (participants.length) await tx.matchParticipant.createMany({ data: participants });
           createdMatches.set(`${roundIndex}:${index}`, match.id);
-
-          if (isInitialMatch) {
-            firstRoundMatches.push(match);
-          }
+          if (isInitialMatch) firstRoundMatches.push(match);
         }
       }
-
-      // The current generated elimination topology is a deterministic winner
-      // tree: consecutive matches feed sides A/B of the next-round match.
-      if (
-        parsed.data.format === "SINGLE_ELIMINATION" ||
-        parsed.data.format === "DOUBLE_ELIMINATION"
-      ) {
-        for (
-          let roundIndex = 0;
-          roundIndex < bracketStructure.length - 1;
-          roundIndex += 1
-        ) {
-          const sourceMatches = bracketStructure[roundIndex].matches;
-
-          for (let index = 0; index < sourceMatches.length; index += 1) {
-            const sourceMatchId = createdMatches.get(
-              `${roundIndex}:${index}`
-            );
-            const targetIndex = Math.floor(index / 2);
-            const targetMatchId = createdMatches.get(
-              `${roundIndex + 1}:${targetIndex}`
-            );
-
-            if (!sourceMatchId || !targetMatchId) {
-              throw new Error(
-                `Invalid generated bracket topology at round ${roundIndex}, match ${index}`
-              );
-            }
-
-            await tx.advancementSlot.create({
-              data: {
-                sourceType: "MATCH_RESULT",
-                outcome: "WINNER",
-                sourceMatchId,
-                targetMatchId,
-                targetSideKey: index % 2 === 0 ? "A" : "B",
-                sourceLabel: `Winner of ${sourceMatches[index].round}`,
-              },
-            });
-          }
+      for (let roundIndex = 0; roundIndex < bracketStructure.length - 1; roundIndex += 1) {
+        for (let index = 0; index < bracketStructure[roundIndex].matches.length; index += 1) {
+          const sourceMatchId = createdMatches.get(`${roundIndex}:${index}`);
+          const targetMatchId = createdMatches.get(`${roundIndex + 1}:${Math.floor(index / 2)}`);
+          if (!sourceMatchId || !targetMatchId) throw new Error(`Invalid generated bracket topology at round ${roundIndex}, match ${index}`);
+          await tx.advancementSlot.create({
+            data: { sourceType: "MATCH_RESULT", outcome: "WINNER", sourceMatchId, targetMatchId,
+              targetSideKey: index % 2 === 0 ? "A" : "B", sourceLabel: `Winner of ${bracketStructure[roundIndex].matches[index].round}` },
+          });
         }
+      }
+    } else if (isLeague || isSwiss) {
+      // League/Swiss are fixture-table competitions: no Bracket row is created.
+      const fixtures = bracketStructure.flatMap((round, roundIndex) =>
+        round.matches.map((slot: any, matchIndex: number) => ({ ...slot, roundIndex, matchIndex }))
+      );
+      for (const slot of fixtures) {
+        if (!slot.playerOneId || !slot.playerTwoId) continue;
+        const match = await tx.match.create({
+          data: { tournamentId: tournament.id, stageId: stage.id,
+            stationId: stations.length ? stations[firstRoundMatches.length % stations.length].id : null,
+            playerOneId: slot.playerOneId, playerTwoId: slot.playerTwoId, round: slot.round, status: "QUEUED",
+            roundIndex: slot.roundIndex, matchIndex: slot.matchIndex, scoringAdapter: scoringMode, rulesSnapshot: competitionRules as any },
+        });
+        await tx.matchSide.createMany({ data: [
+          { matchId: match.id, sideKey: "A", label: "Side A" }, { matchId: match.id, sideKey: "B", label: "Side B" },
+        ] });
+        const sides = await tx.matchSide.findMany({ where: { matchId: match.id }, orderBy: { sideKey: "asc" } });
+        await tx.matchParticipant.createMany({ data: [
+          { sideId: sides[0].id, playerId: slot.playerOneId }, { sideId: sides[1].id, playerId: slot.playerTwoId },
+        ] });
+        firstRoundMatches.push(match);
+      }
+    } else if (isBattleRoyale) {
+      // A BR lobby is one match with one side per entrant. Side keys are A.. and
+      // the generic standings engine aggregates placement/kills/points by side.
+      const lobbyCount = Math.max(1, Math.ceil(playerCount / 16));
+      const lobbySize = Math.ceil(playerCount / lobbyCount);
+      for (let lobbyIndex = 0; lobbyIndex < lobbyCount; lobbyIndex += 1) {
+        const lobbyPlayers = players.slice(lobbyIndex * lobbySize, (lobbyIndex + 1) * lobbySize);
+        if (!lobbyPlayers.length) continue;
+        const match = await tx.match.create({
+          data: { tournamentId: tournament.id, stageId: stage.id,
+            stationId: stations.length ? stations[lobbyIndex % stations.length].id : null,
+            round: `Lobby ${lobbyIndex + 1}`, status: "QUEUED", roundIndex: lobbyIndex, matchIndex: lobbyIndex,
+            scoringAdapter: "battle_royale", rulesSnapshot: competitionRules as any },
+        });
+        const sideData = lobbyPlayers.map((player, index) => ({
+          matchId: match.id, sideKey: `P${index + 1}`, label: player.gamertag,
+        }));
+        await tx.matchSide.createMany({ data: sideData });
+        const sides = await tx.matchSide.findMany({ where: { matchId: match.id }, orderBy: { sideKey: "asc" } });
+        await tx.matchParticipant.createMany({ data: lobbyPlayers.map((player, index) => ({ sideId: sides[index].id, playerId: player.id })) });
+        firstRoundMatches.push(match);
       }
     }
 

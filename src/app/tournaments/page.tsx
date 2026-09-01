@@ -33,7 +33,7 @@ export default async function TournamentsPage() {
       status: true,
       startDate: true,
       venue: true,
-      _count: { select: { brackets: true } },
+      _count: { select: { brackets: true, stages: true } },
     },
   });
 

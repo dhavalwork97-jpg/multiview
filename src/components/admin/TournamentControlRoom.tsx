@@ -35,6 +35,7 @@ type Match = {
   status: "QUEUED" | "LIVE" | "COMPLETED" | "DISPUTED";
   playerOneScore: number;
   playerTwoScore: number;
+  scoringAdapter?: string;
   startedAt?: string | null;
   playerOne: { id: string; gamertag: string } | null;
   playerTwo: { id: string; gamertag: string } | null;
@@ -1438,13 +1439,9 @@ function StationCard({
               Current match
             </p>
             <p className="mt-1 font-medium">
-              <span className="text-corner-p1">
-                {match.playerOne?.gamertag ?? "TBD"}
-              </span>{" "}
-              <span className="text-ink-faint">vs</span>{" "}
-              <span className="text-corner-p2">
-                {match.playerTwo?.gamertag ?? "TBD"}
-              </span>
+              {match.scoringAdapter === "battle_royale"
+                ? "Battle Royale Lobby"
+                : <><span className="text-corner-p1">{match.playerOne?.gamertag ?? "TBD"}</span>{" "}<span className="text-ink-faint">vs</span>{" "}<span className="text-corner-p2">{match.playerTwo?.gamertag ?? "TBD"}</span></>}
             </p>
             <p className="mt-1 font-mono text-[10px] text-ink-faint">
               {match.round ?? "Match"} · {match.status}
@@ -1459,7 +1456,12 @@ function StationCard({
                   Start match
                 </button>
               )}
-              {match.status === "LIVE" && (
+              {match.status === "LIVE" && match.scoringAdapter === "battle_royale" && (
+                <div className="flex flex-wrap gap-2">
+                  <button disabled={!canOperate || busy === match.id} onClick={() => onEnd(match.id, "A")} className="rounded-card border border-signal-live/50 px-3 py-1.5 font-mono text-[10px] uppercase text-signal-live disabled:opacity-40">Complete BR lobby</button>
+                </div>
+              )}
+              {match.status === "LIVE" && match.scoringAdapter !== "battle_royale" && (
                 <div className="flex flex-wrap gap-2">
                   <button
                     disabled={!canOperate || busy === match.id}
