@@ -52,6 +52,7 @@ export function CreateTournamentForm() {
   );
   const [format, setFormat] = useState("SINGLE_ELIMINATION");
   const [bestOf, setBestOf] = useState(initialPreset.bestOf);
+  const [multiStage, setMultiStage] = useState(false);
 
   const [startDate, setStartDate] = useState(() => {
     const d = new Date(Date.now() + 60 * 60 * 1000);
@@ -161,6 +162,11 @@ export function CreateTournamentForm() {
     e.preventDefault();
     setError("");
 
+    if (multiStage && format !== "SINGLE_ELIMINATION") {
+      setError("Multi-stage tournaments currently use Single elimination for the playoff stage.");
+      return;
+    }
+
     if (!validCount) {
       setError(
         isKnockoutFormat
@@ -220,6 +226,7 @@ export function CreateTournamentForm() {
           players: participants,
           format,
           bestOf,
+          multiStage,
         }),
       });
 
@@ -263,6 +270,11 @@ export function CreateTournamentForm() {
           registry.
         </p>
       </div>
+
+      <label className="mb-5 flex items-start gap-3 rounded-card border border-arena-700 bg-arena-950 p-4">
+        <input type="checkbox" checked={multiStage} onChange={(event) => setMultiStage(event.target.checked)} className="mt-1" />
+        <span><span className="block font-display uppercase">Multi-stage tournament</span><span className="mt-1 block text-xs text-ink-faint">Groups → automatic qualification → Playoffs → Grand Final. Use with Single elimination.</span></span>
+      </label>
 
       <div className="grid gap-5 md:grid-cols-2">
         <label className="md:col-span-2">

@@ -22,6 +22,7 @@ const createTournamentSchema = z.object({
   players: z.array(z.string().trim().min(1).max(80)).min(2).max(64),
   format: z.enum(["SINGLE_ELIMINATION", "DOUBLE_ELIMINATION", "ROUND_ROBIN", "SWISS"]).default("SINGLE_ELIMINATION"),
   bestOf: z.number().int().min(1).max(9).optional(),
+  multiStage: z.boolean().optional().default(false),
 });
 
 function slugify(value: string) {
@@ -158,6 +159,17 @@ export async function POST(req: Request) {
           },
         })
       );
+    }
+
+    if (parsed.data.multiStage) {
+      return {
+        tournament: { id: tournament.id, name: tournament.name, slug: tournament.slug },
+        bracket: null,
+        stage: null,
+        stationsCreated: stations.length,
+        matchesCreated: 0,
+        playersCreated: players.length,
+      };
     }
 
     let bracketStructure: any[] = [];

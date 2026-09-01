@@ -40,14 +40,41 @@ export async function progressMatch(
   let stageRankAdvanced: ProgressionAdvancement[] = [];
 
   if (match.stageId) {
-    const stage = await tx.competitionStage.findUnique({
-      where: { id: match.stageId },
-      select: {
-        status: true,
-      },
+    const stageMatches = await tx.match.findMany({
+      where: { stageId: match.stageId },
+      select: { id: true, status: true },
     });
+    const stageComplete =
+      stageMatches.length > 0 &&
+      stageMatches.every((stageMatch) => stageMatch.status === "COMPLETED");
 
-    if (stage?.status === "COMPLETED") {
+    if (stageComplete) {
+      const stage = await tx.competitionStage.findUnique({
+        where: { id: match.stageId },
+        select: { id: true, status: true, tournamentId: true },
+      });
+
+      if (stage && stage.status !== "COMPLETED") {
+        await tx.competitionStage.update({
+          where: { id: stage.id },
+          data: { status: "COMPLETED" },
+        });
+        const existingStageEvent = await tx.progressionEvent.findFirst({
+          where: { matchId: match.id, eventType: "STAGE_COMPLETED" },
+          select: { id: true },
+        });
+        if (!existingStageEvent) {
+          await tx.progressionEvent.create({
+            data: {
+              tournamentId: stage.tournamentId,
+              matchId: match.id,
+              eventType: "STAGE_COMPLETED",
+              payload: { stageId: stage.id, automatic: true },
+            },
+          });
+        }
+      }
+
       stageRankAdvanced = await resolveStageRankAdvancements(
         tx,
         match.stageId,
