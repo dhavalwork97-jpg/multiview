@@ -94,6 +94,9 @@ export default async function TournamentPage({
     notFound();
   }
 
+  const isBattleRoyale =
+    tournament.sport === "bgmi" || tournament.scoringMode === "battle_royale";
+
   const viewerState = await getCompetitionViewerState(tournamentId);
 
   if (!viewerState) {
@@ -241,9 +244,18 @@ export default async function TournamentPage({
             </p>
 
             <div className="flex flex-wrap items-center justify-between gap-3">
-              <h2 className="font-display text-xl uppercase tracking-wide">
-                Brackets
-              </h2>
+              <div>
+                <h2 className="font-display text-xl uppercase tracking-wide">
+                  {isBattleRoyale
+                    ? "Battle Royale standings"
+                    : "Brackets"}
+                </h2>
+                {isBattleRoyale && (
+                  <p className="mt-1 text-xs text-ink-faint">
+                    Placement, kills and points determine the leaderboard.
+                  </p>
+                )}
+              </div>
 
               <Link
                 href={`/tournaments/${tournament.id}/standings`}
@@ -254,10 +266,19 @@ export default async function TournamentPage({
             </div>
           </div>
 
-          <BracketExplorer
-            brackets={tournament.brackets}
-            tournamentId={tournament.id}
-          />
+          {isBattleRoyale ? (
+            <div className="rounded-card border border-arena-700 bg-arena-900 p-5">
+              <p className="text-sm text-ink-muted">
+                Battle Royale tournaments do not use a bracket. View the
+                standings to follow placement, kills and total points.
+              </p>
+            </div>
+          ) : (
+            <BracketExplorer
+              brackets={tournament.brackets}
+              tournamentId={tournament.id}
+            />
+          )}
         </section>
       </div>
     </main>

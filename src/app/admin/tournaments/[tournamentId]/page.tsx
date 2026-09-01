@@ -19,10 +19,22 @@ export default async function AdminTournamentPage({
 
   const tournament = await db.tournament.findUnique({
     where: { id: tournamentId },
-    include: { brackets: { select: { id: true, name: true } } },
+    select: {
+      id: true,
+      name: true,
+      slug: true,
+      sport: true,
+      game: true,
+      participantMode: true,
+      scoringMode: true,
+      brackets: { select: { id: true, name: true } },
+    },
   });
 
   if (!tournament) redirect("/dashboard");
+
+  const isBattleRoyale =
+    tournament.sport === "bgmi" || tournament.scoringMode === "battle_royale";
 
   return (
     <main className="min-h-screen bg-arena-950 px-6 py-8">
@@ -49,21 +61,40 @@ export default async function AdminTournamentPage({
         <StationAssignmentBoard tournamentId={tournament.id} />
       </section>
 
-      <section>
-        <h2 className="mb-3 font-display text-xl uppercase tracking-wide text-ink-muted">
-          Bracket
-        </h2>
-        {tournament.brackets.length === 0 ? (
-          <p className="text-sm text-ink-faint">No bracket imported yet.</p>
-        ) : (
-          tournament.brackets.map((b) => (
-            <div key={b.id} className="mb-8">
-              <p className="mb-2 text-sm font-medium text-ink-muted">{b.name}</p>
-              <InteractiveBracket bracketId={b.id} tournamentId={tournament.id} />
-            </div>
-          ))
-        )}
-      </section>
+      {isBattleRoyale ? (
+        <section>
+          <h2 className="mb-3 font-display text-xl uppercase tracking-wide text-ink-muted">
+            Battle Royale
+          </h2>
+          <div className="rounded-card border border-arena-700 bg-arena-900 p-5">
+            <p className="text-sm text-ink-muted">
+              This competition is standings-driven. No bracket is used.
+            </p>
+            <Link
+              href={`/admin/tournaments/${tournament.id}/standings`}
+              className="action-secondary mt-4 inline-flex"
+            >
+              Open standings
+            </Link>
+          </div>
+        </section>
+      ) : (
+        <section>
+          <h2 className="mb-3 font-display text-xl uppercase tracking-wide text-ink-muted">
+            Bracket
+          </h2>
+          {tournament.brackets.length === 0 ? (
+            <p className="text-sm text-ink-faint">No bracket imported yet.</p>
+          ) : (
+            tournament.brackets.map((b) => (
+              <div key={b.id} className="mb-8">
+                <p className="mb-2 text-sm font-medium text-ink-muted">{b.name}</p>
+                <InteractiveBracket bracketId={b.id} tournamentId={tournament.id} />
+              </div>
+            ))
+          )}
+        </section>
+      )}
     </main>
   );
 }
