@@ -18,7 +18,8 @@
     "clip-worker:dev": "tsx watch src/server/streaming/clip-worker.ts",
     "test:integration": "vitest run tests/integration",
     "test:e2e": "playwright test",
-    "setup": "bash scripts/setup.sh"
+    "setup": "bash scripts/setup.sh",
+    "demo:pack": "tsx prisma/seed-demo-pack.ts"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "3.716.0",

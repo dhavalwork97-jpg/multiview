@@ -120,6 +120,36 @@ function makeAdapter(id: string, label: string): ScoringAdapter {
   };
 }
 
+export const DEFAULT_BATTLE_ROYALE_PLACEMENT_POINTS: Record<number, number> = {
+  1: 10,
+  2: 6,
+  3: 5,
+  4: 4,
+  5: 3,
+  6: 2,
+  7: 1,
+  8: 1,
+};
+
+export function resolveBattleRoyalePlacementPoints(
+  rules: MatchRules = {},
+): Record<number, number> {
+  const configured = rules.placementPoints;
+  if (!configured || typeof configured !== "object" || Array.isArray(configured)) {
+    return DEFAULT_BATTLE_ROYALE_PLACEMENT_POINTS;
+  }
+
+  const result = { ...DEFAULT_BATTLE_ROYALE_PLACEMENT_POINTS };
+  for (const [key, value] of Object.entries(configured as Record<string, unknown>)) {
+    const placement = Number(key);
+    const points = Number(value);
+    if (Number.isInteger(placement) && placement > 0 && Number.isFinite(points)) {
+      result[placement] = points;
+    }
+  }
+  return result;
+}
+
 export const scoringAdapters: Record<string, ScoringAdapter> = {
   points: makeAdapter("points", "Points"),
   goals: makeAdapter("goals", "Goals"),
@@ -130,51 +160,55 @@ export const scoringAdapters: Record<string, ScoringAdapter> = {
   time: makeAdapter("time", "Time"),
   attempts: makeAdapter("attempts", "Attempts"),
   battle_royale: {
-  id: "battle_royale",
-  label: "Battle Royale",
+    id: "battle_royale",
+    label: "Battle Royale",
 
-  acceptsMetric(metric) {
-    return ["placement", "kills", "points"].includes(metric);
-  },
+    acceptsMetric(metric) {
+      return ["placement", "kills", "points"].includes(metric);
+    },
 
-  score(side, rules) {
-    const weights = {
-      placement: Number(rules.weights?.placement ?? 2),
-      kills: Number(rules.weights?.kills ?? 1),
-      points: Number(rules.weights?.points ?? 1),
-    };
+    score(side, rules) {
+      const placementPoints = resolveBattleRoyalePlacementPoints(rules);
+      const finishPoints = Number(rules.finishPoints ?? rules.eliminationPoints ?? 1);
+      const bonusPoints = Number(rules.bonusPoints ?? 0);
 
-    return side.events.reduce((total, event) => {
-      const weight =
-        weights[event.metric as keyof typeof weights] ?? 1;
+      return side.events.reduce((total, event) => {
+        if (event.metric === "placement") {
+          return total + (placementPoints[event.value] ?? 0);
+        }
+        if (event.metric === "kills") {
+          return total + event.value * finishPoints;
+        }
+        if (event.metric === "points") {
+          return total + event.value + bonusPoints;
+        }
+        return total;
+      }, 0);
+    },
 
-      return total + event.value * weight;
-    }, 0);
-  },
+    resolve(a, b, rules) {
+      const aScore = this.score(a, rules);
+      const bScore = this.score(b, rules);
 
-  resolve(a, b, rules) {
-    const aScore = this.score(a, rules);
-    const bScore = this.score(b, rules);
+      if (aScore === bScore) {
+        return {
+          winnerSideKey: null,
+          scores: { A: aScore, B: bScore },
+          isDraw: true,
+          reason: "Battle Royale scores tied.",
+          completed: false,
+        };
+      }
 
-    if (aScore === bScore) {
       return {
-        winnerSideKey: null,
+        winnerSideKey: aScore > bScore ? "A" : "B",
         scores: { A: aScore, B: bScore },
-        isDraw: true,
-        reason: "Battle Royale tie",
-        completed: false,
+        isDraw: false,
+        reason: "Battle Royale placement + finish score.",
+        completed: true,
       };
-    }
-
-    return {
-      winnerSideKey: aScore > bScore ? "A" : "B",
-      scores: { A: aScore, B: bScore },
-      isDraw: false,
-      reason: "Battle Royale weighted score",
-      completed: true,
-    };
+    },
   },
-},
   custom: makeAdapter("custom", "Custom"),
 };
 

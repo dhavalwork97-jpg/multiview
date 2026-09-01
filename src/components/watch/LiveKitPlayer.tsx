@@ -125,15 +125,12 @@ export function LiveKitPlayer({
           <p>Couldn't connect to the low-latency stream yet.</p>
           <p className="text-xs text-ink-faint">Retrying automatically…</p>
           <button
-  type="button"
-  onClick={(event) => {
-  event.stopPropagation();
-  setRetryNonce((n) => n + 1);
-}}
-  className="rounded-card border border-arena-600 px-3 py-1 font-mono text-xs uppercase tracking-wide text-ink-muted hover:border-signal-live hover:text-signal-live"
->
-  Retry now
-</button>
+            type="button"
+            onClick={() => setRetryNonce((n) => n + 1)}
+            className="rounded-card border border-arena-600 px-3 py-1 font-mono text-xs uppercase tracking-wide text-ink-muted hover:border-signal-live hover:text-signal-live"
+          >
+            Retry now
+          </button>
         </div>
       )}
     </div>
