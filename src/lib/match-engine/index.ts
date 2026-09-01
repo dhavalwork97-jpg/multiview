@@ -17,20 +17,47 @@ export const SPORT_DEFAULTS: Record<string, MatchRules> = {
   basketball: { scoringAdapter: "points", bestOf: 1, winCondition: "highest_score", allowedMetrics: ["points"] },
   cricket: { scoringAdapter: "runs", bestOf: 1, winCondition: "highest_score", allowedMetrics: ["runs"] },
   tennis: { scoringAdapter: "sets", bestOf: 3, winCondition: "highest_score", allowedMetrics: ["sets"] },
-  badminton: { scoringAdapter: "games", bestOf: 3, winCondition: "highest_score", allowedMetrics: ["games"] },
+  badminton: {
+  scoringAdapter: "games",
+  bestOf: 3,
+  winCondition: "highest_score",
+  allowedMetrics: ["games"],
+},
   table_tennis: { scoringAdapter: "games", bestOf: 5, winCondition: "highest_score", allowedMetrics: ["games"] },
   volleyball: { scoringAdapter: "sets", bestOf: 5, winCondition: "highest_score", allowedMetrics: ["sets"] },
   valorant: { scoringAdapter: "rounds", bestOf: 1, winCondition: "highest_score", allowedMetrics: ["rounds"] },
   bgmi: {
-    scoringAdapter: "battle_royale",
-    bestOf: 1,
-    winCondition: "highest_score",
-    allowedMetrics: ["placement", "kills", "points"],
-    finishPoints: 1,
-    bonusPoints: 0,
-    placementPoints: { 1: 10, 2: 6, 3: 5, 4: 4, 5: 3, 6: 2, 7: 1, 8: 1 },
-    tiebreakers: ["first_place_finishes", "placement_points", "kills", "most_recent_match"],
+  scoringAdapter: "battle_royale",
+  bestOf: 1,
+  winCondition: "highest_score",
+  allowDraw: false,
+
+  allowedMetrics: [
+    "placement",
+    "kills",
+    "points",
+  ],
+
+  finishPoints: 1,
+
+  placementPoints: {
+    1: 10,
+    2: 6,
+    3: 5,
+    4: 4,
+    5: 3,
+    6: 2,
+    7: 1,
+    8: 1,
   },
+
+  tiebreakers: [
+    "first_place_finishes",
+    "placement_points",
+    "kills",
+    "most_recent_match",
+  ],
+},
   esports: { scoringAdapter: "points", bestOf: 1, winCondition: "highest_score", allowedMetrics: ["points"] },
   custom: { scoringAdapter: "custom", bestOf: 1, winCondition: "explicit", allowDraw: false },
 };

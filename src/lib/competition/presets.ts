@@ -107,6 +107,48 @@ export const COMPETITION_PRESETS: CompetitionDefinition[] = [
     rules: { maxAttempts: 3 },
   },
   {
+  sport: "bgmi",
+  label: "Battle Royale / BGMI",
+  competitionType: "league",
+  participantMode: "team",
+  scoringAdapter: "battle_royale",
+  bestOf: 1,
+  capabilities: [
+    "live_scoring",
+    "standings",
+    "team_roster",
+  ],
+  rules: {
+    winCondition: "highest_score",
+
+    allowedMetrics: [
+      "placement",
+      "kills",
+      "points",
+    ],
+
+    finishPoints: 1,
+
+    placementPoints: {
+      1: 10,
+      2: 6,
+      3: 5,
+      4: 4,
+      5: 3,
+      6: 2,
+      7: 1,
+      8: 1,
+    },
+
+    tiebreakers: [
+      "first_place_finishes",
+      "placement_points",
+      "kills",
+      "most_recent_match",
+    ],
+  },
+},
+  {
     sport: "custom",
     label: "Custom Competition",
     competitionType: "custom",

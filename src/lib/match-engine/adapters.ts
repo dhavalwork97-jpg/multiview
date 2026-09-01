@@ -160,55 +160,60 @@ export const scoringAdapters: Record<string, ScoringAdapter> = {
   time: makeAdapter("time", "Time"),
   attempts: makeAdapter("attempts", "Attempts"),
   battle_royale: {
-    id: "battle_royale",
-    label: "Battle Royale",
+  id: "battle_royale",
+  label: "Battle Royale",
 
-    acceptsMetric(metric) {
-      return ["placement", "kills", "points"].includes(metric);
-    },
-
-    score(side, rules) {
-      const placementPoints = resolveBattleRoyalePlacementPoints(rules);
-      const finishPoints = Number(rules.finishPoints ?? rules.eliminationPoints ?? 1);
-      const bonusPoints = Number(rules.bonusPoints ?? 0);
-
-      return side.events.reduce((total, event) => {
-        if (event.metric === "placement") {
-          return total + (placementPoints[event.value] ?? 0);
-        }
-        if (event.metric === "kills") {
-          return total + event.value * finishPoints;
-        }
-        if (event.metric === "points") {
-          return total + event.value + bonusPoints;
-        }
-        return total;
-      }, 0);
-    },
-
-    resolve(a, b, rules) {
-      const aScore = this.score(a, rules);
-      const bScore = this.score(b, rules);
-
-      if (aScore === bScore) {
-        return {
-          winnerSideKey: null,
-          scores: { A: aScore, B: bScore },
-          isDraw: true,
-          reason: "Battle Royale scores tied.",
-          completed: false,
-        };
-      }
-
-      return {
-        winnerSideKey: aScore > bScore ? "A" : "B",
-        scores: { A: aScore, B: bScore },
-        isDraw: false,
-        reason: "Battle Royale placement + finish score.",
-        completed: true,
-      };
-    },
+  acceptsMetric(metric, rules) {
+    return getAdapterMetrics("battle_royale", rules).includes(metric);
   },
+
+  score(side, rules) {
+    const placementPoints = resolveBattleRoyalePlacementPoints(rules);
+    const finishPoints = Number(
+      rules.finishPoints ?? rules.eliminationPoints ?? 1,
+    );
+
+    return side.events.reduce((total, event) => {
+      switch (event.metric) {
+        case "placement":
+          return total + (placementPoints[event.value] ?? 0);
+
+        case "kills":
+          return total + event.value * finishPoints;
+
+        case "points":
+          // Direct tournament/game points.
+          return total + event.value;
+
+        default:
+          return total;
+      }
+    }, 0);
+  },
+
+  resolve(a, b, rules) {
+    const aScore = this.score(a, rules);
+    const bScore = this.score(b, rules);
+
+    if (aScore === bScore) {
+      return {
+        winnerSideKey: null,
+        scores: { A: aScore, B: bScore },
+        isDraw: true,
+        reason: "Battle Royale scores tied.",
+        completed: false,
+      };
+    }
+
+    return {
+      winnerSideKey: aScore > bScore ? "A" : "B",
+      scores: { A: aScore, B: bScore },
+      isDraw: false,
+      reason: "Battle Royale placement + kills + points.",
+      completed: true,
+    };
+  },
+},
   custom: makeAdapter("custom", "Custom"),
 };
 
