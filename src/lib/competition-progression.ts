@@ -409,6 +409,17 @@ export async function resolveStageRankAdvancements(
       },
     });
 
+    const targetSides = (await tx.matchSide.findMany({
+      where: { matchId: slot.targetMatchId },
+      include: { participants: true },
+    })) ?? [];
+    if (targetSides.length >= 2 && targetSides.every((side) => side.participants.length > 0)) {
+      await tx.match.updateMany({
+        where: { id: slot.targetMatchId, status: "QUEUED" },
+        data: { status: "QUEUED" },
+      });
+    }
+
     results.push({
       slotId: slot.id,
       targetMatchId: slot.targetMatchId,

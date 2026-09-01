@@ -25,6 +25,7 @@ export type SportCategory =
   | "table-tennis"
   | "racing"
   | "skills"
+  | "bgmi"
   | "custom";
 
 export type CompetitionCapability =

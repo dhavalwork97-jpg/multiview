@@ -42,9 +42,13 @@ export function TrendingStrip() {
         >
           <div className="flex items-center justify-between">
             <span>
-              <span className="text-corner-p1">{m.playerOne.gamertag}</span>
-              {" vs "}
-              <span className="text-corner-p2">{m.playerTwo.gamertag}</span>
+              <span className="text-corner-p1">
+  {m.playerOne?.gamertag ?? "TBD"}
+</span>
+{" vs "}
+<span className="text-corner-p2">
+  {m.playerTwo?.gamertag ?? "TBD"}
+</span>
             </span>
             <span className="font-mono text-xs text-signal-warn">{m.hypeScore ?? 0}</span>
           </div>

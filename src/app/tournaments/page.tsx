@@ -29,10 +29,11 @@ export default async function TournamentsPage() {
       game: true,
       sport: true,
       competitionType: true,
+      scoringMode: true,
       status: true,
       startDate: true,
       venue: true,
-      _count: { select: { brackets: true } },
+      _count: { select: { brackets: true, stages: true } },
     },
   });
 
@@ -71,9 +72,11 @@ export default async function TournamentsPage() {
                 {t.venue ? `${t.venue} · ` : ""}
                 {new Date(t.startDate).toLocaleDateString()}
               </p>
-              {t._count.brackets === 0 && (
+              {t.sport === "bgmi" || t.scoringMode === "battle_royale" ? (
+                <p className="mt-2 text-xs text-ink-faint">Battle Royale · standings</p>
+              ) : t._count.brackets === 0 ? (
                 <p className="mt-2 text-xs text-ink-faint">No bracket published yet</p>
-              )}
+              ) : null}
             </Link>
           ))}
         </div>

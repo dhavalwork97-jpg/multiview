@@ -52,6 +52,7 @@ export function CreateTournamentForm() {
   );
   const [format, setFormat] = useState("SINGLE_ELIMINATION");
   const [bestOf, setBestOf] = useState(initialPreset.bestOf);
+  const [multiStage, setMultiStage] = useState(false);
 
   const [startDate, setStartDate] = useState(() => {
     const d = new Date(Date.now() + 60 * 60 * 1000);
@@ -82,7 +83,11 @@ export function CreateTournamentForm() {
     [participantText],
   );
 
-  const validCount = COUNTS.includes(participants.length);
+  const isBattleRoyale = sport === "bgmi" || scoringMode === "battle_royale";
+  const isKnockoutFormat = format === "SINGLE_ELIMINATION" || format === "DOUBLE_ELIMINATION";
+  const validCount = isBattleRoyale || !isKnockoutFormat
+    ? participants.length >= 2 && participants.length <= 64
+    : COUNTS.includes(participants.length);
 
   const preset = useMemo(
     () => getCompetitionDefinition(sport),
@@ -124,6 +129,7 @@ export function CreateTournamentForm() {
     setParticipantMode(nextPreset.participantMode);
     setScoringMode(nextPreset.scoringAdapter);
     setBestOf(nextPreset.bestOf);
+    if (value === "bgmi") setFormat("ROUND_ROBIN");
 
     if (value === "esports") {
       setGame("Street Fighter 6");
@@ -156,9 +162,16 @@ export function CreateTournamentForm() {
     e.preventDefault();
     setError("");
 
+    if (multiStage && format !== "SINGLE_ELIMINATION") {
+      setError("Multi-stage tournaments currently use Single elimination for the playoff stage.");
+      return;
+    }
+
     if (!validCount) {
       setError(
-        "Use exactly 2, 4, 8, 16, 32 or 64 competitors for automatic draw generation.",
+        isKnockoutFormat
+          ? "Knockout formats require 2, 4, 8, 16, 32 or 64 competitors."
+          : "Enter between 2 and 64 competitors.",
       );
       return;
     }
@@ -213,6 +226,7 @@ export function CreateTournamentForm() {
           players: participants,
           format,
           bestOf,
+          multiStage,
         }),
       });
 
@@ -256,6 +270,11 @@ export function CreateTournamentForm() {
           registry.
         </p>
       </div>
+
+      <label className="mb-5 flex items-start gap-3 rounded-card border border-arena-700 bg-arena-950 p-4">
+        <input type="checkbox" checked={multiStage} onChange={(event) => setMultiStage(event.target.checked)} className="mt-1" />
+        <span><span className="block font-display uppercase">Multi-stage tournament</span><span className="mt-1 block text-xs text-ink-faint">Groups → automatic qualification → Playoffs → Grand Final. Use with Single elimination.</span></span>
+      </label>
 
       <div className="grid gap-5 md:grid-cols-2">
         <label className="md:col-span-2">
@@ -368,6 +387,7 @@ export function CreateTournamentForm() {
             <option value="sets">Sets</option>
             <option value="time">Time</option>
             <option value="attempts">Attempts</option>
+            <option value="battle_royale">Battle Royale</option>
             <option value="custom">Custom metric</option>
           </select>
         </label>
@@ -378,7 +398,8 @@ export function CreateTournamentForm() {
           <select
             value={format}
             onChange={(e) => setFormat(e.target.value)}
-            className="field-input"
+            disabled={isBattleRoyale}
+            className="field-input disabled:opacity-60"
           >
             {FORMATS.map(([value, label]) => (
               <option key={value} value={value}>

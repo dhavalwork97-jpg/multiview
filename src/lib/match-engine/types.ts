@@ -29,6 +29,11 @@ export type MatchRules = {
   target?: number;
   allowedMetrics?: string[];
   weights?: Record<string, number>;
+  placementPoints?: Record<string | number, number>;
+  finishPoints?: number;
+  eliminationPoints?: number;
+  bonusPoints?: number;
+  tiebreakers?: string[];
   allowDraw?: boolean;
   [key: string]: unknown;
 };

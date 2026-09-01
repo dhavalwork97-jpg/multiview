@@ -50,9 +50,13 @@ function MatchRow({ title, matches }: { title: string; matches: RecMatch[] }) {
             href={`/watch/${m.id}`}
             className="min-w-[200px] rounded-card border border-arena-600 bg-arena-800 p-3 text-sm hover:border-ink-faint"
           >
-            <span className="text-corner-p1">{m.playerOne.gamertag}</span>
-            {" vs "}
-            <span className="text-corner-p2">{m.playerTwo.gamertag}</span>
+            <span className="text-corner-p1">
+  {m.playerOne?.gamertag ?? "TBD"}
+</span>
+{" vs "}
+<span className="text-corner-p2">
+  {m.playerTwo?.gamertag ?? "TBD"}
+</span>
             <div className="mt-1 text-xs text-ink-faint">{m.station?.label}</div>
           </Link>
         ))}

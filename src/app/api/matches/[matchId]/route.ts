@@ -31,7 +31,7 @@ const updateSchema = z.object({
 
   scoreEvent: z
     .object({
-      sideKey: z.enum(["A", "B"]),
+      sideKey: z.string().min(1).max(20),
       metric: z.string().min(1),
       value: z.number().int().min(0),
       period: z.string().optional(),
@@ -122,6 +122,44 @@ export async function PATCH(
       },
       { status: 429 },
     );
+  }
+
+  /*
+   * Battle Royale matches use one side per entrant. They are not head-to-head
+   * and therefore must not pass through the two-side outcome/progression path.
+   */
+  if (existing.tournament.sport === "bgmi" || existing.scoringAdapter === "battle_royale") {
+    if (parsed.data.winnerSideKey) {
+      return NextResponse.json({ error: "Battle Royale matches do not have a single winner side; submit placement/kills/points." }, { status: 400 });
+    }
+    const scoreEvent = parsed.data.scoreEvent;
+    if (scoreEvent) {
+      const rules = resolveRules(existing.tournament.sport, { ...(existing.tournament.competitionRules as any ?? {}), scoringAdapter: "battle_royale" });
+      validateScoreEvent(scoreEvent, rules);
+    }
+    try {
+      const result = await db.$transaction(async (tx) => {
+        const sides = await tx.matchSide.findMany({ where: { matchId }, orderBy: { sideKey: "asc" } });
+        const side = scoreEvent ? sides.find((candidate) => candidate.sideKey === scoreEvent.sideKey) : null;
+        if (scoreEvent && !side) throw new Error("Invalid Battle Royale participant side");
+        if (scoreEvent) {
+          const nextSequence = (await tx.matchScoreEvent.count({ where: { matchId } })) + 1;
+          await tx.matchScoreEvent.create({ data: { matchId, sideId: side!.id, sequence: nextSequence, metric: scoreEvent.metric, value: scoreEvent.value, period: scoreEvent.period, metadata: scoreEvent.metadata as any } });
+        }
+        const sideScores = parsed.data.sideScores ?? {};
+        for (const candidate of sides) {
+          const key = candidate.sideKey === "A" ? "A" : candidate.sideKey === "B" ? "B" : candidate.sideKey;
+          const next = (sideScores as Record<string, number | undefined>)[key];
+          if (typeof next === "number") await tx.matchSide.update({ where: { id: candidate.id }, data: { score: next } });
+        }
+        if (parsed.data.status === "LIVE") await tx.match.update({ where: { id: matchId }, data: { status: "LIVE", startedAt: existing.startedAt ?? new Date() } });
+        if (parsed.data.status === "COMPLETED") await tx.match.update({ where: { id: matchId }, data: { status: "COMPLETED", endedAt: new Date() } });
+        return tx.match.findUnique({ where: { id: matchId }, include: { sides: { include: { participants: true, scoreEvents: true } }, scoreEvents: { orderBy: { sequence: "asc" } } } });
+      });
+      return NextResponse.json(result);
+    } catch (error) {
+      return NextResponse.json({ error: error instanceof Error ? error.message : "Failed to update Battle Royale match" }, { status: 400 });
+    }
   }
 
   /*
@@ -247,10 +285,11 @@ export async function PATCH(
          * Score event.
          */
         if (parsed.data.scoreEvent) {
-          const side =
-            sidesByKey[
-              parsed.data.scoreEvent.sideKey
-            ];
+          const sideKey = parsed.data.scoreEvent.sideKey;
+          if (sideKey !== "A" && sideKey !== "B") {
+            throw new Error("Generic matches only support Side A or Side B score events");
+          }
+          const side = sidesByKey[sideKey];
 
           const nextSequence =
             (await tx.matchScoreEvent.count({
@@ -277,10 +316,8 @@ export async function PATCH(
 
           scores = {
             ...scores,
-            [parsed.data.scoreEvent.sideKey]:
-              scores[
-                parsed.data.scoreEvent.sideKey
-              ] +
+            [sideKey]:
+              scores[sideKey] +
               parsed.data.scoreEvent.value,
           };
 
@@ -289,10 +326,7 @@ export async function PATCH(
               id: side.id,
             },
             data: {
-              score:
-                scores[
-                  parsed.data.scoreEvent.sideKey
-                ],
+              score: scores[sideKey],
             },
           });
         }

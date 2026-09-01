@@ -56,6 +56,9 @@ export type CompetitionViewerState = {
     participantMode: string;
     scoringMode: string;
     status: string;
+    format: string;
+    presentationMode: "battle_royale" | "standings" | "swiss" | "bracket";
+    stages: Array<{ id: string; name: string; kind: string; orderIndex: number; status: string }>;
   };
 
   broadcast: {

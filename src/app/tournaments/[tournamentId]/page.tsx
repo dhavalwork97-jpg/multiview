@@ -82,10 +82,11 @@ export default async function TournamentPage({
         orderBy: { seed: "asc" },
       },
       brackets: {
-        select: {
-          id: true,
-          name: true,
-        },
+        select: { id: true, name: true },
+      },
+      stages: {
+        orderBy: { orderIndex: "asc" },
+        select: { id: true, name: true, kind: true, status: true, _count: { select: { matches: true } } },
       },
     },
   });
@@ -94,7 +95,11 @@ export default async function TournamentPage({
     notFound();
   }
 
+  const isBattleRoyale =
+    tournament.sport === "bgmi" || tournament.scoringMode === "battle_royale";
+
   const viewerState = await getCompetitionViewerState(tournamentId);
+  const isMultiStage = tournament.stages.length > 1 && !isBattleRoyale;
 
   if (!viewerState) {
     notFound();
@@ -241,9 +246,20 @@ export default async function TournamentPage({
             </p>
 
             <div className="flex flex-wrap items-center justify-between gap-3">
-              <h2 className="font-display text-xl uppercase tracking-wide">
-                Brackets
-              </h2>
+              <div>
+                <h2 className="font-display text-xl uppercase tracking-wide">
+                  {isBattleRoyale
+                    ? "Battle Royale standings"
+                    : isMultiStage
+                      ? "Tournament stages"
+                      : "Brackets"}
+                </h2>
+                {isBattleRoyale ? (
+                  <p className="mt-1 text-xs text-ink-faint">Placement, kills and points determine the leaderboard.</p>
+                ) : isMultiStage ? (
+                  <p className="mt-1 text-xs text-ink-faint">Groups qualify automatically into playoffs, then the Grand Final.</p>
+                ) : null}
+              </div>
 
               <Link
                 href={`/tournaments/${tournament.id}/standings`}
@@ -254,10 +270,21 @@ export default async function TournamentPage({
             </div>
           </div>
 
-          <BracketExplorer
-            brackets={tournament.brackets}
-            tournamentId={tournament.id}
-          />
+          {isBattleRoyale ? (
+            <div className="rounded-card border border-arena-700 bg-arena-900 p-5"><p className="text-sm text-ink-muted">Battle Royale tournaments do not use a bracket. View the standings to follow placement, kills and total points.</p></div>
+          ) : isMultiStage ? (
+            <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
+              {tournament.stages.map((stage, index) => (
+                <div key={stage.id} className="rounded-card border border-arena-700 bg-arena-900 p-4">
+                  <div className="flex items-center justify-between"><span className="font-mono text-[10px] uppercase text-ink-faint">Stage {index + 1}</span><span className="font-mono text-[10px] uppercase text-ink-faint">{stage.status}</span></div>
+                  <h3 className="mt-2 font-display uppercase">{stage.name}</h3>
+                  <p className="mt-1 text-xs text-ink-faint">{stage.kind} · {stage._count.matches} matches</p>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <BracketExplorer brackets={tournament.brackets} tournamentId={tournament.id} />
+          )}
         </section>
       </div>
     </main>

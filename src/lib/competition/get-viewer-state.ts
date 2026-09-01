@@ -91,6 +91,11 @@ export async function getCompetitionViewerState(
       scoringMode: true,
       status: true,
       publicEnabled: true,
+      format: true,
+      stages: {
+        orderBy: { orderIndex: "asc" },
+        select: { id: true, name: true, kind: true, orderIndex: true, status: true },
+      },
       broadcastState: {
         select: {
           scene: true,
@@ -154,13 +159,9 @@ export async function getCompetitionViewerState(
     .slice(0, 12)
     .map(toViewerMatch);
 
-  // The existing standings engine is head-to-head. Do not use it for
-  // competition types whose results cannot be represented correctly.
-  const standings =
-    tournament.competitionType === "league" ||
-    tournament.scoringMode === "points"
-      ? calculateStandings(completed)
-      : [];
+  // Standings are now a first-class competition surface. The engine handles
+  // both head-to-head results and multi-entrant Battle Royale lobbies.
+  const standings = calculateStandings(completed);
 
   return {
     version: 1,
@@ -175,6 +176,16 @@ export async function getCompetitionViewerState(
       participantMode: tournament.participantMode,
       scoringMode: tournament.scoringMode,
       status: tournament.status,
+      format: tournament.format,
+      presentationMode:
+        tournament.scoringMode === "battle_royale" || tournament.sport === "bgmi"
+          ? "battle_royale"
+          : tournament.format === "ROUND_ROBIN" || tournament.competitionType === "league"
+            ? "standings"
+            : tournament.format === "SWISS"
+              ? "swiss"
+              : "bracket",
+      stages: tournament.stages,
     },
 
     broadcast: tournament.broadcastState
