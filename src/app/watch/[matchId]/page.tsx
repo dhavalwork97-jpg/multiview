@@ -26,7 +26,7 @@ export default async function WatchPage({ params }: { params: Promise<{ matchId:
       playerOne: { select: { gamertag: true } },
       playerTwo: { select: { gamertag: true } },
       sides: { include: { participants: { include: { player: { select: { gamertag: true } }, team: { select: { name: true } } } } } },
-      station: { select: { id: true, label: true } },
+      station: { select: { id: true, label: true, playbackIdHls: true } },
       tournament: { select: { name: true } },
     },
   });
@@ -47,6 +47,7 @@ export default async function WatchPage({ params }: { params: Promise<{ matchId:
         playerOne: { gamertag: nameFor(sideA, match.playerOne?.gamertag ?? "Side A") },
         playerTwo: { gamertag: nameFor(sideB, match.playerTwo?.gamertag ?? "Side B") },
         startedAt: match.startedAt?.toISOString() ?? null,
+        hlsPlaylistKey: match.station?.playbackIdHls ? `${match.station.playbackIdHls}/index.m3u8` : null,
       }}
       isPremium={isPremium(user)}
     />

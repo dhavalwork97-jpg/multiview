@@ -1,3 +1,4 @@
+import type { Prisma } from "@prisma/client";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { db } from "@/lib/db";
@@ -134,7 +135,17 @@ export async function PATCH(
     }
     const scoreEvent = parsed.data.scoreEvent;
     if (scoreEvent) {
-      const rules = resolveRules(existing.tournament.sport, { ...(existing.tournament.competitionRules as any ?? {}), scoringAdapter: "battle_royale" });
+      const competitionRules =
+  existing.tournament.competitionRules &&
+  typeof existing.tournament.competitionRules === "object" &&
+  !Array.isArray(existing.tournament.competitionRules)
+    ? existing.tournament.competitionRules
+    : {};
+
+const rules = resolveRules(existing.tournament.sport, {
+  ...competitionRules,
+  scoringAdapter: "battle_royale",
+});
       validateScoreEvent(scoreEvent, rules);
     }
     try {
@@ -144,7 +155,7 @@ export async function PATCH(
         if (scoreEvent && !side) throw new Error("Invalid Battle Royale participant side");
         if (scoreEvent) {
           const nextSequence = (await tx.matchScoreEvent.count({ where: { matchId } })) + 1;
-          await tx.matchScoreEvent.create({ data: { matchId, sideId: side!.id, sequence: nextSequence, metric: scoreEvent.metric, value: scoreEvent.value, period: scoreEvent.period, metadata: scoreEvent.metadata as any } });
+          await tx.matchScoreEvent.create({ data: { matchId, sideId: side!.id, sequence: nextSequence, metric: scoreEvent.metric, value: scoreEvent.value, period: scoreEvent.period, metadata: scoreEvent.metadata as Prisma.InputJsonValue } });
         }
         const sideScores = parsed.data.sideScores ?? {};
         for (const candidate of sides) {
@@ -310,7 +321,7 @@ export async function PATCH(
               period:
                 parsed.data.scoreEvent.period,
               metadata:
-                parsed.data.scoreEvent.metadata as any,
+                parsed.data.scoreEvent.metadata as Prisma.InputJsonValue,
             },
           });
 
@@ -763,7 +774,7 @@ export async function PATCH(
   /*
    * Legacy playerOne/playerTwo match path.
    */
-  const data: Record<string, unknown> = {};
+  const data: Prisma.MatchUpdateInput = {};
 
   if (
     parsed.data.playerOneScore !==
@@ -948,7 +959,7 @@ export async function PATCH(
       where: {
         id: matchId,
       },
-      data: data as any,
+      data,
     });
 
   if (

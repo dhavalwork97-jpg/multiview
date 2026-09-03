@@ -1,84 +1,173 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import Hls from "hls.js";
 
-// Default viewing path — CloudFront-cached HLS scales to any audience
-// size the way a per-viewer WebRTC subscription can't. A few seconds of
-// latency in exchange for that scale is the trade described in
-// STREAMING_ARCHITECTURE.md.
-export function HlsPlayer({ src, muted = false }: { src: string; muted?: boolean }) {
+export function HlsPlayer({
+  src,
+  muted = false,
+  autoPlay = true,
+  className = "",
+}: {
+  src: string;
+  muted?: boolean;
+  autoPlay?: boolean;
+  className?: string;
+}) {
   const videoRef = useRef<HTMLVideoElement>(null);
-  // "loading" until the first frame plays, then "playing" for good —
-  // this only tracks whether a *fatal* failure has happened, not every
-  // hls.js hiccup (it auto-recovers plenty of transient network/media
-  // errors on its own; surfacing those to the viewer would just be noise).
-  const [status, setStatus] = useState<"loading" | "playing" | "error">("loading");
-  // Bumping this remounts the effect below with a fresh Hls instance —
-  // simplest reliable way to actually retry (vs. trying to resume a
-  // fatally-errored hls.js instance in place).
-  const [retryNonce, setRetryNonce] = useState(0);
+  const hlsRef = useRef<Hls | null>(null);
+  const retryTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const retryCountRef = useRef(0);
+  const [error, setError] = useState(false);
+  const [playing, setPlaying] = useState(false);
+
+  const retry = useCallback(() => {
+    const video = videoRef.current;
+    if (!video || !src) return;
+
+    setError(false);
+    retryCountRef.current = 0;
+
+    if (hlsRef.current) {
+      hlsRef.current.startLoad();
+      void video.play().catch(() => undefined);
+      return;
+    }
+
+    if (video.canPlayType("application/vnd.apple.mpegurl")) {
+      video.src = src;
+      video.load();
+      if (autoPlay) void video.play().catch(() => undefined);
+      return;
+    }
+  }, [autoPlay, src]);
 
   useEffect(() => {
     const video = videoRef.current;
-    if (!video) return;
+    if (!video || !src) return;
 
-    setStatus("loading");
+    let disposed = false;
+    let hls: Hls | null = null;
+    setError(false);
+    setPlaying(false);
+    retryCountRef.current = 0;
 
-    if (Hls.isSupported()) {
-      const hls = new Hls({
-        // Keep enough back-buffer that scrubbing backward within the
-        // live playlist (DVR-style "watch from a bit ago") works,
-        // without holding the entire match in memory.
-        backBufferLength: 60 * 30,
-        liveSyncDurationCount: 3,
-      });
-      hls.on(Hls.Events.FRAG_LOADED, () => setStatus((s) => (s === "loading" ? "playing" : s)));
-      hls.on(Hls.Events.ERROR, (_event, data) => {
-        // Previously nothing listened to this at all — a fatal error
-        // (playlist 404 because egress hasn't produced a segment yet,
-        // manifest load timeout, etc.) left the <video> element just
-        // silently frozen with no indication anything was wrong.
-        if (data.fatal) setStatus("error");
-      });
-      hls.loadSource(src);
-      hls.attachMedia(video);
-      return () => hls.destroy();
-    }
+    const scheduleRecovery = () => {
+      if (disposed || retryTimerRef.current) return;
+      const attempt = retryCountRef.current++;
+      const delay = Math.min(1000 * 2 ** attempt, 10000);
+      retryTimerRef.current = setTimeout(() => {
+        retryTimerRef.current = null;
+        if (disposed) return;
+        if (hlsRef.current) {
+          hlsRef.current.startLoad();
+          return;
+        }
+        setError(true);
+      }, delay);
+    };
 
-    // Safari supports HLS natively — no hls.js needed there.
     if (video.canPlayType("application/vnd.apple.mpegurl")) {
       video.src = src;
-      const onPlaying = () => setStatus("playing");
-      const onError = () => setStatus("error");
-      video.addEventListener("playing", onPlaying);
-      video.addEventListener("error", onError);
-      return () => {
-        video.removeEventListener("playing", onPlaying);
-        video.removeEventListener("error", onError);
-      };
+      if (autoPlay) void video.play().catch(() => undefined);
+    } else if (Hls.isSupported()) {
+      hls = new Hls({
+        enableWorker: true,
+        lowLatencyMode: true,
+        backBufferLength: 30,
+        maxBufferLength: 30,
+        manifestLoadingMaxRetry: 3,
+        levelLoadingMaxRetry: 3,
+        fragLoadingMaxRetry: 3,
+      });
+      hlsRef.current = hls;
+      hls.loadSource(src);
+      hls.attachMedia(video);
+
+      hls.on(Hls.Events.MANIFEST_PARSED, () => {
+        retryCountRef.current = 0;
+        if (autoPlay) void video.play().catch(() => undefined);
+      });
+
+      hls.on(Hls.Events.ERROR, (_event, data) => {
+        if (disposed || !data.fatal) return;
+
+        if (data.type === Hls.ErrorTypes.NETWORK_ERROR) {
+          scheduleRecovery();
+        } else if (data.type === Hls.ErrorTypes.MEDIA_ERROR) {
+          retryCountRef.current = 0;
+          hls?.recoverMediaError();
+        } else {
+          scheduleRecovery();
+        }
+      });
+    } else {
+      setError(true);
     }
-  }, [src, retryNonce]);
+
+    const onPlaying = () => {
+      retryCountRef.current = 0;
+      setPlaying(true);
+      setError(false);
+    };
+    const onWaiting = () => setPlaying(false);
+    const onVideoError = () => setError(true);
+    const onVisibilityChange = () => {
+      if (document.visibilityState === "visible" && hlsRef.current) {
+        hlsRef.current.startLoad();
+      }
+    };
+
+    video.addEventListener("playing", onPlaying);
+    video.addEventListener("waiting", onWaiting);
+    video.addEventListener("error", onVideoError);
+    document.addEventListener("visibilitychange", onVisibilityChange);
+
+    return () => {
+      disposed = true;
+      if (retryTimerRef.current) clearTimeout(retryTimerRef.current);
+      retryTimerRef.current = null;
+      video.removeEventListener("playing", onPlaying);
+      video.removeEventListener("waiting", onWaiting);
+      video.removeEventListener("error", onVideoError);
+      document.removeEventListener("visibilitychange", onVisibilityChange);
+      hls?.destroy();
+      hlsRef.current = null;
+      video.pause();
+      video.removeAttribute("src");
+      video.load();
+    };
+  }, [autoPlay, src]);
 
   return (
-    <div className="relative aspect-video w-full overflow-hidden rounded-card bg-arena-900">
+    <div className={`relative aspect-video w-full overflow-hidden rounded-card bg-arena-900 ${className}`}>
       <video
         ref={videoRef}
-        autoPlay
-        playsInline
+        autoPlay={autoPlay}
         muted={muted}
+        playsInline
         controls
-        className="h-full w-full"
+        className="h-full w-full object-contain"
+        onError={() => setError(true)}
       />
-      {status === "error" && (
-        <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-arena-900/95 text-center text-sm text-signal-error">
-          <p>Stream hiccup — playback failed.</p>
+      {!playing && !error && autoPlay && (
+        <button
+          type="button"
+          onClick={() => void videoRef.current?.play().catch(() => undefined)}
+          className="absolute inset-x-3 bottom-3 rounded bg-arena-950/85 px-3 py-2 text-xs text-ink-muted backdrop-blur"
+        >
+          Tap to resume live playback
+        </button>
+      )}
+      {error && (
+        <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-arena-950/90 px-4 text-center text-xs text-ink-muted">
+          <span>Live stream playback is temporarily unavailable.</span>
           <button
             type="button"
-            onClick={() => setRetryNonce((n) => n + 1)}
-            className="rounded-card border border-arena-600 px-3 py-1 font-mono text-xs uppercase tracking-wide text-ink-muted hover:border-signal-live hover:text-signal-live"
+            onClick={retry}
+            className="rounded border border-ink-faint/30 px-3 py-1.5 text-ink hover:bg-arena-800"
           >
-            Retry
+            Retry stream
           </button>
         </div>
       )}
