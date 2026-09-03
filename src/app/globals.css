@@ -66,5 +66,13 @@ a { text-underline-offset: 3px; }
     @apply border-signal-live/60 bg-signal-live text-arena-950 shadow-[0_8px_24px_rgba(0,0,0,.18)];
   }
 
+  .context-tabs { @apply flex gap-1 overflow-x-auto rounded-card border border-arena-700 bg-arena-900/80 p-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden; }
+  .context-tab { @apply inline-flex min-h-9 shrink-0 items-center justify-center rounded-card px-3 font-mono text-[10px] font-bold uppercase tracking-[0.1em] text-ink-faint transition-colors hover:bg-arena-800 hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-live/40; }
+  .context-tab-active { @apply bg-arena-700 text-ink shadow-sm; }
+
+  .stream-tile { @apply relative overflow-hidden rounded-card border border-arena-700 bg-arena-950 shadow-[0_10px_30px_rgba(0,0,0,.2)]; }
+  .stream-tile-active { @apply border-signal-live/50 shadow-[0_0_0_1px_rgba(58,222,124,.08),0_12px_34px_rgba(0,0,0,.28)]; }
+  .stream-tile-label { @apply pointer-events-none absolute inset-x-2 top-2 z-10 flex items-center justify-between gap-2 rounded-card border border-arena-700/80 bg-arena-950/90 px-2.5 py-1.5 font-mono text-[9px] font-bold uppercase tracking-[0.1em] text-ink-muted backdrop-blur; }
+
   .empty-state { @apply rounded-card border border-dashed border-arena-700 bg-arena-900/50 px-6 py-12 text-center; }
 }
