@@ -5,6 +5,7 @@ import { useSocket } from "@/hooks/useSocket";
 import Link from "next/link";
 import { LiveKitPlayer } from "@/components/watch/LiveKitPlayer";
 import { ObserverAssistant } from "@/components/admin/ObserverAssistant";
+import { ObsControlPanel } from "@/components/admin/ObsControlPanel";
 
 type BroadcastScene =
   "OFFLINE" | "WAITING" | "MATCH" | "BREAK" | "INTERMISSION" | "RESULTS";
@@ -1061,6 +1062,25 @@ export function TournamentControlRoom({
           </button>
         </div>
       </section>
+
+      <ObsControlPanel
+        tournamentId={tournamentId}
+        broadcast={broadcast}
+        matchLabel={
+          [...stations.flatMap((station) => station.matches), ...queued].find(
+            (match) => match.id === broadcast.matchId,
+          )
+            ? (() => {
+                const match = [...stations.flatMap((station) => station.matches), ...queued].find(
+                  (item) => item.id === broadcast.matchId,
+                );
+                return match
+                  ? `${match.playerOne?.gamertag ?? "TBD"} vs ${match.playerTwo?.gamertag ?? "TBD"}`
+                  : undefined;
+              })()
+            : undefined
+        }
+      />
 
       {broadcast.matchId && (stations.flatMap((station) => station.matches).find((match) => match.id === broadcast.matchId)?.scoringAdapter === "battle_royale" || queued.find((match) => match.id === broadcast.matchId)?.scoringAdapter === "battle_royale") && (
         <ObserverAssistant tournamentId={tournamentId} matchId={broadcast.matchId} />

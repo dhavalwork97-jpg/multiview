@@ -106,11 +106,7 @@ export async function POST(req: Request, { params }: Params) {
   const current = await db.broadcastState.findUnique({ where: { tournamentId }, select: { overlay: true } });
   const overlay = current?.overlay && typeof current.overlay === "object" && !Array.isArray(current.overlay)
     ? current.overlay as Record<string, unknown> : {};
-  const observer = {
-    ...parsed.data,
-    currentTeamKey: parsed.data.currentTeamKey ?? null,
-    generatedAt: new Date().toISOString(),
-  };
+  const observer = { ...parsed.data, generatedAt: new Date().toISOString() };
   const nextOverlay = JSON.parse(JSON.stringify({ ...overlay, observer }));
 
   const state = await db.broadcastState.upsert({
@@ -118,7 +114,12 @@ export async function POST(req: Request, { params }: Params) {
     create: { tournamentId, scene: "MATCH", matchId: parsed.data.matchId, overlay: nextOverlay },
     update: { matchId: parsed.data.matchId, overlay: nextOverlay },
   });
-  const recommendations = rankObserverRecommendations(observer);
+  const observerContext = {
+  ...observer,
+  currentTeamKey: observer.currentTeamKey ?? null,
+};
+
+const recommendations = rankObserverRecommendations(observerContext);
   await publishEvent({ type: "broadcast:updated", tournamentId, scene: state.scene, stationId: state.stationId, matchId: state.matchId, overlay: nextOverlay, commandType: "OBSERVER_UPDATE" });
   await publishEvent({ type: "competition:updated", tournamentId, reason: "LIVE_STATE_UPDATED" });
   return NextResponse.json({ observer, recommendations, updatedAt: state.updatedAt, actorUserId: access.user.id });
