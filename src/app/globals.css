@@ -36,3 +36,15 @@ a { text-underline-offset: 3px; }
   .action-secondary { @apply inline-flex min-h-9 items-center justify-center rounded-card border border-arena-600 px-3 font-mono text-[11px] font-semibold uppercase tracking-wide text-ink-muted hover:border-signal-live hover:text-ink; }
   .action-primary { @apply inline-flex min-h-9 items-center justify-center rounded-card bg-signal-live px-3 font-mono text-[11px] font-bold uppercase tracking-wide text-arena-950 hover:opacity-90; }
 }
+
+@layer components {
+  .surface { @apply rounded-card border border-arena-700 bg-arena-900 shadow-[0_12px_40px_rgba(0,0,0,.16)]; }
+  .section-kicker { @apply font-mono text-[10px] font-semibold uppercase tracking-[0.2em] text-ink-faint; }
+  .data-value { @apply font-display tracking-wide; }
+}
+
+::selection { background: rgba(58, 222, 124, .22); color: #F2F1ED; }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { scroll-behavior: auto !important; animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; transition-duration: 0.01ms !important; }
+}

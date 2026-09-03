@@ -9,6 +9,7 @@ import { TrendingStrip } from "@/components/dashboard/TrendingStrip";
 import { RecommendedStrip } from "@/components/dashboard/RecommendedStrip";
 import { getPrimaryOrganizationMembership } from "@/lib/organization";
 import { NotificationBell } from "@/components/notifications/NotificationBell";
+import { DashboardStats } from "@/components/dashboard/DashboardStats";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -21,12 +22,15 @@ export default async function DashboardPage() {
   const primaryMembership = await getPrimaryOrganizationMembership(user.id);
   const canCreateTournament = user.role === "ADMIN" || primaryMembership?.role === "OWNER" || primaryMembership?.role === "ADMIN";
   const organizationIds = memberships.map((m) => m.organizationId);
-  const tournaments = await db.tournament.findMany({
+  const [tournaments, liveCount] = await Promise.all([
+    db.tournament.findMany({
     where: user.role === "ADMIN" ? {} : { organizationId: { in: organizationIds } },
     orderBy: { startDate: "desc" },
     take: 8,
     select: { id: true, slug: true, name: true, status: true, startDate: true },
-  });
+    }),
+    db.match.count({ where: { status: "LIVE", tournament: user.role === "ADMIN" ? undefined : { organizationId: { in: organizationIds } } } }),
+  ]);
 
   return (
     <main className="min-h-screen bg-arena-950 px-6 py-8">
@@ -48,6 +52,8 @@ export default async function DashboardPage() {
           </div>
         </div>
       </header>
+
+      <DashboardStats tournaments={tournaments.length} liveCount={liveCount} canCreateTournament={canCreateTournament} />
 
       <section className="mb-10">
         <RecommendedStrip />
