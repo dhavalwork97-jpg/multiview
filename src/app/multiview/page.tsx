@@ -5,7 +5,7 @@ import { db } from "@/lib/db";
 import { MultiView } from "@/components/watch/MultiView";
 import { BillingButton } from "@/components/billing/BillingButton";
 
-// Phase 3's streaming surface with Phase 4's shared navigation/page system.
+// Phase 3 streaming surface with the shared Phase 4 navigation and visual system.
 export default async function MultiViewPage({
   searchParams,
 }: {
@@ -15,30 +15,50 @@ export default async function MultiViewPage({
   const user = await getCurrentUser();
   const tiles = maxMultiViewTiles(user);
 
-  const stations = await db.station.findMany({
-    where: {
-      status: "LIVE",
-      ...(tournamentId ? { tournamentId } : {}),
-    },
-    orderBy: { label: "asc" },
-    take: tiles,
-    select: { id: true, label: true, youtubeVideoId: true, playbackIdHls: true },
-  });
+  const [stations, tournament] = await Promise.all([
+    db.station.findMany({
+      where: {
+        status: "LIVE",
+        ...(tournamentId ? { tournamentId } : {}),
+      },
+      orderBy: { label: "asc" },
+      take: tiles,
+      select: { id: true, label: true, youtubeVideoId: true, playbackIdHls: true },
+    }),
+    tournamentId
+      ? db.tournament.findUnique({ where: { id: tournamentId }, select: { id: true, name: true, game: true, status: true } })
+      : Promise.resolve(null),
+  ]);
 
   return (
     <main className="page-shell">
       <div className="page-container">
-        <header className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
-          <div>
-            <p className="page-kicker text-signal-live">Live signal · {tiles} tiles</p>
-            <h1 className="page-title mt-1">Watch every station</h1>
-            <p className="page-subtitle">Monitor every active station in one control-friendly viewing surface.</p>
+        <header className="mb-6">
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+            <div className="min-w-0">
+              <p className="page-kicker text-signal-live">Live signal · {tiles} tiles</p>
+              <h1 className="page-title mt-1">Watch every station</h1>
+              <p className="page-subtitle">Monitor every active station in one control-friendly viewing surface.</p>
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
+              <Link href="/tournaments" className="action-secondary">Find tournaments</Link>
+              {!isPremium(user) && <BillingButton isPremium={false} />}
+            </div>
           </div>
-          <div className="flex flex-wrap items-center gap-2">
-            <Link href="/tournaments" className="action-secondary">Find tournaments</Link>
-            {!isPremium(user) && <BillingButton isPremium={false} />}
-          </div>
+          <nav aria-label="Viewing navigation" className="context-tabs mt-4">
+            <Link href="/" className="context-tab">Home</Link>
+            <Link href="/tournaments" className="context-tab">Tournaments</Link>
+            {tournament && <Link href={`/tournaments/${tournament.id}`} className="context-tab">{tournament.game} · {tournament.name}</Link>}
+            <span className="context-tab context-tab-active" aria-current="page">Multi-View</span>
+          </nav>
         </header>
+
+        {tournament && (
+          <section className="surface-card mb-4 flex flex-col gap-2 p-4 sm:flex-row sm:items-center sm:justify-between">
+            <div className="min-w-0"><p className="page-kicker text-signal-live">{tournament.game}</p><h2 className="mt-1 truncate font-display text-2xl uppercase tracking-wide">{tournament.name}</h2></div>
+            <span className={tournament.status === "LIVE" ? "status-live" : "status-neutral"}>{tournament.status === "LIVE" && <span className="h-1.5 w-1.5 rounded-full bg-signal-live animate-live-pulse" />}{tournament.status}</span>
+          </section>
+        )}
 
         <section className="surface-card overflow-hidden p-2 sm:p-3">
           {stations.length === 0 ? (
