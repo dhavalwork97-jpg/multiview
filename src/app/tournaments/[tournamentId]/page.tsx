@@ -50,6 +50,11 @@ export default async function TournamentPage({ params }: { params: Promise<{ tou
               <Link href="/tournaments" className="action-secondary">All tournaments</Link>
             </div>
           </div>
+          <nav aria-label="Tournament navigation" className="context-tabs mt-5">
+            <Link href={`/tournaments/${tournament.id}`} aria-current="page" className="context-tab context-tab-active">Overview</Link>
+            <Link href={`/tournaments/${tournament.id}/standings`} className="context-tab">Standings</Link>
+            {tournament.status === "LIVE" && <Link href={`/multiview?tournamentId=${tournament.id}`} className="context-tab">Watch live</Link>}
+          </nav>
         </header>
 
         <div className="space-y-6" style={{ ["--event-accent" as string]: tournament.organization.brandPrimaryColor ?? "#7cf7c5", ["--event-accent-2" as string]: tournament.organization.brandAccentColor ?? "#7c9cff" } as CSSProperties}>
