@@ -12,9 +12,9 @@ export async function POST(
     const state = await recordScoreEvent(matchId, body);
 
     return NextResponse.json(state);
-  } catch (e: any) {
+  } catch (e: unknown) {
     return NextResponse.json(
-      { error: e.message },
+      { error: e instanceof Error ? e.message : "Unable to record score event" },
       { status: 400 }
     );
   }
