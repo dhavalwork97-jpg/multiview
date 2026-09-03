@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useState } from "react";
 import { useSocket } from "@/hooks/useSocket";
 import { VideoPlayer } from "@/components/watch/VideoPlayer";
@@ -41,9 +42,17 @@ export function WatchPageClient({ initialMatch, isPremium }: { initialMatch: Ini
   return (
     <main className="page-shell">
       <div className="page-container max-w-6xl">
-        <header className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-          <div><p className="page-kicker">{match.tournament.name}{match.round && ` · ${match.round}`}</p><h1 className="page-title mt-1 text-3xl sm:text-4xl">Watch match</h1></div>
-          <div className="flex flex-wrap items-center gap-2">{match.status === "LIVE" && <span className="status-live"><span className="h-1.5 w-1.5 rounded-full bg-signal-live animate-live-pulse" />LIVE</span>}{viewerCount !== null && <span className="status-neutral">{viewerCount} watching</span>}{match.station && <span className="status-neutral">{match.station.label}</span>}</div>
+        <header className="mb-5">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+            <div><p className="page-kicker">{match.tournament.name}{match.round && ` · ${match.round}`}</p><h1 className="page-title mt-1 text-3xl sm:text-4xl">Watch match</h1></div>
+            <div className="flex flex-wrap items-center gap-2">{match.status === "LIVE" && <span className="status-live"><span className="h-1.5 w-1.5 rounded-full bg-signal-live animate-live-pulse" />LIVE</span>}{viewerCount !== null && <span className="status-neutral">{viewerCount} watching</span>}{match.station && <span className="status-neutral">{match.station.label}</span>}</div>
+          </div>
+          <nav aria-label="Match navigation" className="context-tabs mt-4">
+            <Link href={`/tournaments/${match.tournamentId}`} className="context-tab">Tournament</Link>
+            <Link href={`/tournaments/${match.tournamentId}/standings`} className="context-tab">Standings</Link>
+            <Link href={`/multiview?tournamentId=${match.tournamentId}`} className="context-tab">Multi-View</Link>
+            <span className="context-tab context-tab-active" aria-current="page">Match</span>
+          </nav>
         </header>
 
         <section className="surface-card overflow-hidden p-2 sm:p-3">
