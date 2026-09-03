@@ -23,11 +23,6 @@ a { text-underline-offset: 3px; }
 }
 .animate-live-pulse { animation: live-pulse 1.6s ease-in-out infinite; }
 
-@keyframes signal-sweep {
-  0% { transform: translateX(-110%); }
-  100% { transform: translateX(110%); }
-}
-
 .bezel-cut {
   clip-path: polygon(0 0, calc(100% - 14px) 0, 100% 14px, 100% 100%, 0 100%);
 }
@@ -56,15 +51,13 @@ a { text-underline-offset: 3px; }
   .surface-card { @apply rounded-card border border-arena-700 bg-arena-900/70 shadow-[0_12px_36px_rgba(0,0,0,.16)]; }
   .surface-card-interactive { @apply transition-all duration-200 hover:-translate-y-0.5 hover:border-signal-live/60 hover:bg-arena-800/80 hover:shadow-[0_16px_42px_rgba(0,0,0,.24)]; }
   .status-live { @apply inline-flex items-center gap-1.5 rounded-full border border-signal-live/30 bg-signal-live/10 px-2 py-1 font-mono text-[10px] font-bold uppercase tracking-widest text-signal-live; }
-  .status-neutral { @apply inline-flex items-center rounded-full border border-arena-600 bg-arena-800 px-2 py-1 font-mono text-[10px] font-bold uppercase tracking-widest text-ink-muted; }
+  .status-neutral { @apply inline-flex items-center gap-1.5 rounded-full border border-arena-600 bg-arena-800 px-2 py-1 font-mono text-[10px] font-bold uppercase tracking-widest text-ink-muted; }
   .section-label { @apply font-mono text-[10px] font-bold uppercase tracking-[0.16em] text-ink-faint; }
 
   .game-tab {
     @apply inline-flex min-h-10 shrink-0 items-center justify-center rounded-card border border-arena-700 bg-arena-900 px-3.5 font-mono text-[10px] font-bold uppercase tracking-[0.1em] text-ink-muted transition-all duration-200 hover:border-arena-600 hover:bg-arena-800 hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-live/40;
   }
-  .game-tab-active {
-    @apply border-signal-live/60 bg-signal-live text-arena-950 shadow-[0_8px_24px_rgba(0,0,0,.18)];
-  }
+  .game-tab-active { @apply border-signal-live/60 bg-signal-live text-arena-950 shadow-[0_8px_24px_rgba(0,0,0,.18)]; }
 
   .context-tabs { @apply flex gap-1 overflow-x-auto rounded-card border border-arena-700 bg-arena-900/80 p-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden; }
   .context-tab { @apply inline-flex min-h-9 shrink-0 items-center justify-center rounded-card px-3 font-mono text-[10px] font-bold uppercase tracking-[0.1em] text-ink-faint transition-colors hover:bg-arena-800 hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-live/40; }
