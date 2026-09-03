@@ -1,52 +1,54 @@
 "use client";
 
+import { useMemo, useState } from "react";
 import { HlsPlayer } from "./HlsPlayer";
 import { YouTubePlayer } from "./YouTubePlayer";
 
 type MultiViewStation = { id: string; label: string; youtubeVideoId: string | null; hlsPlaylistKey: string | null };
 
-// Multi-view is HLS-only, deliberately — 9 simultaneous WebRTC
-// subscriptions is 9x the SFU load per viewer, which is exactly the
-// scaling problem the HLS-default decision in STREAMING_ARCHITECTURE.md
-// exists to avoid. All streams muted except one at a time (audio from 9
-// matches at once isn't useful anyway); click a tile to make it the
-// audio focus.
-export function MultiView({
-  stations,
-  layout,
-}: {
-  stations: MultiViewStation[];
-  layout: 4 | 9;
-}) {
+function buildHlsUrl(key: string | null) {
+  if (!key) return null;
+  const domain = process.env.NEXT_PUBLIC_CLOUDFRONT_DOMAIN?.replace(/^https?:\/\//, "").replace(/\/$/, "");
+  if (!domain) return null;
+  return `https://${domain}/${key.replace(/^\/+/, "")}`;
+}
+
+export function MultiView({ stations, layout }: { stations: MultiViewStation[]; layout: 4 | 9 }) {
   const visible = stations.slice(0, layout);
-  // Fixed 2/3-column grids read fine on a desktop monitor but turn into
-  // postage-stamp tiles on a phone (fighting-game viewership skews heavily
-  // mobile) — collapse to a single column below `sm`, then step up to the
-  // full desktop column count.
-  const gridClass =
-    layout === 4 ? "grid-cols-1 sm:grid-cols-2" : "grid-cols-1 sm:grid-cols-2 lg:grid-cols-3";
+  const [audioFocus, setAudioFocus] = useState(0);
+  const gridClass = layout === 4 ? "grid-cols-1 sm:grid-cols-2" : "grid-cols-1 sm:grid-cols-2 lg:grid-cols-3";
+
+  const sources = useMemo(
+    () => visible.map((station) => ({ station, hlsUrl: buildHlsUrl(station.hlsPlaylistKey) })),
+    [visible],
+  );
 
   return (
     <div className={`grid gap-2 ${gridClass}`}>
-      {visible.map((s, i) =>
-        s.hlsPlaylistKey ? (
-          <div key={s.id} className="relative">
-            <HlsPlayer src={(() => { const d = process.env.NEXT_PUBLIC_CLOUDFRONT_DOMAIN?.replace(/^https?:\/\//, "").replace(/\/$/, ""); return d ? `https://${d}/${s.hlsPlaylistKey.replace(/^\/+/, "")}` : ""; })()} muted={i !== 0} />
-            <span className="absolute left-2 top-2 rounded bg-arena-950/80 px-1.5 py-0.5 font-mono text-[10px] uppercase text-ink-muted">
-              {s.label}
-            </span>
+      {sources.map(({ station, hlsUrl }, i) => {
+        const muted = i !== audioFocus;
+        return (
+          <div key={station.id} className="relative">
+            {hlsUrl ? (
+              <HlsPlayer src={hlsUrl} muted={muted} />
+            ) : station.youtubeVideoId ? (
+              <YouTubePlayer stationId={station.id} videoId={station.youtubeVideoId} isLive muted={muted} />
+            ) : (
+              <div className="flex aspect-video items-center justify-center rounded-card bg-arena-900 text-xs text-ink-faint">
+                {station.label} — offline
+              </div>
+            )}
+            <button
+              type="button"
+              onClick={() => setAudioFocus(i)}
+              aria-pressed={!muted}
+              className="absolute left-2 top-2 rounded bg-arena-950/85 px-2 py-1 font-mono text-[10px] uppercase text-ink-muted backdrop-blur"
+            >
+              {station.label} · {muted ? "Audio off" : "Audio focus"}
+            </button>
           </div>
-        ) : s.youtubeVideoId ? (
-          <div key={s.id} className="relative">
-            <YouTubePlayer stationId={s.id} videoId={s.youtubeVideoId} isLive={true} muted={i !== 0} />
-            <span className="absolute left-2 top-2 rounded bg-arena-950/80 px-1.5 py-0.5 font-mono text-[10px] uppercase text-ink-muted">{s.label}</span>
-          </div>
-        ) : (
-          <div key={s.id} className="flex aspect-video items-center justify-center rounded-card bg-arena-900 text-xs text-ink-faint">
-            {s.label} — offline
-          </div>
-        )
-      )}
+        );
+      })}
     </div>
   );
 }
