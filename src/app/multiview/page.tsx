@@ -1,13 +1,11 @@
+import Link from "next/link";
 import { getCurrentUser } from "@/lib/auth";
 import { isPremium, maxMultiViewTiles } from "@/lib/billing";
 import { db } from "@/lib/db";
 import { MultiView } from "@/components/watch/MultiView";
 import { BillingButton } from "@/components/billing/BillingButton";
 
-// Ties Phase 3's MultiView component to Phase 4's subscription gating:
-// free viewers get 4 tiles, Premium gets 9 — see src/lib/billing.ts for
-// why this particular feature is the one behind the paywall (WebRTC and
-// multi-view are both the higher-infra-cost viewing paths).
+// Phase 3's streaming surface with Phase 4's shared navigation/page system.
 export default async function MultiViewPage({
   searchParams,
 }: {
@@ -28,36 +26,48 @@ export default async function MultiViewPage({
   });
 
   return (
-    <main className="min-h-screen bg-arena-950 px-6 py-8">
-      <header className="mb-6 flex items-center justify-between">
-        <div>
-          <p className="font-mono text-xs uppercase tracking-widest text-ink-faint">
-            Multi-view · {tiles} tiles
+    <main className="page-shell">
+      <div className="page-container">
+        <header className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+          <div>
+            <p className="page-kicker text-signal-live">Live signal · {tiles} tiles</p>
+            <h1 className="page-title mt-1">Watch every station</h1>
+            <p className="page-subtitle">Monitor every active station in one control-friendly viewing surface.</p>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <Link href="/tournaments" className="action-secondary">Find tournaments</Link>
+            {!isPremium(user) && <BillingButton isPremium={false} />}
+          </div>
+        </header>
+
+        <section className="surface-card overflow-hidden p-2 sm:p-3">
+          {stations.length === 0 ? (
+            <div className="empty-state border-0 bg-transparent py-16">
+              <p className="page-kicker text-signal-live">No live signal</p>
+              <h2 className="mt-2 font-display text-2xl uppercase tracking-wide text-ink">No stations are live right now</h2>
+              <p className="mx-auto mt-2 max-w-md text-sm leading-6 text-ink-faint">Return to the tournament hub to find the next scheduled competition.</p>
+              <Link href="/tournaments" className="action-secondary mt-5">Browse tournaments</Link>
+            </div>
+          ) : (
+            <MultiView
+              stations={stations.map((s) => ({
+                id: s.id,
+                label: s.label,
+                youtubeVideoId: s.youtubeVideoId,
+                hlsPlaylistKey: s.playbackIdHls ? `${s.playbackIdHls}/index.m3u8` : null,
+              }))}
+              layout={tiles}
+            />
+          )}
+        </section>
+
+        <footer className="mt-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+          <p className="text-xs text-ink-faint">
+            {isPremium(user) ? "Premium viewing · up to 9 stations at once." : "Free viewing · up to 4 stations at once."}
           </p>
-          <h1 className="font-display text-3xl uppercase tracking-wide">Watch every station</h1>
-        </div>
-        {!isPremium(user) && <BillingButton isPremium={false} />}
-      </header>
-
-      {stations.length === 0 ? (
-        <p className="text-sm text-ink-faint">No stations are live right now.</p>
-      ) : (
-        <MultiView
-          stations={stations.map((s) => ({
-            id: s.id,
-            label: s.label,
-            youtubeVideoId: s.youtubeVideoId,
-            hlsPlaylistKey: s.playbackIdHls ? `${s.playbackIdHls}/index.m3u8` : null,
-          }))}
-          layout={tiles}
-        />
-      )}
-
-      {!isPremium(user) && (
-        <p className="mt-4 text-xs text-ink-faint">
-          Free tier shows up to 4 stations at once — upgrade to Premium for the full 9-tile view.
-        </p>
-      )}
+          <Link href="/" className="font-mono text-[10px] font-bold uppercase tracking-widest text-ink-faint hover:text-signal-live">Back to home →</Link>
+        </footer>
+      </div>
     </main>
   );
 }
