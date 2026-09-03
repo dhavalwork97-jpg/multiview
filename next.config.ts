@@ -45,6 +45,7 @@ const securityHeaders = [
 ];
 
 const nextConfig: NextConfig = {
+  // Keep production builds from being blocked by the repository's existing ESLint debt. TypeScript remains enforced by the build.
   eslint: { ignoreDuringBuilds: true },
   // Server Actions / route handlers stream player avatars, station
   // thumbnails, etc. from S3 in later phases — remotePatterns gets

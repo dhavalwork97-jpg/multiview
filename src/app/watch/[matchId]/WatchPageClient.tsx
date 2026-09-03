@@ -18,6 +18,7 @@ type InitialMatch = {
   tournament: { name: string };
   startedAt: string | null;
   youtubeVideoId: string | null;
+  hlsPlaylistKey: string | null;
 };
 
 export function WatchPageClient({
@@ -102,6 +103,7 @@ export function WatchPageClient({
           <VideoPlayer
             stationId={match.station.id}
             youtubeVideoId={match.youtubeVideoId}
+            hlsPlaylistKey={match.hlsPlaylistKey}
             isPremium={isPremium}
             isLive
           />

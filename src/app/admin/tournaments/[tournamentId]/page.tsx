@@ -34,12 +34,6 @@ export default async function AdminTournamentPage({
 
   if (!tournament) redirect("/dashboard");
 
-  const [matchCount, liveCount, completedCount] = await Promise.all([
-    db.match.count({ where: { tournamentId: tournament.id } }),
-    db.match.count({ where: { tournamentId: tournament.id, status: "LIVE" } }),
-    db.match.count({ where: { tournamentId: tournament.id, status: "COMPLETED" } }),
-  ]);
-
   const isBattleRoyale =
     tournament.sport === "bgmi" || tournament.scoringMode === "battle_royale";
 
@@ -47,26 +41,19 @@ export default async function AdminTournamentPage({
 
   return (
     <main className="min-h-screen bg-arena-950 px-6 py-8">
-      <header className="mb-8 rounded-card border border-arena-700 bg-arena-900 p-5">
-        <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+      <header className="mb-8 flex items-start justify-between">
         <div>
           <p className="font-mono text-xs uppercase tracking-widest text-ink-faint">
             {tournament.sport} · {tournament.game} · {tournament.participantMode}
           </p>
           <h1 className="font-display text-3xl uppercase tracking-wide">{tournament.name}</h1>
         </div>
-          <Link
-            href={`/admin/tournaments/${tournament.id}/control-room`}
-            className="action-primary"
-          >
-            Open control room
-          </Link>
-        </div>
-        <div className="mt-5 grid grid-cols-3 gap-2 border-t border-arena-700 pt-4">
-          <Metric label="Matches" value={matchCount} />
-          <Metric label="Live" value={liveCount} live />
-          <Metric label="Completed" value={completedCount} />
-        </div>
+        <Link
+          href={`/admin/tournaments/${tournament.id}/control-room`}
+          className="rounded-card border border-arena-600 px-3 py-1.5 font-mono text-xs uppercase tracking-wide text-ink-faint transition-colors hover:border-signal-live hover:text-signal-live"
+        >
+          Control room
+        </Link>
       </header>
 
       <div className="mb-8"><TournamentAdminNav tournamentId={tournament.id} slug={tournament.slug} /></div>
@@ -114,14 +101,5 @@ export default async function AdminTournamentPage({
         </section>
       )}
     </main>
-  );
-}
-
-function Metric({ label, value, live = false }: { label: string; value: number; live?: boolean }) {
-  return (
-    <div className="rounded-card border border-arena-700 bg-arena-950 px-3 py-2.5">
-      <p className={`font-mono text-[9px] uppercase tracking-[0.18em] ${live ? "text-signal-live" : "text-ink-faint"}`}>{label}</p>
-      <p className="mt-1 font-display text-2xl leading-none">{value}</p>
-    </div>
   );
 }

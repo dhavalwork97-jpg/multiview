@@ -26,14 +26,14 @@ export function TournamentAdminNav({ tournamentId, slug }: { tournamentId: strin
     <div className="space-y-2">
       <nav aria-label="Tournament administration" className="flex gap-2 overflow-x-auto rounded-card border border-arena-700 bg-arena-900 p-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
         {primary.map(([suffix, label]) => (
-          <Link key={label} href={`${base}${suffix}`} className="inline-flex min-h-10 shrink-0 items-center rounded-card border border-arena-700 bg-arena-950 px-3 font-mono text-[11px] font-semibold uppercase tracking-wide text-ink-muted transition-all hover:-translate-y-px hover:border-signal-live hover:bg-arena-800 hover:text-signal-live">
+          <Link key={label} href={`${base}${suffix}`} className="inline-flex min-h-10 shrink-0 items-center rounded-card border border-arena-700 bg-arena-950 px-3 font-mono text-[11px] font-semibold uppercase tracking-wide text-ink-muted hover:border-signal-live hover:bg-arena-800 hover:text-signal-live">
             {label}
           </Link>
         ))}
       </nav>
       <nav aria-label="Tournament external resources" className="flex gap-2 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
         {secondary.map(([href, label]) => (
-          <Link key={label} href={href} className="inline-flex min-h-9 shrink-0 items-center rounded-card border border-arena-700 px-3 font-mono text-[10px] font-semibold uppercase tracking-wide text-ink-faint transition-colors hover:border-signal-live hover:text-signal-live">
+          <Link key={label} href={href} className="inline-flex min-h-9 shrink-0 items-center rounded-card border border-arena-700 px-3 font-mono text-[10px] font-semibold uppercase tracking-wide text-ink-faint hover:border-signal-live hover:text-signal-live">
             {label}
           </Link>
         ))}
