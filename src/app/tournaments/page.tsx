@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { GameIcon } from "@/components/competition/GameIcon";
 import { db } from "@/lib/db";
 
 export const dynamic = "force-dynamic";
@@ -17,10 +18,6 @@ const STATUS_STYLE: Record<string, string> = {
 
 function slugifyGame(game: string) {
   return game.trim().toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
-}
-
-function gameLabel(game: string) {
-  return game.replace(/[-_]+/g, " ").replace(/\b\w/g, (letter) => letter.toUpperCase());
 }
 
 function matchesGame(game: string, selected: string) {
@@ -78,7 +75,6 @@ export default async function TournamentsPage({ searchParams }: Props) {
   const live = filtered.filter((t) => t.status === "LIVE");
   const upcoming = filtered.filter((t) => t.status === "SCHEDULED");
   const completed = filtered.filter((t) => t.status === "COMPLETED");
-  const selectedLabel = selectedGame === "all" ? "All games" : games.find((game) => matchesGame(game, selectedGame)) ?? gameLabel(selectedGame);
   const hasFilters = selectedGame !== "all" || selectedStatus !== "all" || query.length > 0;
 
   function filterHref(overrides: { game?: string; status?: string; q?: string }) {
@@ -134,7 +130,12 @@ export default async function TournamentsPage({ searchParams }: Props) {
               <Link href={filterHref({ game: "all" })} className={`game-tab ${selectedGame === "all" ? "game-tab-active" : ""}`} aria-current={selectedGame === "all" ? "page" : undefined}>All</Link>
               {games.map((game) => {
                 const active = matchesGame(game, selectedGame);
-                return <Link key={game} href={filterHref({ game: slugifyGame(game) })} className={`game-tab ${active ? "game-tab-active" : ""}`} aria-current={active ? "page" : undefined}>{game}</Link>;
+                return (
+                  <Link key={game} href={filterHref({ game: slugifyGame(game) })} className={`game-tab inline-flex items-center gap-1.5 ${active ? "game-tab-active" : ""}`} aria-current={active ? "page" : undefined}>
+                    <GameIcon game={game} size="sm" />
+                    <span>{game}</span>
+                  </Link>
+                );
               })}
             </div>
           </div>
@@ -176,9 +177,12 @@ function TournamentSection({ title, tournaments, live = false }: { title: string
         {tournaments.map((t) => (
           <Link key={t.id} href={`/tournaments/${t.id}`} className="surface-card surface-card-interactive group block p-4 sm:p-5">
             <div className="flex items-start justify-between gap-3">
-              <div className="min-w-0">
-                <p className="font-mono text-[10px] font-bold uppercase tracking-[0.14em] text-signal-live">{t.game}</p>
-                <p className="mt-0.5 font-mono text-[9px] uppercase tracking-widest text-ink-faint">{t.sport} · {t.competitionType}</p>
+              <div className="flex min-w-0 items-center gap-2.5">
+                <GameIcon game={t.game} />
+                <div className="min-w-0">
+                  <p className="truncate font-mono text-[10px] font-bold uppercase tracking-[0.14em] text-signal-live">{t.game}</p>
+                  <p className="mt-0.5 truncate font-mono text-[9px] uppercase tracking-widest text-ink-faint">{t.sport} · {t.competitionType}</p>
+                </div>
               </div>
               <span className={`shrink-0 flex items-center gap-1 font-mono text-[10px] font-bold uppercase tracking-widest ${STATUS_STYLE[t.status] ?? "text-ink-muted"}`}>
                 {live && <span className="h-1.5 w-1.5 rounded-full bg-signal-live animate-live-pulse" />}{t.status}
