@@ -35,19 +35,22 @@ export default async function TournamentPage({ params }: { params: Promise<{ tou
   const isMultiStage = tournament.stages.length > 1 && !isBattleRoyale;
   if (!viewerState) notFound();
 
+  const formatLabel = tournament.format.replace(/_/g, " ").toLowerCase().replace(/\b\w/g, (letter) => letter.toUpperCase());
+  const modeLabel = tournament.participantMode.replace(/_/g, " ").toLowerCase().replace(/\b\w/g, (letter) => letter.toUpperCase());
+
   return (
     <main className="page-shell">
       <div className="page-container max-w-6xl">
         <header className="mb-6 sm:mb-8">
           <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
             <div className="min-w-0">
-              <p className="page-kicker text-signal-live">{tournament.game} · {tournament.sport}{tournament.venue ? ` · ${tournament.venue}` : ""}</p>
+              <Link href={`/tournaments?game=${encodeURIComponent(tournament.game.toLowerCase().replace(/[^a-z0-9]+/g, "-"))}`} className="page-kicker text-signal-live hover:underline">← {tournament.game}</Link>
               <h1 className="page-title mt-1">{tournament.name}</h1>
-              <p className="page-subtitle">{tournament.status} · {new Date(tournament.startDate).toLocaleDateString()}</p>
+              <p className="page-subtitle">{tournament.status} · {new Date(tournament.startDate).toLocaleDateString()}{tournament.venue ? ` · ${tournament.venue}` : " · Online"}</p>
             </div>
             <div className="flex flex-wrap gap-2">
               {tournament.status === "LIVE" && <span className="status-live"><span className="h-1.5 w-1.5 rounded-full bg-signal-live animate-live-pulse" />Live now</span>}
-              <Link href="/tournaments" className="action-secondary">All tournaments</Link>
+              <Link href={`/tournaments?game=${encodeURIComponent(tournament.game.toLowerCase().replace(/[^a-z0-9]+/g, "-"))}`} className="action-secondary">More {tournament.game}</Link>
             </div>
           </div>
           <nav aria-label="Tournament navigation" className="context-tabs mt-5">
@@ -61,9 +64,15 @@ export default async function TournamentPage({ params }: { params: Promise<{ tou
           <section className="surface-card p-4 sm:p-5">
             <div className="flex flex-wrap items-center gap-4">
               {tournament.organization.brandLogoUrl && <img src={tournament.organization.brandLogoUrl} alt="" className="h-12 w-12 rounded-card object-cover" />}
-              <div>
+              <div className="min-w-0 flex-1">
                 <p className="font-mono text-[10px] uppercase tracking-widest" style={{ color: "var(--event-accent)" }}>{tournament.organization.name}</p>
                 <p className="text-sm text-ink-faint">{tournament.organization.tagline ?? "Official event broadcast hub"}</p>
+              </div>
+              <div className="grid min-w-[220px] grid-cols-2 gap-x-5 gap-y-2 text-right sm:text-left">
+                <Fact label="Format" value={formatLabel} />
+                <Fact label="Best of" value={`BO${tournament.bestOf}`} />
+                <Fact label="Mode" value={modeLabel} />
+                <Fact label="Stages" value={isBattleRoyale ? "Standings" : String(tournament.stages.length || 1)} />
               </div>
             </div>
           </section>
@@ -77,7 +86,7 @@ export default async function TournamentPage({ params }: { params: Promise<{ tou
           <section>
             <div className="mb-3 flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
               <div><p className="section-label">Competition</p><h2 className="page-title mt-1 text-2xl">{isBattleRoyale ? "Battle Royale standings" : isMultiStage ? "Tournament stages" : "Brackets"}</h2>{isBattleRoyale ? <p className="page-subtitle">Placement, kills and points determine the leaderboard.</p> : isMultiStage ? <p className="page-subtitle">Groups qualify automatically into playoffs, then the Grand Final.</p> : null}</div>
-              <Link href={`/tournaments/${tournament.id}/standings`} className="action-secondary self-start">Standings</Link>
+              <Link href={`/tournaments/${tournament.id}/standings`} className="action-secondary self-start">Open standings</Link>
             </div>
 
             {isBattleRoyale ? <div className="surface-card p-5"><p className="text-sm text-ink-muted">Battle Royale tournaments do not use a bracket. View the standings to follow placement, kills and total points.</p></div> : isMultiStage ? <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">{tournament.stages.map((stage, index) => <div key={stage.id} className="surface-card p-4"><div className="flex items-center justify-between"><span className="section-label">Stage {index + 1}</span><span className="status-neutral">{stage.status}</span></div><h3 className="mt-2 font-display uppercase">{stage.name}</h3><p className="mt-1 text-xs text-ink-faint">{stage.kind} · {stage._count.matches} matches</p></div>)}</div> : <BracketExplorer brackets={tournament.brackets} tournamentId={tournament.id} />}
@@ -86,4 +95,8 @@ export default async function TournamentPage({ params }: { params: Promise<{ tou
       </div>
     </main>
   );
+}
+
+function Fact({ label, value }: { label: string; value: string }) {
+  return <div><span className="block font-mono text-[9px] uppercase tracking-widest text-ink-faint">{label}</span><span className="text-xs font-medium text-ink-muted">{value}</span></div>;
 }
