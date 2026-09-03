@@ -74,7 +74,13 @@ export default async function TournamentsPage({ searchParams }: Props) {
   const selectedLabel = selectedGame === "all" ? "All games" : games.find((game) => matchesGame(game, selectedGame)) ?? gameLabel(selectedGame);
 
   const gameCounts = new Map<string, number>();
-  for (const tournament of tournaments) gameCounts.set(tournament.game, (gameCounts.get(tournament.game) ?? 0) + 1);
+  const gameLiveCounts = new Map<string, number>();
+  const gameUpcomingCounts = new Map<string, number>();
+  for (const tournament of tournaments) {
+    gameCounts.set(tournament.game, (gameCounts.get(tournament.game) ?? 0) + 1);
+    if (tournament.status === "LIVE") gameLiveCounts.set(tournament.game, (gameLiveCounts.get(tournament.game) ?? 0) + 1);
+    if (tournament.status === "SCHEDULED") gameUpcomingCounts.set(tournament.game, (gameUpcomingCounts.get(tournament.game) ?? 0) + 1);
+  }
 
   return (
     <main className="page-shell">
@@ -106,7 +112,11 @@ export default async function TournamentsPage({ searchParams }: Props) {
             <Link href={queryHref("all", selectedStatus, search)} className={`game-tab ${selectedGame === "all" ? "game-tab-active" : ""}`} aria-current={selectedGame === "all" ? "page" : undefined}>All <span className="ml-1 opacity-60">{tournaments.length}</span></Link>
             {games.map((game) => {
               const active = matchesGame(game, selectedGame);
-              return <Link key={game} href={queryHref(slugifyGame(game), selectedStatus, search)} className={`game-tab ${active ? "game-tab-active" : ""}`} aria-current={active ? "page" : undefined}>{game} <span className="ml-1 opacity-60">{gameCounts.get(game) ?? 0}</span></Link>;
+              const liveCount = gameLiveCounts.get(game) ?? 0;
+              const upcomingCount = gameUpcomingCounts.get(game) ?? 0;
+              return <Link key={game} href={queryHref(slugifyGame(game), selectedStatus, search)} className={`game-tab ${active ? "game-tab-active" : ""}`} aria-current={active ? "page" : undefined}>
+                <span>{game}</span><span className="ml-1 opacity-60">{gameCounts.get(game) ?? 0}</span>{liveCount > 0 && <span className="ml-1 inline-flex items-center gap-1 text-signal-live"><span className="h-1.5 w-1.5 rounded-full bg-signal-live animate-live-pulse" />{liveCount}</span>}{liveCount === 0 && upcomingCount > 0 && <span className="ml-1 text-ink-faint">· {upcomingCount} next</span>}
+              </Link>;
             })}
           </div>
           <div className="mt-3 flex gap-2 overflow-x-auto pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden" aria-label="Competition status">
@@ -115,6 +125,27 @@ export default async function TournamentsPage({ searchParams }: Props) {
             ))}
           </div>
         </section>
+
+        {selectedGame !== "all" && selectedStatus === "all" && search === "" && (
+          <section className="surface-card mb-6 p-4 sm:p-5" aria-live="polite">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <p className="section-label">{selectedLabel} status</p>
+                {live.length > 0 ? (
+                  <p className="mt-1 text-sm font-medium text-ink">{live.length} {live.length === 1 ? "tournament is" : "tournaments are"} live now.</p>
+                ) : upcoming.length > 0 ? (
+                  <p className="mt-1 text-sm font-medium text-ink">No live {selectedLabel} event right now · {upcoming.length} {upcoming.length === 1 ? "upcoming competition" : "upcoming competitions"}.</p>
+                ) : (
+                  <p className="mt-1 text-sm font-medium text-ink">No {selectedLabel} tournament is live or scheduled right now.</p>
+                )}
+              </div>
+              <div className="flex gap-2">
+                {live.length === 0 && upcoming.length > 0 && <Link href={queryHref(selectedGame, "upcoming", "")} className="action-primary">See upcoming</Link>}
+                {live.length === 0 && upcoming.length === 0 && <Link href="/tournaments" className="action-secondary">Browse all games</Link>}
+              </div>
+            </div>
+          </section>
+        )}
 
         {tournaments.length === 0 ? (
           <div className="empty-state">
