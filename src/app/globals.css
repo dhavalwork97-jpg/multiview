@@ -18,10 +18,15 @@ button:disabled { cursor: not-allowed; }
 a { text-underline-offset: 3px; }
 
 @keyframes live-pulse {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.35; }
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.35; transform: scale(.86); }
 }
 .animate-live-pulse { animation: live-pulse 1.6s ease-in-out infinite; }
+
+@keyframes signal-sweep {
+  0% { transform: translateX(-110%); }
+  100% { transform: translateX(110%); }
+}
 
 .bezel-cut {
   clip-path: polygon(0 0, calc(100% - 14px) 0, 100% 14px, 100% 100%, 0 100%);
@@ -30,9 +35,32 @@ a { text-underline-offset: 3px; }
 @layer components {
   .field-label { @apply mb-1 block font-mono text-[10px] font-semibold uppercase tracking-widest text-ink-faint; }
   .field-input { @apply w-full rounded-card border border-arena-600 bg-arena-950 px-3 py-2.5 text-sm text-ink outline-none transition-colors placeholder:text-ink-faint focus:border-signal-live focus:ring-1 focus:ring-signal-live/20; }
-}
 
-@layer components {
-  .action-secondary { @apply inline-flex min-h-9 items-center justify-center rounded-card border border-arena-600 px-3 font-mono text-[11px] font-semibold uppercase tracking-wide text-ink-muted hover:border-signal-live hover:text-ink; }
-  .action-primary { @apply inline-flex min-h-9 items-center justify-center rounded-card bg-signal-live px-3 font-mono text-[11px] font-bold uppercase tracking-wide text-arena-950 hover:opacity-90; }
+  .action-secondary {
+    @apply inline-flex min-h-9 items-center justify-center rounded-card border border-arena-600 px-3 font-mono text-[11px] font-semibold uppercase tracking-wide text-ink-muted transition-all duration-200 hover:border-signal-live/70 hover:bg-arena-800 hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-live/40 active:translate-y-px;
+  }
+  .action-primary {
+    @apply inline-flex min-h-9 items-center justify-center rounded-card bg-signal-live px-3 font-mono text-[11px] font-bold uppercase tracking-wide text-arena-950 transition-all duration-200 hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-live/60 active:translate-y-px;
+  }
+
+  .page-shell { @apply min-h-screen bg-arena-950 px-4 py-6 sm:px-6 sm:py-8 lg:px-8; }
+  .page-container { @apply mx-auto w-full max-w-[1680px]; }
+  .page-kicker { @apply font-mono text-[10px] font-bold uppercase tracking-[0.18em] text-ink-faint; }
+  .page-title { @apply font-display text-3xl font-semibold uppercase tracking-[0.05em] text-ink sm:text-4xl; }
+  .page-subtitle { @apply mt-1 max-w-2xl text-sm leading-6 text-ink-muted; }
+
+  .surface-card { @apply rounded-card border border-arena-700 bg-arena-900/70 shadow-[0_12px_36px_rgba(0,0,0,.16)]; }
+  .surface-card-interactive { @apply transition-all duration-200 hover:-translate-y-0.5 hover:border-signal-live/60 hover:bg-arena-800/80 hover:shadow-[0_16px_42px_rgba(0,0,0,.24)]; }
+  .status-live { @apply inline-flex items-center gap-1.5 rounded-full border border-signal-live/30 bg-signal-live/10 px-2 py-1 font-mono text-[10px] font-bold uppercase tracking-widest text-signal-live; }
+  .status-neutral { @apply inline-flex items-center rounded-full border border-arena-600 bg-arena-800 px-2 py-1 font-mono text-[10px] font-bold uppercase tracking-widest text-ink-muted; }
+  .section-label { @apply font-mono text-[10px] font-bold uppercase tracking-[0.16em] text-ink-faint; }
+
+  .game-tab {
+    @apply inline-flex min-h-10 shrink-0 items-center justify-center rounded-card border border-arena-700 bg-arena-900 px-3.5 font-mono text-[10px] font-bold uppercase tracking-[0.1em] text-ink-muted transition-all duration-200 hover:border-arena-500 hover:bg-arena-800 hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-live/40;
+  }
+  .game-tab-active {
+    @apply border-signal-live/60 bg-signal-live text-arena-950 shadow-[0_8px_24px_rgba(0,0,0,.18)];
+  }
+
+  .empty-state { @apply rounded-card border border-dashed border-arena-700 bg-arena-900/50 px-6 py-12 text-center; }
 }
