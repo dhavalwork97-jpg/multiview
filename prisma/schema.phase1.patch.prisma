@@ -1,0 +1,6 @@
+// Merge these additions into schema.prisma
+// @@index([organizerId])
+// @@index([status])
+// @@unique([tournamentId, order])
+// @@index([stageId])
+// @@unique([userId, tournamentId])
