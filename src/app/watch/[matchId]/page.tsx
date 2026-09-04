@@ -4,6 +4,11 @@ import { getCurrentUser } from "@/lib/auth";
 import { isPremium } from "@/lib/billing";
 import { WatchPageClient } from "./WatchPageClient";
 
+// Match existence is resolved at request time because match records are
+// mutable/live data. Force this route to stay dynamic so Vercel cannot
+// serve a previously generated success response for an unknown match ID.
+export const dynamic = "force-dynamic";
+
 // Video playback (WebRTC low-latency path + HLS fallback, adaptive
 // bitrate, DVR) is Phase 3 scope. This page exists now so every
 // click-through added in Phase 2 — the live grid, the bracket, search —
