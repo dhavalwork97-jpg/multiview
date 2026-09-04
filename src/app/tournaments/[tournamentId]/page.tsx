@@ -15,10 +15,6 @@ export async function generateMetadata({ params }: { params: Promise<{ tournamen
   return { title: `${tournament.name} · ${tournament.game}`, description: `${tournament.name} live tournament hub — watch individual matches, follow brackets, and track results.` };
 }
 
-function matchLabel(match: { sides: Array<{ key: string; participants: Array<{ label: string }> }> }) {
-  return match.sides.map((side) => side.participants.map((participant) => participant.label).join(" / ") || side.key).join(" vs ");
-}
-
 function MatchCard({ match, live = false, result = false, tournamentId }: { match: { id: string; status: string; round: string | null; sides: Array<{ id: string; key: string; score: number; participants: Array<{ label: string }> }>; station: { id: string; label: string } | null }; live?: boolean; result?: boolean; tournamentId: string }) {
   return (
     <article className={`surface-card p-4 ${live ? "border-signal-live/40" : ""}`}>
