@@ -47,6 +47,7 @@ function toViewerMatch(match: {
   status: string;
   round: string | null;
   updatedAt: Date;
+  stage: { id: string; name: string; kind: string } | null;
   sides: Array<{
     id: string;
     sideKey: string;
@@ -65,6 +66,7 @@ function toViewerMatch(match: {
     id: match.id,
     status: match.status,
     round: match.round,
+    stage: match.stage,
     station: match.station,
     updatedAt: match.updatedAt.toISOString(),
     sides: match.sides.map((side) => ({
@@ -74,6 +76,14 @@ function toViewerMatch(match: {
       participants: side.participants.map(participantLabel),
     })),
   };
+}
+
+function matchOrder(a: { roundIndex: number | null; matchIndex: number | null; updatedAt: Date }, b: { roundIndex: number | null; matchIndex: number | null; updatedAt: Date }) {
+  const round = (a.roundIndex ?? Number.MAX_SAFE_INTEGER) - (b.roundIndex ?? Number.MAX_SAFE_INTEGER);
+  if (round !== 0) return round;
+  const index = (a.matchIndex ?? Number.MAX_SAFE_INTEGER) - (b.matchIndex ?? Number.MAX_SAFE_INTEGER);
+  if (index !== 0) return index;
+  return a.updatedAt.getTime() - b.updatedAt.getTime();
 }
 
 export async function getCompetitionViewerState(
@@ -110,10 +120,15 @@ export async function getCompetitionViewerState(
           status: true,
           round: true,
           updatedAt: true,
+          roundIndex: true,
+          matchIndex: true,
           winnerSideId: true,
           playerOneScore: true,
           playerTwoScore: true,
           rulesSnapshot: true,
+          stage: {
+            select: { id: true, name: true, kind: true },
+          },
           station: {
             select: { id: true, label: true },
           },
@@ -156,8 +171,13 @@ export async function getCompetitionViewerState(
         match.status !== "LIVE" &&
         match.status !== "COMPLETED",
     )
+    .sort(matchOrder)
     .slice(0, 12)
     .map(toViewerMatch);
+
+  const recentCompleted = [...completed].sort(
+    (a, b) => b.updatedAt.getTime() - a.updatedAt.getTime(),
+  );
 
   // Standings are now a first-class competition surface. The engine handles
   // both head-to-head results and multi-entrant Battle Royale lobbies.
@@ -206,7 +226,7 @@ export async function getCompetitionViewerState(
 
     standings,
 
-    recentResults: completed.slice(0, 12).map((match) => ({
+    recentResults: recentCompleted.slice(0, 12).map((match) => ({
       ...toViewerMatch(match),
       winnerSideId: match.winnerSideId,
     })),
