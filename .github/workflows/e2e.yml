@@ -25,4 +25,8 @@ jobs:
       - run: npx playwright install --with-deps chromium webkit
       - run: npm run test:e2e
         env:
-          E2E_BASE_URL: ${{ github.event.deployment_status.target_url }}
+          # Vercel uses target_url for its dashboard/deployment details link;
+          # environment_url is the actual deployed preview URL. Running the
+          # browser suite against target_url can therefore test a dashboard
+          # page and make every application route appear to return 200.
+          E2E_BASE_URL: ${{ github.event.deployment_status.environment_url }}
