@@ -17,4 +17,40 @@ jobs:
           node-version: 20
           cache: npm
       - run: npm ci
-      - run: npm audit --audit-level=high
+      - name: Run npm audit with registry outage retries
+        shell: bash
+        run: |
+          set -o pipefail
+          max_attempts=5
+          delay=5
+
+          for attempt in $(seq 1 "$max_attempts"); do
+            log_file="$(mktemp)"
+            set +e
+            npm audit --audit-level=high 2>&1 | tee "$log_file"
+            status=${PIPESTATUS[0]}
+            set -e
+
+            if [ "$status" -eq 0 ]; then
+              rm -f "$log_file"
+              exit 0
+            fi
+
+            # npm returns a non-zero exit code for vulnerabilities as well as
+            # registry failures. Only retry when the failure clearly indicates
+            # a transient HTTP 503 / service-unavailable response; genuine
+            # audit findings continue to fail the job immediately.
+            if grep -Eiq '(^|[^0-9])503([^0-9]|$)|service unavailable|e503' "$log_file"; then
+              if [ "$attempt" -lt "$max_attempts" ]; then
+                echo "npm registry returned HTTP 503; retrying in ${delay}s (attempt ${attempt}/${max_attempts})..."
+                rm -f "$log_file"
+                sleep "$delay"
+                delay=$((delay * 2))
+                continue
+              fi
+              echo "npm audit could not reach the registry after ${max_attempts} attempts."
+            fi
+
+            rm -f "$log_file"
+            exit "$status"
+          done
