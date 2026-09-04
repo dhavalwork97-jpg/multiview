@@ -8,9 +8,6 @@ export { EVENTS_CHANNEL };
 // autocomplete and type safety on payload shape.
 export type AppEvent =
   | {
-      // A competition-level invalidation event. Viewers fetch the
-      // canonical snapshot rather than attempting to reconstruct
-      // tournament state from individual mutation events.
       type: "competition:updated";
       tournamentId: string;
       reason:
@@ -64,9 +61,6 @@ export type AppEvent =
       targetSideKey: string;
     }
   | {
-      // Published after persistent broadcast director state changes.
-      // OBS integration is intentionally not coupled here: a future
-      // broadcast agent can consume this event or the command history.
       type: "broadcast:updated";
       tournamentId: string;
       scene: string;
@@ -86,8 +80,7 @@ async function ensureConnected() {
     return true;
   }
 
-  if (connected) connected = false;
-
+  connected = false;
   if (redisPub.status !== "wait") return false;
 
   try {
