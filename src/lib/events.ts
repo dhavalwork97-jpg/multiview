@@ -84,8 +84,11 @@ async function ensureConnected() {
   if (redisPub.status !== "wait") return false;
 
   try {
+    // ioredis resolves connect() once the connection is established. Avoid
+    // reading status here because its literal-type narrowing remains "wait"
+    // across the await in TypeScript.
     await redisPub.connect();
-    connected = redisPub.status === "ready";
+    connected = true;
   } catch (error) {
     serverLogger.warn("realtime Redis connection unavailable", {
       error: error instanceof Error ? error.message : "unknown_error",
