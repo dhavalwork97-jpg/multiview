@@ -10,10 +10,14 @@ export function useCompetitionViewerState(
 ) {
   const [state, setState] = useState(initialState);
   const [refreshing, setRefreshing] = useState(false);
+  const [refreshError, setRefreshError] = useState(false);
+  const [lastUpdatedAt, setLastUpdatedAt] = useState(initialState.generatedAt);
+  const [connected, setConnected] = useState(false);
   const socket = useSocket({ tournamentId });
 
   const refresh = useCallback(async () => {
     setRefreshing(true);
+    setRefreshError(false);
 
     try {
       const response = await fetch(
@@ -21,14 +25,37 @@ export function useCompetitionViewerState(
         { cache: "no-store" },
       );
 
-      if (!response.ok) return;
+      if (!response.ok) {
+        setRefreshError(true);
+        return;
+      }
 
       const next = (await response.json()) as CompetitionViewerState;
       setState(next);
+      setLastUpdatedAt(next.generatedAt);
+    } catch {
+      setRefreshError(true);
     } finally {
       setRefreshing(false);
     }
   }, [tournamentId]);
+
+  useEffect(() => {
+    const handleConnect = () => {
+      setConnected(true);
+      void refresh();
+    };
+    const handleDisconnect = () => setConnected(false);
+
+    socket.on("connect", handleConnect);
+    socket.on("disconnect", handleDisconnect);
+    setConnected(socket.connected);
+
+    return () => {
+      socket.off("connect", handleConnect);
+      socket.off("disconnect", handleDisconnect);
+    };
+  }, [socket, refresh]);
 
   useEffect(() => {
     let timer: ReturnType<typeof setTimeout> | undefined;
@@ -45,26 +72,16 @@ export function useCompetitionViewerState(
 
     return () => {
       socket.off("competition:updated", handleUpdate);
-
       if (timer) clearTimeout(timer);
-    };
-  }, [socket, refresh]);
-
-  useEffect(() => {
-    const handleConnect = () => {
-      void refresh();
-    };
-
-    socket.on("connect", handleConnect);
-
-    return () => {
-      socket.off("connect", handleConnect);
     };
   }, [socket, refresh]);
 
   return {
     state,
     refreshing,
+    refreshError,
+    lastUpdatedAt,
+    connected,
     refresh,
   };
 }
