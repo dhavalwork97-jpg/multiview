@@ -12,6 +12,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with: { node-version: "20", cache: "npm" }
+      - run: npm install --package-lock-only --ignore-scripts
       - run: npm ci
       - run: npm run lint
       - run: npm run typecheck
@@ -22,6 +23,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with: { node-version: "20", cache: "npm" }
+      - run: npm install --package-lock-only --ignore-scripts
       - run: npm ci
       - run: npx vitest run tests/unit
 
@@ -48,6 +50,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with: { node-version: "20", cache: "npm" }
+      - run: npm install --package-lock-only --ignore-scripts
       - run: npm ci
       - run: npx prisma migrate deploy
       - run: npm run test:integration
@@ -59,6 +62,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with: { node-version: "20", cache: "npm" }
+      - run: npm install --package-lock-only --ignore-scripts
       - run: npm ci
       - run: npx prisma generate
       - run: npm run build
