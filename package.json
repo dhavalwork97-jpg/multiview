@@ -22,14 +22,14 @@
     "demo:pack": "tsx prisma/seed-demo-pack.ts"
   },
   "dependencies": {
-    "@aws-sdk/client-s3": "3.716.0",
-    "@clerk/nextjs": "6.9.0",
+    "@aws-sdk/client-s3": "3.1126.0",
+    "@clerk/nextjs": "6.39.6",
     "@livekit/protocol": "^1.29.3",
     "@prisma/client": "5.22.0",
     "@socket.io/redis-adapter": "8.3.0",
     "@upstash/ratelimit": "2.0.5",
     "@upstash/redis": "1.34.3",
-    "bullmq": "5.28.1",
+    "bullmq": "5.81.4",
     "class-variance-authority": "0.7.0",
     "clsx": "2.1.1",
     "date-fns": "4.1.0",
@@ -37,8 +37,7 @@
     "ioredis": "5.4.1",
     "livekit-client": "2.7.4",
     "livekit-server-sdk": "2.9.2",
-    "next": "15.1.11",
-    "prisma": "5.22.0",
+    "next": "15.5.25",
     "react": "^19.0.3",
     "react-dom": "^19.0.3",
     "socket.io": "4.8.1",
@@ -51,15 +50,15 @@
     "zod": "3.23.8"
   },
   "devDependencies": {
-    "@playwright/test": "1.49.1",
+    "@playwright/test": "1.62.1",
     "@types/node": "22.9.0",
     "@types/react": "19.0.1",
     "@types/react-dom": "19.0.1",
     "autoprefixer": "10.4.20",
     "eslint": "8.57.1",
-    "eslint-config-next": "15.1.0",
-    "postcss": "8.4.47",
+    "eslint-config-next": "15.5.25",
+    "postcss": "8.5.23",
     "tsx": "4.19.2",
-    "vitest": "2.1.4"
+    "vitest": "2.1.9"
   }
 }
