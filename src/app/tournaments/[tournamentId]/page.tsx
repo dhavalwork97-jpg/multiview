@@ -4,6 +4,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { db } from "@/lib/db";
 import { BracketExplorer } from "@/components/bracket/BracketExplorer";
+import { CompetitionScoreboard } from "@/components/competition/CompetitionScoreboard";
 import { GameIcon } from "@/components/competition/GameIcon";
 import { UniversalLiveViewer } from "@/components/competition/UniversalLiveViewer";
 import { getCompetitionViewerState } from "@/lib/competition/get-viewer-state";
@@ -20,18 +21,13 @@ function MatchCard({ match, live = false, result = false, tournamentId }: { matc
     <article className={`surface-card p-4 ${live ? "border-signal-live/40" : ""}`}>
       <div className="flex items-center justify-between gap-3">
         <div className="flex min-w-0 items-center gap-2">
-          <span className={live ? "status-live" : result ? "status-neutral" : "status-neutral"}>{live && <span className="h-1.5 w-1.5 rounded-full bg-signal-live animate-live-pulse" />}{live ? "LIVE" : result ? "Final" : "Next"}</span>
+          <span className={live ? "status-live" : "status-neutral"}>{live && <span className="h-1.5 w-1.5 rounded-full bg-signal-live animate-live-pulse" />}{live ? "LIVE" : result ? "Final" : "Next"}</span>
           {match.round && <span className="truncate font-mono text-[10px] uppercase tracking-widest text-ink-faint">{match.round}</span>}
         </div>
         {match.station && <span className="status-neutral">{match.station.label}</span>}
       </div>
-      <div className="mt-4 space-y-2">
-        {match.sides.map((side) => (
-          <div key={side.id} className="flex items-center justify-between gap-3 rounded-card border border-arena-800 bg-arena-950/50 px-3 py-2">
-            <span className="min-w-0 truncate text-sm font-semibold text-ink">{side.participants.map((participant) => participant.label).join(" / ") || "TBD"}</span>
-            <span className="font-mono text-lg font-bold tabular-nums text-ink">{side.score}</span>
-          </div>
-        ))}
+      <div className="mt-4">
+        <CompetitionScoreboard sides={match.sides} />
       </div>
       <div className="mt-4 flex flex-wrap gap-2">
         {live ? <Link href={`/watch/${match.id}`} className="action-primary">Watch live</Link> : <Link href={`/watch/${match.id}`} className="action-secondary">Match view</Link>}
