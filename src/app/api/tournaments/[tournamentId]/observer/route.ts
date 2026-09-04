@@ -33,7 +33,8 @@ type Params = { params: Promise<{ tournamentId: string }> };
 function readObserver(overlay: unknown) {
   if (!overlay || typeof overlay !== "object" || Array.isArray(overlay)) return null;
   const value = (overlay as Record<string, unknown>).observer;
-  return observerSchema.safeParse(value).success ? observerSchema.parse(value) : null;
+  const parsed = observerSchema.safeParse(value);
+  return parsed.success ? parsed.data : null;
 }
 
 export async function GET(_req: Request, { params }: Params) {
@@ -118,6 +119,7 @@ export async function GET(_req: Request, { params }: Params) {
   };
   const normalized = {
     ...observer,
+    currentTeamKey: observer.currentTeamKey ?? null,
     teams: observer.teams.length ? observer.teams : teams,
     fights: observer.fights.length ? observer.fights : autoFights,
   };
