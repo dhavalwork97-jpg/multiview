@@ -14,16 +14,27 @@ export default function RootLayout({
 }: {
   children: React.ReactNode;
 }) {
+  const clerkPublishableKey = process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY;
+  const clerkConfigured = Boolean(clerkPublishableKey && clerkPublishableKey !== "pk_test_dummy");
+
+  const content = (
+    <>
+      <NavGate>
+        <Nav />
+      </NavGate>
+      {children}
+    </>
+  );
+
   return (
-    <ClerkProvider>
-      <html lang="en">
-        <body>
-       <NavGate>
-         <Nav />
-       </NavGate>
-       {children}
-        </body>
-      </html>
-    </ClerkProvider>
+    <html lang="en">
+      <body>
+        {clerkConfigured ? (
+          <ClerkProvider publishableKey={clerkPublishableKey}>{content}</ClerkProvider>
+        ) : (
+          content
+        )}
+      </body>
+    </html>
   );
 }
