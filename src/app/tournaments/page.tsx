@@ -53,11 +53,12 @@ export default async function TournamentsPage({ searchParams }: Props) {
       game: true,
       sport: true,
       competitionType: true,
+      participantMode: true,
       scoringMode: true,
       status: true,
       startDate: true,
       venue: true,
-      _count: { select: { brackets: true, stages: true } },
+      _count: { select: { brackets: true, stages: true, matches: true, entrants: true, teams: true } },
     },
   });
 
@@ -166,7 +167,31 @@ export default async function TournamentsPage({ searchParams }: Props) {
   );
 }
 
-function TournamentSection({ title, tournaments, live = false }: { title: string; tournaments: Array<{ id: string; name: string; game: string; sport: string; competitionType: string; scoringMode: string; status: string; startDate: Date; venue: string | null; _count: { brackets: number; stages: number } }>; live?: boolean }) {
+function competitionCountLabel(t: {
+  participantMode: string;
+  scoringMode: string;
+  sport: string;
+  _count: { brackets: number; matches: number; entrants: number; teams: number };
+}) {
+  if (t.scoringMode === "battle_royale" || t.sport === "bgmi") return "Battle Royale · standings";
+
+  const participantCount = t.participantMode === "team" ? t._count.teams : t._count.entrants;
+  const participantLabel = t.participantMode === "team" ? "team" : "entrant";
+  const parts: string[] = [];
+
+  if (participantCount > 0) {
+    parts.push(`${participantCount} ${participantLabel}${participantCount === 1 ? "" : "s"}`);
+  }
+  if (t._count.matches > 0) {
+    parts.push(`${t._count.matches} match${t._count.matches === 1 ? "" : "es"}`);
+  }
+  if (parts.length > 0) return parts.join(" · ");
+  return t._count.brackets > 0
+    ? `${t._count.brackets} bracket${t._count.brackets === 1 ? "" : "s"}`
+    : "Bracket pending";
+}
+
+function TournamentSection({ title, tournaments, live = false }: { title: string; tournaments: Array<{ id: string; name: string; game: string; sport: string; competitionType: string; participantMode: string; scoringMode: string; status: string; startDate: Date; venue: string | null; _count: { brackets: number; stages: number; matches: number; entrants: number; teams: number } }>; live?: boolean }) {
   return (
     <section>
       <div className="mb-3 flex items-center gap-2">
@@ -193,8 +218,8 @@ function TournamentSection({ title, tournaments, live = false }: { title: string
               <div><span className="block font-mono text-[9px] uppercase tracking-widest text-ink-faint">When</span><span className="text-ink-muted">{new Date(t.startDate).toLocaleDateString()}</span></div>
               <div><span className="block font-mono text-[9px] uppercase tracking-widest text-ink-faint">Where</span><span className="truncate text-ink-muted">{t.venue ?? "Online"}</span></div>
             </div>
-            <div className="mt-4 flex items-center justify-between">
-              <span className="font-mono text-[9px] uppercase tracking-widest text-ink-faint">{t.scoringMode === "battle_royale" || t.sport === "bgmi" ? "Battle Royale · standings" : t._count.brackets > 0 ? `${t._count.brackets} bracket${t._count.brackets === 1 ? "" : "s"}` : "Bracket pending"}</span>
+            <div className="mt-4 flex flex-wrap items-center justify-between gap-2 border-t border-arena-700 pt-3">
+              <span className="font-mono text-[9px] uppercase tracking-widest text-ink-faint">{competitionCountLabel(t)}</span>
               <span className="font-mono text-[10px] font-bold uppercase tracking-widest text-ink-muted transition-colors group-hover:text-signal-live">View →</span>
             </div>
           </Link>
