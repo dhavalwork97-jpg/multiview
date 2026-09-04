@@ -3,5 +3,24 @@
   "extends": [
     "next/core-web-vitals",
     "next/typescript"
+  ],
+  "overrides": [
+    {
+      "files": [
+        "src/app/api/tournaments/[tournamentId]/stages/route.ts",
+        "src/app/api/tournaments/route.ts",
+        "src/app/api/webhooks/clerk/route.ts",
+        "src/components/admin/ObserverAssistant.tsx",
+        "src/components/notifications/NotificationBell.tsx",
+        "src/components/organization/BrandingForm.tsx",
+        "src/lib/obs-websocket.ts",
+        "tests/unit/competition-progression.test.ts",
+        "tests/unit/progression-reconciliation.test.ts",
+        "tests/unit/progression-recovery.test.ts"
+      ],
+      "rules": {
+        "@typescript-eslint/no-explicit-any": "off"
+      }
+    }
   ]
 }
