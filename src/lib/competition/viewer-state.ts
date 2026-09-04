@@ -15,6 +15,11 @@ export type ViewerMatch = {
   id: string;
   status: string;
   round: string | null;
+  stage: {
+    id: string;
+    name: string;
+    kind: string;
+  } | null;
   sides: ViewerSide[];
   station: {
     id: string;
