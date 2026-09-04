@@ -12,6 +12,8 @@ export function WatchPageClient({ initialMatch, isPremium }: { initialMatch: Ini
   const [match, setMatch] = useState(initialMatch);
   const [viewerCount, setViewerCount] = useState<number | null>(null);
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
+  const [connected, setConnected] = useState(false);
+  const [lastUpdateAt, setLastUpdateAt] = useState<number | null>(null);
   const socket = useSocket({ matchId: initialMatch.id });
 
   useEffect(() => {
@@ -33,10 +35,13 @@ export function WatchPageClient({ initialMatch, isPremium }: { initialMatch: Ini
   }, [match.startedAt]);
 
   useEffect(() => {
-    function handleUpdate(event: { matchId: string; status: string; playerOneScore: number; playerTwoScore: number }) { if (event.matchId !== initialMatch.id) return; setMatch((prev) => ({ ...prev, status: event.status, playerOneScore: event.playerOneScore, playerTwoScore: event.playerTwoScore })); }
-    function handleViewerCount(event: { matchId: string; count: number }) { if (event.matchId === initialMatch.id) setViewerCount(event.count); }
-    socket.on("match:updated", handleUpdate); socket.on("viewer:count", handleViewerCount);
-    return () => { socket.off("match:updated", handleUpdate); socket.off("viewer:count", handleViewerCount); };
+    setConnected(socket.connected);
+    function handleConnect() { setConnected(true); setLastUpdateAt(Date.now()); }
+    function handleDisconnect() { setConnected(false); }
+    function handleUpdate(event: { matchId: string; status: string; playerOneScore: number; playerTwoScore: number }) { if (event.matchId !== initialMatch.id) return; setMatch((prev) => ({ ...prev, status: event.status, playerOneScore: event.playerOneScore, playerTwoScore: event.playerTwoScore })); setLastUpdateAt(Date.now()); }
+    function handleViewerCount(event: { matchId: string; count: number }) { if (event.matchId === initialMatch.id) { setViewerCount(event.count); setLastUpdateAt(Date.now()); } }
+    socket.on("connect", handleConnect); socket.on("disconnect", handleDisconnect); socket.on("match:updated", handleUpdate); socket.on("viewer:count", handleViewerCount);
+    return () => { socket.off("connect", handleConnect); socket.off("disconnect", handleDisconnect); socket.off("match:updated", handleUpdate); socket.off("viewer:count", handleViewerCount); };
   }, [socket, initialMatch.id]);
 
   return (
@@ -45,8 +50,9 @@ export function WatchPageClient({ initialMatch, isPremium }: { initialMatch: Ini
         <header className="mb-5">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
             <div><p className="page-kicker">{match.tournament.name}{match.round && ` · ${match.round}`}</p><h1 className="page-title mt-1 text-3xl sm:text-4xl">Watch match</h1></div>
-            <div className="flex flex-wrap items-center gap-2">{match.status === "LIVE" && <span className="status-live"><span className="h-1.5 w-1.5 rounded-full bg-signal-live animate-live-pulse" />LIVE</span>}{viewerCount !== null && <span className="status-neutral">{viewerCount} watching</span>}{match.station && <span className="status-neutral">{match.station.label}</span>}</div>
+            <div className="flex flex-wrap items-center gap-2" aria-live="polite">{match.status === "LIVE" && <span className="status-live"><span className="h-1.5 w-1.5 rounded-full bg-signal-live animate-live-pulse" />LIVE</span>}{viewerCount !== null && <span className="status-neutral">{viewerCount} watching</span>}{match.station && <span className="status-neutral">{match.station.label}</span>}<span className={connected ? "status-neutral" : "status-warning"}>{connected ? "Live updates" : "Reconnecting…"}</span>{lastUpdateAt !== null && <span className="status-neutral hidden sm:inline">Updated {new Date(lastUpdateAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</span>}</div>
           </div>
+          {!connected && <div role="status" className="mt-3 rounded-card border border-corner-p2/30 bg-corner-p2/10 px-3 py-2 text-sm text-ink-secondary">The stream can continue while live score updates reconnect. We’ll resume live updates automatically.</div>}
           <nav aria-label="Match navigation" className="context-tabs mt-4">
             <Link href={`/tournaments/${match.tournamentId}`} className="context-tab">Tournament</Link>
             <Link href={`/tournaments/${match.tournamentId}/standings`} className="context-tab">Standings</Link>
