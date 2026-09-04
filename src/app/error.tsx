@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect } from "react";
 
 export default function GlobalRouteError({
@@ -26,9 +27,9 @@ export default function GlobalRouteError({
             <button type="button" onClick={() => reset()} className="action-primary min-h-11 px-5">
               Try again
             </button>
-            <a href="/tournaments" className="action-secondary min-h-11 px-5">
+            <Link href="/tournaments" className="action-secondary min-h-11 px-5">
               Browse tournaments
-            </a>
+            </Link>
           </div>
         </section>
       </div>
