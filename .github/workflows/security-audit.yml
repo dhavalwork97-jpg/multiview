@@ -18,6 +18,8 @@ jobs:
           cache: npm
       - name: Resolve dependency lockfile
         run: npm install --package-lock-only --ignore-scripts
+      - name: Apply non-breaking audit fixes to lockfile
+        run: npm audit fix --package-lock-only --ignore-scripts
       - run: npm ci
       - name: Run npm audit with registry outage retries
         shell: bash
