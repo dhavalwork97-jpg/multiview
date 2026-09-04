@@ -9,7 +9,7 @@ jobs:
   lint-and-typecheck:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: actions/setup-node@v4
         with: { node-version: "20", cache: "npm" }
       - run: npm install --package-lock-only --ignore-scripts
@@ -20,7 +20,7 @@ jobs:
   unit-tests:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: actions/setup-node@v4
         with: { node-version: "20", cache: "npm" }
       - run: npm install --package-lock-only --ignore-scripts
@@ -47,7 +47,7 @@ jobs:
     env:
       DATABASE_URL: postgresql://postgres:test@localhost:5432/fgc_test
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: actions/setup-node@v4
         with: { node-version: "20", cache: "npm" }
       - run: npm install --package-lock-only --ignore-scripts
@@ -59,7 +59,7 @@ jobs:
     runs-on: ubuntu-latest
     needs: [lint-and-typecheck, unit-tests, integration-tests]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: actions/setup-node@v4
         with: { node-version: "20", cache: "npm" }
       - run: npm install --package-lock-only --ignore-scripts
