@@ -16,6 +16,14 @@ const STATUS_STYLE: Record<string, string> = {
   DRAFT: "text-ink-faint",
 };
 
+const STATUS_LABEL: Record<string, string> = {
+  LIVE: "Live",
+  SCHEDULED: "Upcoming",
+  COMPLETED: "Completed",
+  ARCHIVED: "Archived",
+  DRAFT: "Draft",
+};
+
 function slugifyGame(game: string) {
   return game.trim().toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
 }
@@ -46,7 +54,7 @@ export default async function TournamentsPage({ searchParams }: Props) {
       status: { not: "DRAFT" },
       publicEnabled: true,
     },
-    orderBy: [{ status: "asc" }, { startDate: "desc" }],
+    orderBy: [{ startDate: "desc" }],
     select: {
       id: true,
       name: true,
@@ -74,9 +82,10 @@ export default async function TournamentsPage({ searchParams }: Props) {
   });
 
   const live = filtered.filter((t) => t.status === "LIVE");
-  const upcoming = filtered.filter((t) => t.status === "SCHEDULED");
-  const completed = filtered.filter((t) => t.status === "COMPLETED");
+  const upcoming = filtered.filter((t) => t.status === "SCHEDULED").sort((a, b) => a.startDate.getTime() - b.startDate.getTime());
+  const completed = filtered.filter((t) => t.status === "COMPLETED").sort((a, b) => b.startDate.getTime() - a.startDate.getTime());
   const hasFilters = selectedGame !== "all" || selectedStatus !== "all" || query.length > 0;
+  const resultLabel = `${filtered.length} tournament${filtered.length === 1 ? "" : "s"}`;
 
   function filterHref(overrides: { game?: string; status?: string; q?: string }) {
     const nextGame = overrides.game ?? selectedGame;
@@ -157,6 +166,10 @@ export default async function TournamentsPage({ searchParams }: Props) {
           </div>
         ) : (
           <div className="space-y-8">
+            <div className="flex items-center justify-between gap-3 border-b border-arena-700 pb-3" aria-live="polite">
+              <p className="font-mono text-[10px] font-bold uppercase tracking-[0.14em] text-ink-faint">Showing {resultLabel}</p>
+              {hasFilters && <Link href="/tournaments" className="font-mono text-[10px] font-bold uppercase tracking-widest text-ink-muted transition-colors hover:text-signal-live focus-visible:text-signal-live">Clear filters</Link>}
+            </div>
             {live.length > 0 && <TournamentSection title="Live now" tournaments={live} live />}
             {upcoming.length > 0 && <TournamentSection title="Upcoming" tournaments={upcoming} />}
             {completed.length > 0 && <TournamentSection title="Completed" tournaments={completed} />}
@@ -210,7 +223,7 @@ function TournamentSection({ title, tournaments, live = false }: { title: string
                 </div>
               </div>
               <span className={`shrink-0 flex items-center gap-1 font-mono text-[10px] font-bold uppercase tracking-widest ${STATUS_STYLE[t.status] ?? "text-ink-muted"}`}>
-                {live && <span className="h-1.5 w-1.5 rounded-full bg-signal-live animate-live-pulse" />}{t.status}
+                {live && <span className="h-1.5 w-1.5 rounded-full bg-signal-live animate-live-pulse" aria-hidden="true" />}{STATUS_LABEL[t.status] ?? t.status}
               </span>
             </div>
             <h2 className="mt-4 font-display text-2xl uppercase tracking-wide text-ink group-hover:text-signal-live">{t.name}</h2>
