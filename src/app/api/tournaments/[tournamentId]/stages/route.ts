@@ -1,10 +1,43 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
+import { Prisma } from "@prisma/client";
 import { db } from "@/lib/db";
 import { requireTournamentManage } from "@/lib/auth";
 import { resolveStageRankAdvancements } from "@/lib/competition-progression";
-const createStageSchema=z.object({name:z.string().trim().min(2).max(100),kind:z.enum(["QUALIFIER","GROUP","SWISS","LEAGUE","KNOCKOUT","CONSOLATION","FINAL","CUSTOM"]).default("CUSTOM"),orderIndex:z.number().int().min(0),rules:z.record(z.unknown()).optional()});
-export async function GET(_req:Request,{params}:{params:Promise<{tournamentId:string}>}){const {tournamentId}=await params;const stages=await db.competitionStage.findMany({where:{tournamentId},orderBy:{orderIndex:"asc"},include:{matches:{select:{id:true,round:true,status:true,matchIndex:true}}}});return NextResponse.json({stages});}
-export async function POST(req:Request,{params}:{params:Promise<{tournamentId:string}>}){const {tournamentId}=await params;try{await requireTournamentManage(tournamentId);}catch{return NextResponse.json({error:"Forbidden"},{status:403});}const parsed=createStageSchema.safeParse(await req.json().catch(()=>null));if(!parsed.success)return NextResponse.json({error:parsed.error.flatten()},{status:400});const stage=await db.competitionStage.create({data:{tournamentId,...parsed.data,rules:parsed.data.rules as any}});return NextResponse.json({stage},{status:201});}
 
-export async function PATCH(req:Request,{params}:{params:Promise<{tournamentId:string}>}){const {tournamentId}=await params;try{await requireTournamentManage(tournamentId);}catch{return NextResponse.json({error:"Forbidden"},{status:403});}const body=await req.json().catch(()=>null);const id=typeof body?.id==="string"?body.id:null;const status=body?.status;const allowed=["SCHEDULED","LIVE","COMPLETED","ARCHIVED"];if(!id||!allowed.includes(status))return NextResponse.json({error:"id and valid status are required"},{status:400});const stage=await db.competitionStage.findFirst({where:{id,tournamentId}});if(!stage)return NextResponse.json({error:"Stage not found"},{status:404});const updated=await db.competitionStage.update({where:{id},data:{status}});if(status==="COMPLETED")await db.$transaction(tx=>resolveStageRankAdvancements(tx,id));return NextResponse.json({stage:updated});}
+const createStageSchema = z.object({
+  name: z.string().trim().min(2).max(100),
+  kind: z.enum(["QUALIFIER", "GROUP", "SWISS", "LEAGUE", "KNOCKOUT", "CONSOLATION", "FINAL", "CUSTOM"]).default("CUSTOM"),
+  orderIndex: z.number().int().min(0),
+  rules: z.record(z.unknown()).optional(),
+});
+
+export async function GET(_req: Request, { params }: { params: Promise<{ tournamentId: string }> }) {
+  const { tournamentId } = await params;
+  const stages = await db.competitionStage.findMany({ where: { tournamentId }, orderBy: { orderIndex: "asc" }, include: { matches: { select: { id: true, round: true, status: true, matchIndex: true } } } });
+  return NextResponse.json({ stages });
+}
+
+export async function POST(req: Request, { params }: { params: Promise<{ tournamentId: string }> }) {
+  const { tournamentId } = await params;
+  try { await requireTournamentManage(tournamentId); } catch { return NextResponse.json({ error: "Forbidden" }, { status: 403 }); }
+  const parsed = createStageSchema.safeParse(await req.json().catch(() => null));
+  if (!parsed.success) return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
+  const stage = await db.competitionStage.create({ data: { tournamentId, ...parsed.data, rules: parsed.data.rules as Prisma.InputJsonValue } });
+  return NextResponse.json({ stage }, { status: 201 });
+}
+
+export async function PATCH(req: Request, { params }: { params: Promise<{ tournamentId: string }> }) {
+  const { tournamentId } = await params;
+  try { await requireTournamentManage(tournamentId); } catch { return NextResponse.json({ error: "Forbidden" }, { status: 403 }); }
+  const body = await req.json().catch(() => null);
+  const id = typeof body?.id === "string" ? body.id : null;
+  const status = body?.status;
+  const allowed = ["SCHEDULED", "LIVE", "COMPLETED", "ARCHIVED"];
+  if (!id || !allowed.includes(status)) return NextResponse.json({ error: "id and valid status are required" }, { status: 400 });
+  const stage = await db.competitionStage.findFirst({ where: { id, tournamentId } });
+  if (!stage) return NextResponse.json({ error: "Stage not found" }, { status: 404 });
+  const updated = await db.competitionStage.update({ where: { id }, data: { status } });
+  if (status === "COMPLETED") await db.$transaction((tx) => resolveStageRankAdvancements(tx, id));
+  return NextResponse.json({ stage: updated });
+}
