@@ -1,4 +1,5 @@
 import { redisPub, EVENTS_CHANNEL } from "@/lib/redis";
+import { serverLogger } from "@/lib/server-logger";
 
 export { EVENTS_CHANNEL };
 
@@ -80,16 +81,35 @@ let connected = false;
 async function ensureConnected() {
   if (!redisPub) return false;
 
-  if (!connected) {
-    try {
-      await redisPub.connect();
-      connected = true;
-    } catch {
-      return false;
-    }
+  if (redisPub.status === "ready") {
+    connected = true;
+    return true;
   }
 
-  return true;
+  if (connected) connected = false;
+
+  if (redisPub.status !== "wait") return false;
+
+  try {
+    await redisPub.connect();
+    connected = redisPub.status === "ready";
+  } catch (error) {
+    serverLogger.warn("realtime Redis connection unavailable", {
+      error: error instanceof Error ? error.message : "unknown_error",
+    });
+    connected = false;
+  }
+
+  return connected;
+}
+
+if (redisPub) {
+  redisPub.on("error", (error) => {
+    connected = false;
+    serverLogger.warn("realtime Redis client error", {
+      error: error instanceof Error ? error.message : "unknown_error",
+    });
+  });
 }
 
 export async function publishEvent(event: AppEvent) {
@@ -99,6 +119,11 @@ export async function publishEvent(event: AppEvent) {
     await redisPub.publish(EVENTS_CHANNEL, JSON.stringify(event));
   } catch (error) {
     // Realtime fan-out must never make a successful database mutation fail.
-    console.error("[redis] failed to publish realtime event", error);
+    connected = false;
+    serverLogger.error("failed to publish realtime event", {
+      eventType: event.type,
+      tournamentId: event.tournamentId,
+      error: error instanceof Error ? error.message : "unknown_error",
+    });
   }
 }
