@@ -16,6 +16,11 @@ export async function generateMetadata({ params }: { params: Promise<{ tournamen
   return { title: `${tournament.name} · ${tournament.game}`, description: `${tournament.name} live tournament hub — watch individual matches, follow brackets, and track results.` };
 }
 
+function competitionParticipantLabel(participantMode: string, count: number) {
+  const label = participantMode === "team" ? "team" : "entrant";
+  return `${count} ${label}${count === 1 ? "" : "s"}`;
+}
+
 function MatchCard({ match, live = false, result = false, tournamentId }: { match: { id: string; status: string; round: string | null; sides: Array<{ id: string; key: string; score: number; participants: Array<{ label: string }> }>; station: { id: string; label: string } | null }; live?: boolean; result?: boolean; tournamentId: string }) {
   return (
     <article className={`surface-card p-4 ${live ? "border-signal-live/40" : ""}`}>
@@ -44,6 +49,7 @@ export default async function TournamentPage({ params }: { params: Promise<{ tou
     select: {
       id: true, name: true, slug: true, bestOf: true, format: true, publicEnabled: true, game: true, sport: true,
       participantMode: true, scoringMode: true, status: true, venue: true, startDate: true,
+      _count: { select: { entrants: true, teams: true, matches: true, brackets: true, stages: true } },
       organization: { select: { name: true, tagline: true, brandLogoUrl: true, brandPrimaryColor: true, brandAccentColor: true } },
       sponsors: { where: { active: true }, orderBy: { weight: "desc" }, take: 8 },
       teams: { include: { team: { select: { id: true, name: true, logoUrl: true } } }, orderBy: { seed: "asc" } },
@@ -91,6 +97,19 @@ export default async function TournamentPage({ params }: { params: Promise<{ tou
             <div className="flex flex-wrap items-center gap-4">
               {tournament.organization.brandLogoUrl && <img src={tournament.organization.brandLogoUrl} alt="" className="h-12 w-12 rounded-card object-cover" />}
               <div><p className="font-mono text-[10px] uppercase tracking-widest" style={{ color: "var(--event-accent)" }}>{tournament.organization.name}</p><p className="text-sm text-ink-faint">{tournament.organization.tagline ?? "Official event broadcast hub"}</p></div>
+            </div>
+            <div className="mt-4 grid grid-cols-2 gap-px overflow-hidden rounded-card border border-arena-700 bg-arena-700 sm:grid-cols-4">
+              {[
+                ["Format", tournament.format ?? "Standard"],
+                ["Participants", isBattleRoyale ? "Battle Royale" : competitionParticipantLabel(tournament.participantMode, tournament.participantMode === "team" ? tournament._count.teams : tournament._count.entrants)],
+                ["Matches", String(tournament._count.matches)],
+                ["Stages", String(tournament._count.stages)],
+              ].map(([label, value]) => (
+                <div key={label} className="min-w-0 bg-arena-950/70 px-3 py-2.5">
+                  <span className="block font-mono text-[9px] uppercase tracking-widest text-ink-faint">{label}</span>
+                  <span className="mt-1 block truncate text-sm text-ink-muted">{value}</span>
+                </div>
+              ))}
             </div>
           </section>
 
