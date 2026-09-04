@@ -16,6 +16,12 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with: { node-version: "20", cache: "npm" }
+      # Keep npm ci deterministic while first reconciling the repository's
+      # legacy lockfile with the current package manifest. The generated
+      # lockfile is intentionally ephemeral here; package-lock.json remains
+      # a tracked artifact to be refreshed separately once dependency
+      # resolution is complete.
+      - run: npm install --package-lock-only --ignore-scripts
       - run: npm ci
       - run: npx playwright install --with-deps chromium webkit
       - run: npm run test:e2e
