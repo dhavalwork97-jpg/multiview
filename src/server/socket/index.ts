@@ -13,6 +13,22 @@ import { startStationHeartbeat } from "./heartbeat";
 const PORT = Number(process.env.PORT ?? process.env.SOCKET_SERVER_PORT ?? 4000);
 const REDIS_URL = process.env.REDIS_URL ?? "redis://localhost:6379";
 
+const adapterPubClient = new Redis(REDIS_URL);
+const adapterSubClient = adapterPubClient.duplicate();
+const eventsSubscriber = new Redis(REDIS_URL);
+
+for (const [name, client] of [
+  ["socket adapter publisher", adapterPubClient],
+  ["socket adapter subscriber", adapterSubClient],
+  ["socket event subscriber", eventsSubscriber],
+] as const) {
+  client.on("error", (error) => {
+    serverLogger.warn(`${name} Redis client error`, {
+      error: error instanceof Error ? error.message : "unknown_error",
+    });
+  });
+}
+
 const httpServer = createServer((req, res) => {
   if (req.url === "/" || req.url === "/healthz") {
     const redisReady = adapterPubClient.status === "ready" && eventsSubscriber.status === "ready";
@@ -29,24 +45,7 @@ const httpServer = createServer((req, res) => {
 const io = new Server(httpServer, {
   cors: { origin: process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000" },
 });
-
-const adapterPubClient = new Redis(REDIS_URL);
-const adapterSubClient = adapterPubClient.duplicate();
 io.adapter(createAdapter(adapterPubClient, adapterSubClient));
-
-const eventsSubscriber = new Redis(REDIS_URL);
-
-for (const [name, client] of [
-  ["socket adapter publisher", adapterPubClient],
-  ["socket adapter subscriber", adapterSubClient],
-  ["socket event subscriber", eventsSubscriber],
-] as const) {
-  client.on("error", (error) => {
-    serverLogger.warn(`${name} Redis client error`, {
-      error: error instanceof Error ? error.message : "unknown_error",
-    });
-  });
-}
 
 eventsSubscriber.subscribe(EVENTS_CHANNEL).catch((error) => {
   serverLogger.error("socket event subscription failed", {
