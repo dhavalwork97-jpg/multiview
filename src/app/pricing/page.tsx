@@ -1,4 +1,3 @@
-import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/auth";
 import { isTrialActive } from "@/lib/billing";
 import { PricingPlans } from "@/components/billing/PricingPlans";

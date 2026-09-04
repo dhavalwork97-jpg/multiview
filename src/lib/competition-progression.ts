@@ -54,13 +54,6 @@ export async function advanceCompetitionFromMatch(
     return [];
   }
 
-  /*
-   * MATCH_COMPLETED is a match-level event.
-   *
-   * It must be emitted at most once regardless of how many advancement
-   * slots this match has and regardless of how many times progression is
-   * invoked for the same completed match.
-   */
   const existingCompletionEvent =
     await tx.progressionEvent.findFirst({
       where: {
@@ -146,14 +139,6 @@ export async function advanceCompetitionFromMatch(
       continue;
     }
 
-    /*
-     * V31.3.3: claim the slot before mutating the target side, but do not
-     * resolve it until the mutation has completed successfully.
-     *
-     * claimedByMatchId is the ownership token. The conditional update is the
-     * concurrency boundary: only one caller can acquire an unclaimed,
-     * unresolved slot. claimAttempt records every successful acquisition.
-     */
     const claimed = await tx.advancementSlot.updateMany({
       where: {
         id: slot.id,
@@ -191,11 +176,6 @@ export async function advanceCompetitionFromMatch(
         });
       }
 
-      /*
-       * Resolve only if we still own the claim. This conditional update makes
-       * the state transition explicit and prevents another caller from
-       * resolving a slot it did not claim.
-       */
       const resolved = await tx.advancementSlot.updateMany({
         where: {
           id: slot.id,
@@ -238,10 +218,6 @@ export async function advanceCompetitionFromMatch(
         targetSideKey: slot.targetSideKey,
       });
     } catch (error) {
-      /*
-       * A failed mutation must not leave the slot permanently claimed.
-       * Release only our own unresolved claim so a retry can safely acquire it.
-       */
       await tx.advancementSlot.updateMany({
         where: {
           id: slot.id,

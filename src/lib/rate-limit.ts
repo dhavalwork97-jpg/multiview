@@ -15,7 +15,8 @@ const redis = configured
   : null;
 
 const fallback = {
-  async limit(_key: string) {
+  async limit(key: string) {
+    void key;
     const production = process.env.NODE_ENV === "production";
     return {
       success: !production,

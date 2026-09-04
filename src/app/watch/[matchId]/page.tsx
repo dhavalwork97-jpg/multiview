@@ -1,8 +1,16 @@
+import { connection } from "next/server";
 import { notFound } from "next/navigation";
 import { db } from "@/lib/db";
 import { getCurrentUser } from "@/lib/auth";
 import { isPremium } from "@/lib/billing";
 import { WatchPageClient } from "./WatchPageClient";
+
+// Match existence is resolved at request time because match records are
+// mutable/live data. Explicitly opt into dynamic rendering so an unknown
+// match can never be satisfied by a stale/static route result.
+export const dynamic = "force-dynamic";
+export const dynamicParams = true;
+export const revalidate = 0;
 
 // Video playback (WebRTC low-latency path + HLS fallback, adaptive
 // bitrate, DVR) is Phase 3 scope. This page exists now so every
@@ -10,6 +18,7 @@ import { WatchPageClient } from "./WatchPageClient";
 // has a real destination and the live match state (score, status, viewer
 // count) is already wired end-to-end over Socket.IO.
 export default async function WatchPage({ params }: { params: Promise<{ matchId: string }> }) {
+  await connection();
   const { matchId } = await params;
 
   const match = await db.match.findUnique({

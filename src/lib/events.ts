@@ -1,4 +1,5 @@
 import { redisPub, EVENTS_CHANNEL } from "@/lib/redis";
+import { serverLogger } from "@/lib/server-logger";
 
 export { EVENTS_CHANNEL };
 
@@ -7,9 +8,6 @@ export { EVENTS_CHANNEL };
 // autocomplete and type safety on payload shape.
 export type AppEvent =
   | {
-      // A competition-level invalidation event. Viewers fetch the
-      // canonical snapshot rather than attempting to reconstruct
-      // tournament state from individual mutation events.
       type: "competition:updated";
       tournamentId: string;
       reason:
@@ -63,9 +61,6 @@ export type AppEvent =
       targetSideKey: string;
     }
   | {
-      // Published after persistent broadcast director state changes.
-      // OBS integration is intentionally not coupled here: a future
-      // broadcast agent can consume this event or the command history.
       type: "broadcast:updated";
       tournamentId: string;
       scene: string;
@@ -80,16 +75,37 @@ let connected = false;
 async function ensureConnected() {
   if (!redisPub) return false;
 
-  if (!connected) {
-    try {
-      await redisPub.connect();
-      connected = true;
-    } catch {
-      return false;
-    }
+  if (redisPub.status === "ready") {
+    connected = true;
+    return true;
   }
 
-  return true;
+  connected = false;
+  if (redisPub.status !== "wait") return false;
+
+  try {
+    // ioredis resolves connect() once the connection is established. Avoid
+    // reading status here because its literal-type narrowing remains "wait"
+    // across the await in TypeScript.
+    await redisPub.connect();
+    connected = true;
+  } catch (error) {
+    serverLogger.warn("realtime Redis connection unavailable", {
+      error: error instanceof Error ? error.message : "unknown_error",
+    });
+    connected = false;
+  }
+
+  return connected;
+}
+
+if (redisPub) {
+  redisPub.on("error", (error) => {
+    connected = false;
+    serverLogger.warn("realtime Redis client error", {
+      error: error instanceof Error ? error.message : "unknown_error",
+    });
+  });
 }
 
 export async function publishEvent(event: AppEvent) {
@@ -99,6 +115,11 @@ export async function publishEvent(event: AppEvent) {
     await redisPub.publish(EVENTS_CHANNEL, JSON.stringify(event));
   } catch (error) {
     // Realtime fan-out must never make a successful database mutation fail.
-    console.error("[redis] failed to publish realtime event", error);
+    connected = false;
+    serverLogger.error("failed to publish realtime event", {
+      eventType: event.type,
+      tournamentId: event.tournamentId,
+      error: error instanceof Error ? error.message : "unknown_error",
+    });
   }
 }

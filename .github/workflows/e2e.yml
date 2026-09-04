@@ -1,23 +1,32 @@
 name: E2E (against Vercel preview)
 
 # Vercel's GitHub integration posts a `deployment_status` event once a
-# preview deploy finishes — this waits for that rather than trying to
-# stand up its own server, which is the whole point: these tests exercise
-# the real deployed app, including the real Clerk middleware and real
-# security headers, not a CI-only approximation of it.
+# preview deploy finishes. Only test the deployment belonging to the exact
+# commit that triggered this workflow; otherwise an older successful Vercel
+# deployment can cause E2E to exercise stale application code.
 on:
   deployment_status:
 
 jobs:
   e2e:
-    if: github.event.deployment_status.state == 'success'
+    if: github.event.deployment_status.state == 'success' && github.event.deployment.sha == github.sha
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with: { node-version: "20", cache: "npm" }
+      # Keep npm ci deterministic while first reconciling the repository's
+      # legacy lockfile with the current package manifest. The generated
+      # lockfile is intentionally ephemeral here; package-lock.json remains
+      # a tracked artifact to be refreshed separately once dependency
+      # resolution is complete.
+      - run: npm install --package-lock-only --ignore-scripts
       - run: npm ci
       - run: npx playwright install --with-deps chromium webkit
       - run: npm run test:e2e
         env:
-          E2E_BASE_URL: ${{ github.event.deployment_status.target_url }}
+          # Vercel uses target_url for its dashboard/deployment details link;
+          # environment_url is the actual deployed preview URL. Running the
+          # browser suite against target_url can therefore test a dashboard
+          # page and make every application route appear to return 200.
+          E2E_BASE_URL: ${{ github.event.deployment_status.environment_url }}
