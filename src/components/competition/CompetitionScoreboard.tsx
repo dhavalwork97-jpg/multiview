@@ -1,10 +1,14 @@
-import type { ViewerSide } from "@/lib/competition/viewer-state";
+type ScoreboardSide = {
+  id: string;
+  score: number;
+  participants: Array<{ label: string }>;
+};
 
-function sideLabel(side: ViewerSide) {
+function sideLabel(side: ScoreboardSide) {
   return side.participants.map((participant) => participant.label).join(" / ") || "TBD";
 }
 
-function SideRow({ side, align = "left", compact }: { side: ViewerSide; align?: "left" | "right"; compact: boolean }) {
+function SideRow({ side, align = "left", compact }: { side: ScoreboardSide; align?: "left" | "right"; compact: boolean }) {
   return (
     <div className={`flex min-w-0 items-center gap-2 ${align === "right" ? "justify-end text-right" : "text-left"}`}>
       <span className={compact ? "min-w-0 truncate text-sm" : "min-w-0 truncate font-display text-lg uppercase"}>
@@ -21,7 +25,7 @@ export function CompetitionScoreboard({
   sides,
   compact = false,
 }: {
-  sides: ViewerSide[];
+  sides: ScoreboardSide[];
   compact?: boolean;
 }) {
   if (sides.length === 0) return null;
