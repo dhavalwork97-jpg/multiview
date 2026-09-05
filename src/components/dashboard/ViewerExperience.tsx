@@ -40,9 +40,8 @@ export function ViewerExperience() {
           <p className="section-label">Your interactive toolkit</p>
           <h2 className="page-title mt-1 text-2xl">Stay in the action</h2>
         </div>
-        <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-5">
           {[
-            ["/watch", "Watch"],
             ["/multiview", "Multi-View"],
             ["/friends", "Friends"],
             ["/activity", "Activity"],
