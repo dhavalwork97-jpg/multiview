@@ -106,6 +106,8 @@ export default async function DashboardPage() {
     dataWarning,
   } = await loadDashboardData(user);
   const isOrganizer = isOrganizerDashboardRole(user.role, dashboardRole);
+  const premium = isPremium(user);
+  const trialDays = trialDaysRemaining(user);
 
   return (
     <main className="page-shell">
@@ -139,9 +141,7 @@ export default async function DashboardPage() {
                 </Link>
               )}
               <Link href="/pricing" className="action-secondary">
-                {isPremium(user)
-                  ? `Plans · ${trialDaysRemaining(user)}d`
-                  : "Plans"}
+                {premium ? `Plans · ${trialDays}d` : "Plans"}
               </Link>
               {canCreateTournament && (
                 <Link href="/admin/tournaments/new" className="action-primary">
@@ -154,13 +154,14 @@ export default async function DashboardPage() {
 
         {isOrganizer ? (
           <OrganizerDashboard
-            user={user}
             role={dashboardRole}
             tournaments={tournaments}
             canCreateTournament={canCreateTournament}
             canManageOrganization={canManageOrganization}
             canAccessAdmin={canAccessAdmin}
             dataWarning={dataWarning}
+            premium={premium}
+            trialDays={trialDays}
           />
         ) : (
           <ViewerDashboard />
