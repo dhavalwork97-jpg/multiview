@@ -1,8 +1,28 @@
 import Link from "next/link";
 import type { OrganizationRole } from "@prisma/client";
 
-export function OrganizerControlCenter({ role, tournamentCount }: { role: OrganizationRole | "ADMIN" | null; tournamentCount: number }) {
-  const isAdmin = role === "ADMIN";
+export function OrganizerControlCenter({
+  role,
+  tournamentCount,
+  canCreateTournament,
+  canManageOrganization,
+  canAccessAdmin,
+}: {
+  role: OrganizationRole | "ADMIN" | null;
+  tournamentCount: number;
+  canCreateTournament: boolean;
+  canManageOrganization: boolean;
+  canAccessAdmin: boolean;
+}) {
+  const links: Array<[string, string]> = [
+    ...(canCreateTournament ? [["/admin/tournaments/new", "Create tournament"] as [string, string]] : []),
+    ["/dashboard/team", "Team"],
+    ["/tournaments", "Events"],
+    ...(canManageOrganization ? [["/organization/settings", "Organization"] as [string, string]] : []),
+    ...(canAccessAdmin ? [["/admin", "Admin"] as [string, string]] : []),
+    ["/multiview", "Live / Multi-View"],
+  ];
+
   return (
     <section className="surface-card mb-10 border-signal-live/30 bg-signal-live/[0.04] p-5 sm:p-6">
       <p className="page-kicker text-signal-live">Organizer control center</p>
@@ -13,17 +33,10 @@ export function OrganizerControlCenter({ role, tournamentCount }: { role: Organi
             Create events, manage stations and teams, monitor analytics, and operate live tournament workflows from one workspace.
           </p>
         </div>
-        <span className="status-neutral">{isAdmin ? "Platform admin" : role ?? "Organizer"}</span>
+        <span className="status-neutral">{role === "ADMIN" ? "Platform admin" : role ?? "Organizer"}</span>
       </div>
       <div className="mt-5 grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
-        {[
-          ["/admin/tournaments/new", "Create tournament"],
-          ["/dashboard/team", "Team"],
-          ["/tournaments", "Events"],
-          ["/organization/settings", "Organization"],
-          ["/admin", "Admin"],
-          ["/multiview", "Live / Multi-View"],
-        ].map(([href, label]) => (
+        {links.map(([href, label]) => (
           <Link key={href} href={href} className="action-secondary flex min-h-14 items-center justify-center text-center">
             {label}
           </Link>
