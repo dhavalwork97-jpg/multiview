@@ -2,7 +2,6 @@ import { redirect } from "next/navigation";
 import Link from "next/link";
 import {
   canAdminTournamentRole,
-  canOperateTournamentRole,
   getCurrentUser,
   isOrganizerDashboardRole,
   resolveDashboardRole,
@@ -47,12 +46,11 @@ async function loadDashboardData(
       memberships.map((membership) => membership.role),
     );
     const isPlatformAdmin = user.role === "ADMIN";
-    const canCreateTournament =
-      isPlatformAdmin || user.role === "ORGANIZER" || canOperateTournamentRole(dashboardRole);
     const canManageOrganization =
       isPlatformAdmin ||
       user.role === "ORGANIZER" ||
       canAdminTournamentRole(dashboardRole);
+    const canCreateTournament = canManageOrganization;
     const canAccessAdmin = isPlatformAdmin || user.role === "ORGANIZER";
     const organizationIds = memberships.map(
       (membership) => membership.organizationId,
