@@ -11,6 +11,7 @@ import { FloatingReactionCanvas } from "@/components/social/FloatingReactionCanv
 import { MatchPulseCard } from "@/components/social/MatchPulseCard";
 import { LiveActivityFeed } from "@/components/social/LiveActivityFeed";
 import { WatchPartyPanel } from "@/components/social/WatchPartyPanel";
+import { ChatPanel } from "@/components/social/ChatPanel";
 import { useActivityFeed, usePresence, usePulse, useReactionStream } from "@/hooks/useSocial";
 
 type InitialMatch = { id: string; round: string | null; status: string; playerOneScore: number; playerTwoScore: number; tournamentId: string; playerOne: { gamertag: string }; playerTwo: { gamertag: string }; station: { id: string; label: string } | null; tournament: { name: string }; startedAt: string | null; youtubeVideoId: string | null; hlsPlaylistKey: string | null };
@@ -79,12 +80,15 @@ export function WatchPageClient({ initialMatch, isPremium }: { initialMatch: Ini
           </section>
         </WatchPartyPanel>
 
-        <section className="surface-card mt-3 p-4 sm:p-6">
-          <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-3 sm:gap-6">
-            <div className="min-w-0 border-l-2 border-corner-p1 pl-3"><p className="truncate font-display text-xl uppercase tracking-wide sm:text-3xl">{match.playerOne.gamertag}</p><p className="page-kicker mt-1">Side A</p></div>
-            <div className="text-center"><span className="font-mono text-3xl font-bold tabular-nums sm:text-5xl">{match.playerOneScore}–{match.playerTwoScore}</span></div>
-            <div className="min-w-0 border-r-2 border-corner-p2 pr-3 text-right"><p className="truncate font-display text-xl uppercase tracking-wide sm:text-3xl">{match.playerTwo.gamertag}</p><p className="page-kicker mt-1">Side B</p></div>
-          </div>
+        <section className="mt-3 grid gap-3 lg:grid-cols-[1fr_22rem]">
+          <section className="surface-card p-4 sm:p-6">
+            <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-3 sm:gap-6">
+              <div className="min-w-0 border-l-2 border-corner-p1 pl-3"><p className="truncate font-display text-xl uppercase tracking-wide sm:text-3xl">{match.playerOne.gamertag}</p><p className="page-kicker mt-1">Side A</p></div>
+              <div className="text-center"><span className="font-mono text-3xl font-bold tabular-nums sm:text-5xl">{match.playerOneScore}–{match.playerTwoScore}</span></div>
+              <div className="min-w-0 border-r-2 border-corner-p2 pr-3 text-right"><p className="truncate font-display text-xl uppercase tracking-wide sm:text-3xl">{match.playerTwo.gamertag}</p><p className="page-kicker mt-1">Side B</p></div>
+            </div>
+          </section>
+          <ChatPanel matchId={match.id} />
         </section>
 
         <div className="mt-3 grid gap-3 lg:grid-cols-[1fr_18rem]">
