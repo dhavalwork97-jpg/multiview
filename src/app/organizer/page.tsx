@@ -1,8 +1,9 @@
 import { redirect } from "next/navigation";
+import Link from "next/link";
 import { getCurrentUser } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { getPrimaryOrganizationMembership } from "@/lib/organization";
-import { OrganizerDashboard } from "@/app/dashboard/OrganizerDashboard";
+import { OrganizerDashboard } from "@/components/dashboard/OrganizerDashboard";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -36,8 +37,8 @@ export default async function OrganizerPage() {
           <p className="mt-2 max-w-2xl text-sm text-ink-muted">One focused workspace for tournament operations, broadcast control, competitors and event analytics.</p>
         </div>
         <div className="flex flex-wrap gap-2">
-          {canCreateTournament && <a href="/admin/tournaments/new" className="action-primary">Create tournament</a>}
-          <a href="/pricing" className="action-secondary">Plans</a>
+          {canCreateTournament && <Link href="/admin/tournaments/new" className="action-primary">Create tournament</Link>}
+          <Link href="/pricing" className="action-secondary">Plans</Link>
         </div>
       </header>
 
