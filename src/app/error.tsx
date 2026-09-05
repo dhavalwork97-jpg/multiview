@@ -23,6 +23,11 @@ export default function GlobalRouteError({
           <p className="page-subtitle mt-3 max-w-xl">
             The rest of FGC Stream is still available. Try the page again, or return to the competition hub.
           </p>
+          {error.digest && (
+            <p className="mt-4 font-mono text-[10px] uppercase tracking-widest text-ink-faint">
+              Reference: {error.digest}
+            </p>
+          )}
           <div className="mt-6 flex flex-wrap gap-2">
             <button type="button" onClick={() => reset()} className="action-primary min-h-11 px-5">
               Try again
