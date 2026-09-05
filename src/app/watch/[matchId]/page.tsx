@@ -32,8 +32,8 @@ export default async function WatchPage({ params }: { params: Promise<{ matchId:
       tournamentId: true,
       startedAt: true,
       youtubeVideoId: true,
-      playerOne: { select: { gamertag: true } },
-      playerTwo: { select: { gamertag: true } },
+      playerOne: { select: { id: true, gamertag: true } },
+      playerTwo: { select: { id: true, gamertag: true } },
       sides: { include: { participants: { include: { player: { select: { gamertag: true } }, team: { select: { name: true } } } } } },
       station: { select: { id: true, label: true, playbackIdHls: true } },
       tournament: { select: { name: true } },
@@ -53,8 +53,8 @@ export default async function WatchPage({ params }: { params: Promise<{ matchId:
     <WatchPageClient
       initialMatch={{
         ...match,
-        playerOne: { gamertag: nameFor(sideA, match.playerOne?.gamertag ?? "Side A") },
-        playerTwo: { gamertag: nameFor(sideB, match.playerTwo?.gamertag ?? "Side B") },
+        playerOne: { id: match.playerOne?.id ?? `side-a-${match.id}`, gamertag: nameFor(sideA, match.playerOne?.gamertag ?? "Side A") },
+        playerTwo: { id: match.playerTwo?.id ?? `side-b-${match.id}`, gamertag: nameFor(sideB, match.playerTwo?.gamertag ?? "Side B") },
         startedAt: match.startedAt?.toISOString() ?? null,
         hlsPlaylistKey: match.station?.playbackIdHls ? `${match.station.playbackIdHls}/index.m3u8` : null,
       }}
