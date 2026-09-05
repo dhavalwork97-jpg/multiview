@@ -9,6 +9,7 @@ import { TrendingStrip } from "@/components/dashboard/TrendingStrip";
 import { RecommendedStrip } from "@/components/dashboard/RecommendedStrip";
 import { NotificationBell } from "@/components/notifications/NotificationBell";
 import { SocialPulseWidgets } from "@/components/dashboard/SocialPulseWidgets";
+import { DashboardWidgetBoundary } from "@/components/dashboard/DashboardWidgetBoundary";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -88,9 +89,9 @@ export default async function DashboardPage() {
           </div>
         </header>
 
-        <section className="mb-10"><div className="mb-3"><p className="section-label">For you</p><h2 className="page-title mt-1 text-2xl">Recommended</h2></div><RecommendedStrip /></section>
-        <section className="mb-10"><div className="mb-3"><p className="section-label">Community signal</p><h2 className="page-title mt-1 text-2xl">Trending</h2></div><TrendingStrip /></section>
-        <SocialPulseWidgets />
+        <section className="mb-10"><div className="mb-3"><p className="section-label">For you</p><h2 className="page-title mt-1 text-2xl">Recommended</h2></div><DashboardWidgetBoundary label="Recommendations"><RecommendedStrip /></DashboardWidgetBoundary></section>
+        <section className="mb-10"><div className="mb-3"><p className="section-label">Community signal</p><h2 className="page-title mt-1 text-2xl">Trending</h2></div><DashboardWidgetBoundary label="Trending"><TrendingStrip /></DashboardWidgetBoundary></section>
+        <DashboardWidgetBoundary label="Social pulse"><SocialPulseWidgets /></DashboardWidgetBoundary>
 
         <section className="surface-card mb-10 border-signal-live/30 bg-signal-live/[0.04] p-5">
           <div className="flex flex-wrap items-center justify-between gap-4"><div><p className="page-kicker text-signal-live">Plans</p><h2 className="mt-1 font-display text-2xl uppercase">Paid plans are coming soon</h2><p className="mt-1 text-sm text-ink-muted">Explore Starter, Pro and Event pricing. Billing and subscriptions are not enabled yet.</p></div><div className="flex gap-2"><Link href="/organization/settings" className="action-secondary">Branding</Link><Link href="/pricing" className="action-primary">View plans</Link></div></div>
@@ -102,7 +103,7 @@ export default async function DashboardPage() {
         </section>
 
         <section className="mb-10"><div className="mb-3 flex items-end justify-between"><div><p className="section-label">Owned events</p><h2 className="page-title mt-1 text-2xl">Your tournaments</h2></div></div>{tournaments.length === 0 ? <div className="empty-state"><p>{dataWarning ? "Tournament data is temporarily unavailable." : "You haven't created a tournament yet."}</p>{canCreateTournament && <Link href="/admin/tournaments/new" className="action-secondary mt-3">Create your first tournament</Link>}</div> : <ul className="surface-card divide-y divide-arena-700 overflow-hidden">{tournaments.map((t) => <li key={t.id} className="flex flex-col gap-3 px-4 py-4 sm:flex-row sm:items-center sm:justify-between"><div className="min-w-0"><div className="flex flex-wrap items-center gap-2"><Link href={`/admin/tournaments/${t.id}`} className="font-display text-lg uppercase hover:text-signal-live">{t.name}</Link><span className={t.status === "LIVE" ? "status-live" : "status-neutral"} aria-label={`Status: ${STATUS_LABEL[t.status] ?? t.status}`}>{t.status === "LIVE" && <span className="h-1.5 w-1.5 rounded-full bg-signal-live animate-live-pulse" aria-hidden="true" />}{STATUS_LABEL[t.status] ?? t.status}</span></div><p className="mt-0.5 font-mono text-[10px] uppercase tracking-widest text-ink-faint">{new Date(t.startDate).toLocaleDateString()}</p></div><div className="flex flex-wrap items-center gap-3"><Link href={`/e/${t.slug}`} className="font-mono text-[10px] uppercase tracking-wide text-ink-faint hover:text-ink">Public page</Link><Link href={`/admin/tournaments/${t.id}/analytics`} className="font-mono text-[10px] uppercase tracking-wide text-ink-faint hover:text-signal-live">Analytics</Link><Link href={`/admin/tournaments/${t.id}/control-room`} className="action-secondary">Manage stations</Link></div></li>)}</ul>}</section>
-        <section><div className="mb-3"><p className="section-label">Live signal</p><h2 className="page-title mt-1 text-2xl">Live right now</h2></div><LiveGrid /></section>
+        <section><div className="mb-3"><p className="section-label">Live signal</p><h2 className="page-title mt-1 text-2xl">Live right now</h2></div><DashboardWidgetBoundary label="Live matches"><LiveGrid /></DashboardWidgetBoundary></section>
       </div>
     </main>
   );
