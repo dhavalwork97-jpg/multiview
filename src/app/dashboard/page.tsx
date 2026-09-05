@@ -1,6 +1,12 @@
 import { redirect } from "next/navigation";
 import Link from "next/link";
-import { getCurrentUser, isOrganizerDashboardRole, resolveDashboardRole } from "@/lib/auth";
+import {
+  canAdminTournamentRole,
+  canOperateTournamentRole,
+  getCurrentUser,
+  isOrganizerDashboardRole,
+  resolveDashboardRole,
+} from "@/lib/auth";
 import { db } from "@/lib/db";
 import { SearchBar } from "@/components/dashboard/SearchBar";
 import { isPremium, trialDaysRemaining } from "@/lib/billing";
@@ -14,6 +20,8 @@ export const revalidate = 0;
 type DashboardData = {
   dashboardRole: ReturnType<typeof resolveDashboardRole>;
   canCreateTournament: boolean;
+  canManageOrganization: boolean;
+  canAccessAdmin: boolean;
   tournaments: Array<{
     id: string;
     slug: string;
@@ -38,10 +46,14 @@ async function loadDashboardData(
       user.role,
       memberships.map((membership) => membership.role),
     );
+    const isPlatformAdmin = user.role === "ADMIN";
     const canCreateTournament =
-      user.role === "ADMIN" ||
+      isPlatformAdmin || user.role === "ORGANIZER" || canOperateTournamentRole(dashboardRole);
+    const canManageOrganization =
+      isPlatformAdmin ||
       user.role === "ORGANIZER" ||
-      (dashboardRole !== null && dashboardRole !== "VIEWER");
+      canAdminTournamentRole(dashboardRole);
+    const canAccessAdmin = isPlatformAdmin || user.role === "ORGANIZER";
     const organizationIds = memberships.map(
       (membership) => membership.organizationId,
     );
@@ -62,12 +74,21 @@ async function loadDashboardData(
       },
     });
 
-    return { dashboardRole, canCreateTournament, tournaments, dataWarning: false };
+    return {
+      dashboardRole,
+      canCreateTournament,
+      canManageOrganization,
+      canAccessAdmin,
+      tournaments,
+      dataWarning: false,
+    };
   } catch (error) {
     console.error("FGC Stream dashboard data load failed", error);
     return {
       dashboardRole: user.role === "ADMIN" ? "ADMIN" : null,
       canCreateTournament: user.role === "ADMIN" || user.role === "ORGANIZER",
+      canManageOrganization: user.role === "ADMIN" || user.role === "ORGANIZER",
+      canAccessAdmin: user.role === "ADMIN" || user.role === "ORGANIZER",
       tournaments: [],
       dataWarning: true,
     };
@@ -78,8 +99,14 @@ export default async function DashboardPage() {
   const user = await getCurrentUser();
   if (!user) redirect("/sign-in");
 
-  const { dashboardRole, canCreateTournament, tournaments, dataWarning } =
-    await loadDashboardData(user);
+  const {
+    dashboardRole,
+    canCreateTournament,
+    canManageOrganization,
+    canAccessAdmin,
+    tournaments,
+    dataWarning,
+  } = await loadDashboardData(user);
   const isOrganizer = isOrganizerDashboardRole(user.role, dashboardRole);
 
   return (
@@ -133,6 +160,8 @@ export default async function DashboardPage() {
             role={dashboardRole}
             tournaments={tournaments}
             canCreateTournament={canCreateTournament}
+            canManageOrganization={canManageOrganization}
+            canAccessAdmin={canAccessAdmin}
             dataWarning={dataWarning}
           />
         ) : (
