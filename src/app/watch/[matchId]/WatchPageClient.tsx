@@ -12,9 +12,10 @@ import { MatchPulseCard } from "@/components/social/MatchPulseCard";
 import { LiveActivityFeed } from "@/components/social/LiveActivityFeed";
 import { WatchPartyPanel } from "@/components/social/WatchPartyPanel";
 import { ChatPanel } from "@/components/social/ChatPanel";
+import { CommunityEngagementPanel } from "@/components/social/CommunityEngagementPanel";
 import { useActivityFeed, usePresence, usePulse, useReactionStream } from "@/hooks/useSocial";
 
-type InitialMatch = { id: string; round: string | null; status: string; playerOneScore: number; playerTwoScore: number; tournamentId: string; playerOne: { gamertag: string }; playerTwo: { gamertag: string }; station: { id: string; label: string } | null; tournament: { name: string }; startedAt: string | null; youtubeVideoId: string | null; hlsPlaylistKey: string | null };
+type InitialMatch = { id: string; round: string | null; status: string; playerOneScore: number; playerTwoScore: number; tournamentId: string; playerOne: { id: string; gamertag: string }; playerTwo: { id: string; gamertag: string }; station: { id: string; label: string } | null; tournament: { name: string }; startedAt: string | null; youtubeVideoId: string | null; hlsPlaylistKey: string | null };
 
 export function WatchPageClient({ initialMatch, isPremium }: { initialMatch: InitialMatch; isPremium: boolean }) {
   const [match, setMatch] = useState(initialMatch);
@@ -95,6 +96,8 @@ export function WatchPageClient({ initialMatch, isPremium }: { initialMatch: Ini
           <div className="space-y-3"><div className="sticky bottom-3 z-10 sm:static"><ReactionTray onReact={(reaction) => void send(reaction)} /></div><ClipControls matchId={match.id} elapsedSeconds={elapsedSeconds} /></div>
           <aside className="grid gap-3 sm:grid-cols-2 lg:grid-cols-1"><MatchPulseCard score={pulse.score} reactions={pulse.reactions} /><LiveActivityFeed events={activity} /></aside>
         </div>
+
+        <section className="mt-6"><CommunityEngagementPanel matchId={match.id} tournamentId={match.tournamentId} playerOne={match.playerOne} playerTwo={match.playerTwo} /></section>
       </div>
     </main>
   );
