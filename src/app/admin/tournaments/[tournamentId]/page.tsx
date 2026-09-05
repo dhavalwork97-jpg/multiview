@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 import Link from "next/link";
-import { getCurrentUser } from "@/lib/auth";
+import { getTournamentAccess } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { InteractiveBracket } from "@/components/bracket/InteractiveBracket";
 import { StationAssignmentBoard } from "@/components/admin/StationAssignmentBoard";
@@ -12,8 +12,14 @@ export default async function AdminTournamentPage({
   params: Promise<{ tournamentId: string }>;
 }) {
   const { tournamentId } = await params;
-  const user = await getCurrentUser();
-  if (!user || (user.role !== "ORGANIZER" && user.role !== "ADMIN")) {
+  let access;
+  try {
+    access = await getTournamentAccess(tournamentId);
+  } catch {
+    redirect("/dashboard");
+  }
+
+  if (!access.isPlatformAdmin && (access.role === "VIEWER")) {
     redirect("/dashboard");
   }
 
@@ -37,7 +43,8 @@ export default async function AdminTournamentPage({
   const isBattleRoyale =
     tournament.sport === "bgmi" || tournament.scoringMode === "battle_royale";
 
-  const isMultiStage = tournament.stages.length > 1 && !isBattleRoyale;
+  const isMultiStage =
+    tournament.stages.length > 1 && !isBattleRoyale;
 
   return (
     <main className="min-h-screen bg-arena-950 px-6 py-8">
