@@ -1,0 +1,151 @@
+import { randomUUID } from "node:crypto";
+import { NextResponse } from "next/server";
+import { z } from "zod";
+import { db } from "@/lib/db";
+import { getCurrentUser, requireTournamentAdmin } from "@/lib/auth";
+
+const headers = { "Cache-Control": "no-store" };
+const predictionSchema = z.object({ action: z.literal("prediction"), matchId: z.string().min(1), playerId: z.string().min(1), confidence: z.number().int().min(1).max(100) });
+const pollVoteSchema = z.object({ action: z.literal("pollVote"), pollId: z.string().min(1), optionIndex: z.number().int().min(0).max(9) });
+const mvpSchema = z.object({ action: z.literal("mvp"), tournamentId: z.string().min(1), playerId: z.string().min(1) });
+const pickemSchema = z.object({ action: z.literal("pickem"), tournamentId: z.string().min(1), picks: z.record(z.string(), z.string()).refine((v) => Object.keys(v).length <= 64) });
+const createPollSchema = z.object({ action: z.literal("createPoll"), matchId: z.string().min(1), question: z.string().trim().min(5).max(240), options: z.array(z.string().trim().min(1).max(80)).min(2).max(6), closesAt: z.string().datetime().nullable().optional() });
+const resolveSchema = z.object({ action: z.literal("resolvePrediction"), matchId: z.string().min(1), winnerPlayerId: z.string().min(1) });
+
+export async function GET(request: Request) {
+  const url = new URL(request.url);
+  const matchId = url.searchParams.get("matchId")?.trim();
+  const tournamentId = url.searchParams.get("tournamentId")?.trim();
+  const user = await getCurrentUser();
+  if (!matchId && !tournamentId) return NextResponse.json({ error: "matchId or tournamentId is required" }, { status: 400, headers });
+
+  let prediction = null;
+  let leaderboard: Array<{ username: string; points: number }> = [];
+  let polls: Array<{ id: string; question: string; options: string[]; counts: number[]; closesAt: string | null; votedIndex: number | null }> = [];
+  let mvp: Array<{ playerId: string; gamertag: string; votes: number }> = [];
+  let pickem = null;
+  let pickemMatches: Array<{ id: string; round: string | null; playerOneId: string; playerOne: string; playerTwoId: string; playerTwo: string; status: string }> = [];
+
+  if (matchId) {
+    const rows = await db.$queryRaw<Array<{ id: string; playerId: string; confidence: number; points: number; resolved: boolean }>>`
+      SELECT id, predicted_player_id AS "playerId", confidence, points, resolved FROM community_predictions WHERE match_id=${matchId} ${user ? db.$queryRawUnsafe("AND user_id = $1", user.id) : db.$queryRawUnsafe("AND 1=0")} LIMIT 1
+    `;
+    prediction = rows[0] ?? null;
+    const pollRows = await db.$queryRaw<Array<{ id: string; question: string; options: unknown; closesAt: Date | null }>>`
+      SELECT id, question, options, closes_at AS "closesAt" FROM community_polls WHERE match_id=${matchId} AND status='OPEN' AND (closes_at IS NULL OR closes_at > CURRENT_TIMESTAMP) ORDER BY created_at DESC LIMIT 3
+    `;
+    for (const poll of pollRows) {
+      const options = Array.isArray(poll.options) ? poll.options.map(String) : [];
+      const countsRows = await db.$queryRaw<Array<{ optionIndex: number; count: bigint }>>`
+        SELECT option_index AS "optionIndex", COUNT(*)::bigint AS count FROM community_poll_votes WHERE poll_id=${poll.id} GROUP BY option_index
+      `;
+      const voted = user ? await db.$queryRaw<Array<{ optionIndex: number }>>`SELECT option_index AS "optionIndex" FROM community_poll_votes WHERE poll_id=${poll.id} AND user_id=${user.id} LIMIT 1` : [];
+      polls.push({ id: poll.id, question: poll.question, options, counts: options.map((_, i) => Number(countsRows.find((r) => r.optionIndex === i)?.count ?? 0n)), closesAt: poll.closesAt?.toISOString() ?? null, votedIndex: voted[0]?.optionIndex ?? null });
+    }
+  }
+
+  if (tournamentId) {
+    const lb = await db.$queryRaw<Array<{ username: string; points: number }>>`
+      SELECT u.username, COALESCE(SUM(p.points),0)::int AS points FROM users u LEFT JOIN community_predictions p ON p.user_id=u.id GROUP BY u.id, u.username ORDER BY points DESC, u.username ASC LIMIT 25
+    `;
+    leaderboard = lb;
+    const mv = await db.$queryRaw<Array<{ playerId: string; gamertag: string; votes: bigint }>>`
+      SELECT v.player_id AS "playerId", p.gamertag, COUNT(v.id)::bigint AS votes FROM community_mvp_votes v JOIN players p ON p.id=v.player_id WHERE v.tournament_id=${tournamentId} GROUP BY v.player_id,p.gamertag ORDER BY votes DESC,p.gamertag ASC LIMIT 12
+    `;
+    mvp = mv.map((r) => ({ ...r, votes: Number(r.votes) }));
+    if (user) {
+      const pe = await db.$queryRaw<Array<{ id: string; picks: unknown; points: number }>>`SELECT id,picks,points FROM community_pickems WHERE tournament_id=${tournamentId} AND user_id=${user.id} LIMIT 1`;
+      pickem = pe[0] ?? null;
+    }
+    const ms = await db.$queryRaw<Array<{ id:string; round:string|null; playerOneId:string; playerOne:string; playerTwoId:string; playerTwo:string; status:string }>>`
+      SELECT m.id,m.round,m.player_one_id AS "playerOneId",p1.gamertag AS "playerOne",m.player_two_id AS "playerTwoId",p2.gamertag AS "playerTwo",m.status FROM matches m JOIN players p1 ON p1.id=m.player_one_id JOIN players p2 ON p2.id=m.player_two_id WHERE m.tournament_id=${tournamentId} AND m.status IN ('SCHEDULED','LIVE') ORDER BY m.start_time NULLS LAST,m.created_at ASC LIMIT 16
+    `;
+    pickemMatches = ms;
+  }
+  return NextResponse.json({ prediction, polls, leaderboard, mvp, pickem, pickemMatches, viewer: user ? { id: user.id, username: user.username } : null }, { headers });
+}
+
+export async function POST(request: Request) {
+  const user = await getCurrentUser();
+  if (!user) return NextResponse.json({ error: "Sign in to participate" }, { status: 401, headers });
+  const input = await request.json().catch(() => null);
+  const action = input?.action;
+  try {
+    if (action === "prediction") return await savePrediction(user.id, input);
+    if (action === "pollVote") return await votePoll(user.id, input);
+    if (action === "mvp") return await voteMvp(user.id, input);
+    if (action === "pickem") return await savePickem(user.id, input);
+    if (action === "createPoll") return await createPoll(user.id, input);
+    if (action === "resolvePrediction") return await resolvePrediction(user.id, input);
+    return NextResponse.json({ error: "Unknown action" }, { status: 400, headers });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Unable to save community action";
+    return NextResponse.json({ error: message }, { status: 400, headers });
+  }
+}
+
+async function savePrediction(userId: string, input: unknown) {
+  const p = predictionSchema.parse(input);
+  const match = await db.match.findUnique({ where: { id: p.matchId }, select: { id:true, playerOneId:true, playerTwoId:true, status:true } });
+  if (!match) throw new Error("Match not found");
+  if (match.status === "COMPLETED") throw new Error("Predictions are closed");
+  if (![match.playerOneId, match.playerTwoId].includes(p.playerId)) throw new Error("Player is not in this match");
+  await db.$executeRaw`
+    INSERT INTO community_predictions (id,match_id,user_id,predicted_player_id,confidence,created_at,updated_at) VALUES (${randomUUID()},${p.matchId},${userId},${p.playerId},${p.confidence},CURRENT_TIMESTAMP,CURRENT_TIMESTAMP)
+    ON CONFLICT (match_id,user_id) DO UPDATE SET predicted_player_id=EXCLUDED.predicted_player_id,confidence=EXCLUDED.confidence,updated_at=CURRENT_TIMESTAMP
+  `;
+  return NextResponse.json({ ok:true });
+}
+
+async function votePoll(userId: string, input: unknown) {
+  const p = pollVoteSchema.parse(input);
+  const rows = await db.$queryRaw<Array<{ options: unknown; status:string; closesAt:Date|null }>>`SELECT options,status,closes_at AS "closesAt" FROM community_polls WHERE id=${p.pollId} LIMIT 1`;
+  const poll = rows[0];
+  if (!poll) throw new Error("Poll not found");
+  if (poll.status !== "OPEN" || (poll.closesAt && poll.closesAt <= new Date())) throw new Error("Poll is closed");
+  const options = Array.isArray(poll.options) ? poll.options : [];
+  if (p.optionIndex >= options.length) throw new Error("Invalid poll option");
+  await db.$executeRaw`INSERT INTO community_poll_votes (id,poll_id,user_id,option_index) VALUES (${randomUUID()},${p.pollId},${userId},${p.optionIndex}) ON CONFLICT (poll_id,user_id) DO UPDATE SET option_index=EXCLUDED.option_index`;
+  return NextResponse.json({ ok:true });
+}
+
+async function voteMvp(userId: string, input: unknown) {
+  const p = mvpSchema.parse(input);
+  const entrant = await db.$queryRaw<Array<{ id:string }>>`SELECT id FROM tournament_entrants WHERE tournament_id=${p.tournamentId} AND player_id=${p.playerId} LIMIT 1`;
+  if (!entrant.length) throw new Error("Player is not an entrant in this tournament");
+  await db.$executeRaw`INSERT INTO community_mvp_votes (id,tournament_id,user_id,player_id) VALUES (${randomUUID()},${p.tournamentId},${userId},${p.playerId}) ON CONFLICT (tournament_id,user_id) DO UPDATE SET player_id=EXCLUDED.player_id`;
+  return NextResponse.json({ ok:true });
+}
+
+async function savePickem(userId:string,input:unknown) {
+  const p=pickemSchema.parse(input);
+  const allowed=await db.$queryRaw<Array<{id:string}>>`SELECT id FROM matches WHERE tournament_id=${p.tournamentId} AND status IN ('SCHEDULED','LIVE')`;
+  const ids=new Set(allowed.map(x=>x.id));
+  for (const [matchId,playerId] of Object.entries(p.picks)) {
+    if (!ids.has(matchId)) throw new Error("Pick'em contains an invalid match");
+    const match=await db.match.findUnique({where:{id:matchId},select:{playerOneId:true,playerTwoId:true,status:true}});
+    if (!match || ![match.playerOneId,match.playerTwoId].includes(playerId)) throw new Error("Pick'em contains an invalid player");
+    if (match.status !== "SCHEDULED") throw new Error("Live picks are locked");
+  }
+  await db.$executeRaw`INSERT INTO community_pickems (id,tournament_id,user_id,picks,created_at,updated_at) VALUES (${randomUUID()},${p.tournamentId},${userId},${JSON.stringify(p.picks)}::jsonb,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP) ON CONFLICT (tournament_id,user_id) DO UPDATE SET picks=EXCLUDED.picks,updated_at=CURRENT_TIMESTAMP`;
+  return NextResponse.json({ ok:true });
+}
+
+async function createPoll(userId:string,input:unknown) {
+  const p=createPollSchema.parse(input);
+  const access=await db.match.findUnique({where:{id:p.matchId},select:{tournamentId:true}});
+  if(!access) throw new Error("Match not found");
+  await requireTournamentAdmin(access.tournamentId);
+  const id=randomUUID();
+  await db.$executeRaw`INSERT INTO community_polls (id,match_id,question,options,status,closes_at,created_by_id) VALUES (${id},${p.matchId},${p.question},${JSON.stringify(p.options)}::jsonb,'OPEN',${p.closesAt ? new Date(p.closesAt) : null},${userId})`;
+  return NextResponse.json({ id },{status:201});
+}
+
+async function resolvePrediction(userId:string,input:unknown) {
+  const p=resolveSchema.parse(input);
+  const match=await db.match.findUnique({where:{id:p.matchId},select:{tournamentId:true}});
+  if(!match) throw new Error("Match not found");
+  await requireTournamentAdmin(match.tournamentId);
+  await db.$executeRaw`UPDATE community_predictions SET points = CASE WHEN predicted_player_id=${p.winnerPlayerId} THEN 10 + LEAST(confidence/10,10) ELSE 0 END, resolved=true, updated_at=CURRENT_TIMESTAMP WHERE match_id=${p.matchId}`;
+  return NextResponse.json({ok:true});
+}
