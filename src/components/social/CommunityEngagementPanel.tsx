@@ -1,0 +1,41 @@
+"use client";
+
+import { useEffect, useMemo, useState } from "react";
+
+type Props = { matchId?: string; tournamentId: string; playerOne?: { id: string; gamertag: string } | null; playerTwo?: { id: string; gamertag: string } | null };
+type Data = { prediction: { playerId:string; confidence:number; points:number }|null; polls:{id:string;question:string;options:string[];counts:number[];votedIndex:number|null}[]; leaderboard:{username:string;points:number}[]; mvp:{playerId:string;gamertag:string;votes:number}[]; pickem:{picks:Record<string,string>;points:number}|null; pickemMatches:{id:string;round:string|null;playerOneId:string;playerOne:string;playerTwoId:string;playerTwo:string;status:string}[]; viewer:{id:string;username:string}|null };
+
+export function CommunityEngagementPanel({ matchId, tournamentId, playerOne, playerTwo }: Props) {
+  const [data,setData]=useState<Data>({prediction:null,polls:[],leaderboard:[],mvp:[],pickem:null,pickemMatches:[],viewer:null});
+  const [busy,setBusy]=useState(false);
+  const [message,setMessage]=useState("");
+  const [confidence,setConfidence]=useState(70);
+  const [picks,setPicks]=useState<Record<string,string>>({});
+
+  async function load(){
+    const qs=new URLSearchParams({tournamentId}); if(matchId) qs.set("matchId",matchId);
+    const res=await fetch(`/api/community/engagement?${qs.toString()}`,{cache:"no-store"});
+    if(res.ok){const next=await res.json() as Data; setData(next); if(next.pickem?.picks) setPicks(next.pickem.picks); if(next.prediction) setConfidence(next.prediction.confidence);}
+  }
+  useEffect(()=>{void load();},[matchId,tournamentId]);
+  async function act(body:Record<string,unknown>){setBusy(true);setMessage("");try{const res=await fetch("/api/community/engagement",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)});const json=await res.json().catch(()=>({}));if(!res.ok) throw new Error(json.error||"Action failed");setMessage("Saved");await load();}catch(e){setMessage(e instanceof Error?e.message:"Action failed");}finally{setBusy(false);}}
+  const predictionOptions=useMemo(()=>[playerOne,playerTwo].filter(Boolean) as {id:string;gamertag:string}[],[playerOne,playerTwo]);
+  const mvpOptions=data.mvp.length?data.mvp.map(x=>({id:x.playerId,name:x.gamertag})):predictionOptions.map(x=>({id:x.id,name:x.gamertag}));
+  return <section className="grid gap-3 lg:grid-cols-2">
+    {matchId && <div className="surface-card p-4 sm:p-5">
+      <div className="flex items-start justify-between gap-3"><div><p className="section-label">Community prediction</p><h2 className="page-title mt-1 text-xl">Who takes this match?</h2></div><span className="status-neutral">Up to 20 pts</span></div>
+      <div className="mt-4 grid grid-cols-2 gap-2">{predictionOptions.map(p=><button key={p.id} disabled={!data.viewer||busy} onClick={()=>void act({action:"prediction",matchId,playerId:p.id,confidence})} className={`rounded-card border px-3 py-3 text-left transition ${data.prediction?.playerId===p.id?"border-signal-live bg-signal-live/10":"border-arena-700 hover:border-ink-faint"}`}><span className="block font-display uppercase">{p.gamertag}</span><span className="mt-1 block text-xs text-ink-faint">{data.prediction?.playerId===p.id?"Your pick":"Pick winner"}</span></button>)}</div>
+      <label className="mt-4 block text-xs text-ink-faint">Confidence <span className="font-mono">{confidence}%</span><input aria-label="Prediction confidence" type="range" min="1" max="100" value={confidence} onChange={e=>setConfidence(Number(e.target.value))} className="mt-2 w-full" disabled={!data.viewer}/></label>
+      {!data.viewer&&<p className="mt-3 text-xs text-ink-faint">Sign in to submit a prediction.</p>}
+    </div>}
+
+    {data.polls.length>0 && <div className="surface-card p-4 sm:p-5"><div className="flex items-start justify-between"><div><p className="section-label">Live polls</p><h2 className="page-title mt-1 text-xl">Call the moment</h2></div><span className="status-live">LIVE</span></div><div className="mt-4 space-y-4">{data.polls.map(p=><div key={p.id}><p className="font-medium">{p.question}</p><div className="mt-2 space-y-2">{p.options.map((option,i)=>{const total=p.counts.reduce((a,b)=>a+b,0);const pct=total?Math.round(p.counts[i]/total*100):0;return <button key={option} disabled={!data.viewer||busy} onClick={()=>void act({action:"pollVote",pollId:p.id,optionIndex:i})} className={`relative w-full overflow-hidden rounded-card border px-3 py-2 text-left ${p.votedIndex===i?"border-signal-live":"border-arena-700"}`}><span className="absolute inset-y-0 left-0 opacity-10" style={{width:`${pct}%`,background:"currentColor"}}/><span className="relative flex justify-between gap-2 text-sm"><span>{option}</span><span className="font-mono text-xs">{pct}%</span></span></button>})}</div></div>)}</div></div>}
+
+    {mvpOptions.length>0 && <div className="surface-card p-4 sm:p-5"><div className="flex items-start justify-between"><div><p className="section-label">MVP voting</p><h2 className="page-title mt-1 text-xl">Who is your MVP?</h2></div><span className="status-neutral">1 vote</span></div><div className="mt-4 grid gap-2">{mvpOptions.slice(0,8).map(p=>{const row=data.mvp.find(x=>x.playerId===p.id);return <button key={p.id} disabled={!data.viewer||busy} onClick={()=>void act({action:"mvp",tournamentId,playerId:p.id})} className="flex items-center justify-between rounded-card border border-arena-700 px-3 py-2 text-left hover:border-signal-live"><span className="font-display uppercase">{p.name}</span><span className="font-mono text-xs text-ink-faint">{row?.votes??0} votes</span></button>})}</div></div>}
+
+    <div className="surface-card p-4 sm:p-5"><div className="flex items-start justify-between"><div><p className="section-label">Prediction leaderboard</p><h2 className="page-title mt-1 text-xl">Community picks</h2></div><span className="status-neutral">Top 25</span></div><div className="mt-3 space-y-1">{data.leaderboard.slice(0,8).map((row,i)=><div key={row.username} className="flex items-center justify-between rounded px-2 py-2 text-sm"><span><span className="mr-3 font-mono text-[10px] text-ink-faint">{String(i+1).padStart(2,"0")}</span>{row.username}</span><span className="font-mono text-xs">{row.points} pts</span></div>)}{data.leaderboard.length===0&&<p className="text-sm text-ink-faint">Make the first prediction to start the leaderboard.</p>}</div></div>
+
+    {data.pickemMatches.length>0 && <div className="surface-card p-4 sm:p-5 lg:col-span-2"><div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between"><div><p className="section-label">Pick'em brackets</p><h2 className="page-title mt-1 text-xl">Predict the next matchups</h2><p className="page-subtitle">Your picks lock when a match goes live.</p></div><button disabled={!data.viewer||busy||Object.keys(picks).length===0} onClick={()=>void act({action:"pickem",tournamentId,picks})} className="action-primary self-start">Save picks</button></div><div className="mt-4 grid gap-2 md:grid-cols-2">{data.pickemMatches.map(m=><div key={m.id} className="rounded-card border border-arena-700 p-3"><div className="mb-2 flex justify-between gap-2"><span className="font-mono text-[9px] uppercase tracking-widest text-ink-faint">{m.round??"Next"}</span><span className="status-neutral">{m.status}</span></div><div className="grid grid-cols-2 gap-2">{[[m.playerOneId,m.playerOne],[m.playerTwoId,m.playerTwo]].map(([id,name])=><button key={id} disabled={!data.viewer||busy||m.status!=="SCHEDULED"} onClick={()=>setPicks(prev=>({...prev,[m.id]:id}))} className={`rounded border px-2 py-2 text-left text-sm ${picks[m.id]===id?"border-signal-live bg-signal-live/10":"border-arena-700"}`}>{name}</button>)}</div></div>)}</div></div>}
+    {message&&<p className="lg:col-span-2 text-xs text-ink-faint" role="status">{message}</p>}
+  </section>;
+}
