@@ -10,6 +10,7 @@ import { ReactionTray } from "@/components/social/ReactionTray";
 import { FloatingReactionCanvas } from "@/components/social/FloatingReactionCanvas";
 import { MatchPulseCard } from "@/components/social/MatchPulseCard";
 import { LiveActivityFeed } from "@/components/social/LiveActivityFeed";
+import { WatchPartyPanel } from "@/components/social/WatchPartyPanel";
 import { useActivityFeed, usePresence, usePulse, useReactionStream } from "@/hooks/useSocial";
 
 type InitialMatch = { id: string; round: string | null; status: string; playerOneScore: number; playerTwoScore: number; tournamentId: string; playerOne: { gamertag: string }; playerTwo: { gamertag: string }; station: { id: string; label: string } | null; tournament: { name: string }; startedAt: string | null; youtubeVideoId: string | null; hlsPlaylistKey: string | null };
@@ -71,10 +72,12 @@ export function WatchPageClient({ initialMatch, isPremium }: { initialMatch: Ini
           </nav>
         </header>
 
-        <section className="surface-card relative overflow-hidden p-2 sm:p-3">
-          {match.status === "LIVE" && match.station ? <VideoPlayer stationId={match.station.id} youtubeVideoId={match.youtubeVideoId} hlsPlaylistKey={match.hlsPlaylistKey} isPremium={isPremium} isLive /> : <div className="flex aspect-video w-full items-center justify-center rounded-card bg-arena-950 text-sm text-ink-muted">{match.station ? (match.status === "COMPLETED" ? "Stream ended" : "Waiting for stream") : "Not yet assigned to a station"}</div>}
-          <FloatingReactionCanvas reactions={reactions} />
-        </section>
+        <WatchPartyPanel matchId={match.id}>
+          <section className="surface-card relative overflow-hidden p-2 sm:p-3">
+            {match.status === "LIVE" && match.station ? <VideoPlayer stationId={match.station.id} youtubeVideoId={match.youtubeVideoId} hlsPlaylistKey={match.hlsPlaylistKey} isPremium={isPremium} isLive /> : <div className="flex aspect-video w-full items-center justify-center rounded-card bg-arena-950 text-sm text-ink-muted">{match.station ? (match.status === "COMPLETED" ? "Stream ended" : "Waiting for stream") : "Not yet assigned to a station"}</div>}
+            <FloatingReactionCanvas reactions={reactions} />
+          </section>
+        </WatchPartyPanel>
 
         <section className="surface-card mt-3 p-4 sm:p-6">
           <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-3 sm:gap-6">
