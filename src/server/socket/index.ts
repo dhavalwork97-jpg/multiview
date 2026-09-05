@@ -89,6 +89,19 @@ eventsSubscriber.on("message", (_channel, raw) => {
     case "tournament:completed":
       io.to(`tournament:${event.tournamentId}`).emit("tournament:completed", event);
       break;
+    case "presence:updated":
+      io.to(`match:${event.matchId}`).emit("presence:updated", event);
+      break;
+    case "reaction:created":
+      io.to(`match:${event.matchId}`).emit("reaction:created", event);
+      break;
+    case "activity:created":
+      io.emit("activity:created", event);
+      if (event.matchId) io.to(`match:${event.matchId}`).emit("activity:created", event);
+      break;
+    case "pulse:updated":
+      io.to(`match:${event.matchId}`).emit("pulse:updated", event);
+      break;
   }
 });
 

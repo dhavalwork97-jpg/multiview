@@ -1,0 +1,2 @@
+"use client";
+export function MatchPulseCard({ score, reactions }: { score: number; reactions: number }) { return <div className="surface-card p-3"><p className="page-kicker">Match pulse</p><div className="mt-2 flex items-end justify-between"><strong className="font-display text-3xl text-signal-live">{score}</strong><span className="text-xs text-ink-muted">{reactions} reactions / 5m</span></div><div className="mt-2 h-1.5 overflow-hidden rounded-full bg-arena-700"><div className="h-full bg-signal-live transition-all" style={{ width: `${score}%` }} /></div></div>; }

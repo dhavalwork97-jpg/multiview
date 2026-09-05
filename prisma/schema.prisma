@@ -44,6 +44,10 @@ model User {
   playerProfile           Player?
   organizedTournaments    Tournament[]             @relation("TournamentOrganizer")
   watchHistory            WatchHistoryEntry[]
+  viewerPresence          ViewerPresence[]
+  viewerSessions          ViewerSession[]
+  reactions               ReactionEvent[]
+  activityEvents          ActivityEvent[]
 
   @@index([role])
   @@map("users")
@@ -535,6 +539,10 @@ model Match {
   winnerSide         MatchSide?          @relation("MatchWinnerSide", fields: [winnerSideId], references: [id])
   recording          Recording?
   watchHistory       WatchHistoryEntry[]
+  viewerPresence     ViewerPresence[]
+  viewerSessions     ViewerSession[]
+  reactions          ReactionEvent[]
+  activityEvents     ActivityEvent[]
   progressionEvents  ProgressionEvent[]
   BroadcastState     BroadcastState[]
 
@@ -604,14 +612,70 @@ model ViewerSession {
   sessionHash  String
   tournamentId String
   matchId      String
+  userId       String?
   dayKey       String
   firstSeenAt  DateTime @default(now())
   lastSeenAt   DateTime @updatedAt
+  user         User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  match        Match    @relation(fields: [matchId], references: [id], onDelete: Cascade)
 
   @@unique([sessionHash, matchId, dayKey])
   @@index([tournamentId, dayKey])
   @@index([matchId, dayKey])
+  @@index([userId, lastSeenAt])
   @@map("viewer_sessions")
+}
+
+model ViewerPresence {
+  id          String   @id @default(cuid())
+  matchId     String
+  userId      String?
+  sessionHash String
+  displayName String?
+  avatarUrl   String?
+  lastSeenAt  DateTime @default(now())
+  expiresAt   DateTime
+  createdAt   DateTime @default(now())
+  user        User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  match       Match    @relation(fields: [matchId], references: [id], onDelete: Cascade)
+
+  @@unique([matchId, sessionHash])
+  @@index([matchId, expiresAt])
+  @@index([userId, lastSeenAt])
+  @@map("viewer_presence")
+}
+
+model ReactionEvent {
+  id          String   @id @default(cuid())
+  matchId     String
+  userId      String?
+  sessionHash String
+  reaction    String
+  createdAt   DateTime @default(now())
+  user        User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  match       Match    @relation(fields: [matchId], references: [id], onDelete: Cascade)
+
+  @@index([matchId, createdAt])
+  @@index([reaction, createdAt])
+  @@index([userId, createdAt])
+  @@map("reaction_events")
+}
+
+model ActivityEvent {
+  id          String       @id @default(cuid())
+  matchId     String?
+  userId      String?
+  type        ActivityType
+  message     String
+  metadata    Json?
+  createdAt   DateTime     @default(now())
+  user        User?        @relation(fields: [userId], references: [id], onDelete: SetNull)
+  match       Match?       @relation(fields: [matchId], references: [id], onDelete: Cascade)
+
+  @@index([createdAt])
+  @@index([matchId, createdAt])
+  @@index([type, createdAt])
+  @@map("activity_events")
 }
 
 model AuditLog {
@@ -870,4 +934,12 @@ enum ClipStatus {
   PROCESSING
   READY
   FAILED
+}
+
+enum ActivityType {
+  REACTION
+  PRESENCE
+  MATCH_STARTED
+  MATCH_COMPLETED
+  SYSTEM
 }

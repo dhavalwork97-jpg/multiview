@@ -68,7 +68,11 @@ export type AppEvent =
       matchId: string | null;
       overlay: Record<string, unknown> | null;
       commandType: string;
-    };
+    }
+  | { type: "presence:updated"; matchId: string; count: number }
+  | { type: "reaction:created"; matchId: string; reaction: string; id: string; createdAt: string }
+  | { type: "activity:created"; matchId: string | null; id: string; activityType: string; message: string; createdAt: string }
+  | { type: "pulse:updated"; matchId: string; score: number; reactions: number; viewers: number };
 
 let connected = false;
 

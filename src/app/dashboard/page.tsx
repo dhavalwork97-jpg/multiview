@@ -9,6 +9,7 @@ import { TrendingStrip } from "@/components/dashboard/TrendingStrip";
 import { RecommendedStrip } from "@/components/dashboard/RecommendedStrip";
 import { getPrimaryOrganizationMembership } from "@/lib/organization";
 import { NotificationBell } from "@/components/notifications/NotificationBell";
+import { SocialPulseWidgets } from "@/components/dashboard/SocialPulseWidgets";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -52,6 +53,7 @@ export default async function DashboardPage() {
 
         <section className="mb-10"><div className="mb-3"><p className="section-label">For you</p><h2 className="page-title mt-1 text-2xl">Recommended</h2></div><RecommendedStrip /></section>
         <section className="mb-10"><div className="mb-3"><p className="section-label">Community signal</p><h2 className="page-title mt-1 text-2xl">Trending</h2></div><TrendingStrip /></section>
+        <SocialPulseWidgets />
 
         <section className="surface-card mb-10 border-signal-live/30 bg-signal-live/[0.04] p-5">
           <div className="flex flex-wrap items-center justify-between gap-4"><div><p className="page-kicker text-signal-live">Plans</p><h2 className="mt-1 font-display text-2xl uppercase">Paid plans are coming soon</h2><p className="mt-1 text-sm text-ink-muted">Explore Starter, Pro and Event pricing. Billing and subscriptions are not enabled yet.</p></div><div className="flex gap-2"><Link href="/organization/settings" className="action-secondary">Branding</Link><Link href="/pricing" className="action-primary">View plans</Link></div></div>
