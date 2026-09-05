@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { Prisma } from "@prisma/client";
 import { z } from "zod";
 import { getCurrentUser } from "@/lib/auth";
 import { db } from "@/lib/db";
@@ -17,7 +18,11 @@ export async function GET(request: Request) {
     select: { id: true, username: true, displayName: true, avatarUrl: true },
     orderBy: { username: "asc" },
   });
-  const following = await db.$queryRaw<Array<{ followingId: string }>>`SELECT "followingId" FROM "user_follows" WHERE "followerId" = ${me.id} AND "followingId" IN (${db.$queryRawUnsafe(users.map(() => "?").join(","))})`;
+  if (users.length === 0) return NextResponse.json({ users: [] }, { headers: { "Cache-Control": "no-store" } });
+  const ids = users.map((user) => user.id);
+  const following = await db.$queryRaw<Array<{ followingId: string }>>`
+    SELECT "followingId" FROM "user_follows"
+    WHERE "followerId" = ${me.id} AND "followingId" IN (${Prisma.join(ids)})`;
   const followed = new Set(following.map((row) => row.followingId));
   return NextResponse.json({ users: users.map((user) => ({ ...user, following: followed.has(user.id) })) }, { headers: { "Cache-Control": "no-store" } });
 }
