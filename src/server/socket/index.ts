@@ -7,51 +7,100 @@ import { serverLogger } from "@/lib/server-logger";
 import { startStationHeartbeat } from "./heartbeat";
 
 const PORT = Number(process.env.PORT ?? process.env.SOCKET_SERVER_PORT ?? 4000);
-const REDIS_URL = process.env.REDIS_URL ?? "redis://localhost:6379";
-const adapterPubClient = new Redis(REDIS_URL);
-const adapterSubClient = adapterPubClient.duplicate();
-const eventsSubscriber = new Redis(REDIS_URL);
+const REDIS_URL = process.env.REDIS_URL?.trim() || null;
 
-for (const [name, client] of [["socket adapter publisher", adapterPubClient], ["socket adapter subscriber", adapterSubClient], ["socket event subscriber", eventsSubscriber]] as const) {
-  client.on("error", (error) => serverLogger.warn(`${name} Redis client error`, { error: error instanceof Error ? error.message : "unknown_error" }));
+// Redis is an optional scale-out dependency. The socket server must remain
+// usable as a single instance when Redis is unavailable or not configured.
+const adapterPubClient = REDIS_URL ? new Redis(REDIS_URL, { lazyConnect: true }) : null;
+const adapterSubClient = adapterPubClient ? adapterPubClient.duplicate() : null;
+const eventsSubscriber = REDIS_URL ? new Redis(REDIS_URL, { lazyConnect: true }) : null;
+
+for (const [name, client] of [
+  ["socket adapter publisher", adapterPubClient],
+  ["socket adapter subscriber", adapterSubClient],
+  ["socket event subscriber", eventsSubscriber],
+] as const) {
+  client?.on("error", (error) =>
+    serverLogger.warn(`${name} Redis client error`, {
+      error: error instanceof Error ? error.message : "unknown_error",
+    }),
+  );
 }
 
 const httpServer = createServer((req, res) => {
   if (req.url === "/" || req.url === "/healthz") {
-    const redisReady = adapterPubClient.status === "ready" && eventsSubscriber.status === "ready";
-    res.writeHead(redisReady ? 200 : 503, { "Content-Type": "text/plain", "Cache-Control": "no-store" });
+    const redisReady =
+      !REDIS_URL ||
+      (adapterPubClient?.status === "ready" && eventsSubscriber?.status === "ready");
+    res.writeHead(redisReady ? 200 : 503, {
+      "Content-Type": "text/plain",
+      "Cache-Control": "no-store",
+    });
     res.end(redisReady ? "ok" : "degraded");
     return;
   }
-  res.writeHead(404); res.end();
+  res.writeHead(404);
+  res.end();
 });
-const io = new Server(httpServer, { cors: { origin: process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000" } });
-io.adapter(createAdapter(adapterPubClient, adapterSubClient));
 
-eventsSubscriber.subscribe(EVENTS_CHANNEL).catch((error) => serverLogger.error("socket event subscription failed", { error: error instanceof Error ? error.message : "unknown_error" }));
-eventsSubscriber.on("message", (_channel, raw) => {
-  let event: AppEvent;
-  try { event = JSON.parse(raw); } catch { serverLogger.warn("socket ignored malformed realtime event"); return; }
-  switch (event.type) {
-    case "broadcast:updated": io.to(`tournament:${event.tournamentId}`).emit("broadcast:updated", event); break;
-    case "match:updated": io.to(`tournament:${event.tournamentId}`).emit("match:updated", event); io.to(`match:${event.matchId}`).emit("match:updated", event); break;
-    case "station:status": io.to(`tournament:${event.tournamentId}`).emit("station:status", event); break;
-    case "match:assigned": io.to(`tournament:${event.tournamentId}`).emit("match:assigned", event); break;
-    case "bracket:advanced": io.to(`tournament:${event.tournamentId}`).emit("bracket:advanced", event); break;
-    case "clip:ready": io.to(`match:${event.matchId}`).emit("clip:ready", event); io.to(`tournament:${event.tournamentId}`).emit("clip:ready", event); break;
-    case "competition:updated": io.to(`tournament:${event.tournamentId}`).emit("competition:updated", event); break;
-    case "tournament:completed": io.to(`tournament:${event.tournamentId}`).emit("tournament:completed", event); break;
-    case "presence:updated": io.to(`match:${event.matchId}`).emit("presence:updated", event); break;
-    case "reaction:created": io.to(`match:${event.matchId}`).emit("reaction:created", event); break;
-    case "activity:created": io.emit("activity:created", event); if (event.matchId) io.to(`match:${event.matchId}`).emit("activity:created", event); break;
-    case "pulse:updated": io.to(`match:${event.matchId}`).emit("pulse:updated", event); break;
-    case "chat:message": io.to(`match:${event.matchId}`).emit("chat:message", event); break;
-    case "chat:moderated": io.to(`match:${event.matchId}`).emit("chat:moderated", event); break;
-  }
+const io = new Server(httpServer, {
+  cors: { origin: process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000" },
 });
+
+async function connectRedis() {
+  if (!REDIS_URL || !adapterPubClient || !adapterSubClient || !eventsSubscriber) return;
+
+  try {
+    await Promise.all([
+      adapterPubClient.connect(),
+      adapterSubClient.connect(),
+      eventsSubscriber.connect(),
+    ]);
+    io.adapter(createAdapter(adapterPubClient, adapterSubClient));
+
+    await eventsSubscriber.subscribe(EVENTS_CHANNEL);
+    eventsSubscriber.on("message", (_channel, raw) => {
+      let event: AppEvent;
+      try {
+        event = JSON.parse(raw) as AppEvent;
+      } catch {
+        serverLogger.warn("socket ignored malformed realtime event");
+        return;
+      }
+
+      switch (event.type) {
+        case "broadcast:updated": io.to(`tournament:${event.tournamentId}`).emit("broadcast:updated", event); break;
+        case "match:updated": io.to(`tournament:${event.tournamentId}`).emit("match:updated", event); io.to(`match:${event.matchId}`).emit("match:updated", event); break;
+        case "station:status": io.to(`tournament:${event.tournamentId}`).emit("station:status", event); break;
+        case "match:assigned": io.to(`tournament:${event.tournamentId}`).emit("match:assigned", event); break;
+        case "bracket:advanced": io.to(`tournament:${event.tournamentId}`).emit("bracket:advanced", event); break;
+        case "clip:ready": io.to(`match:${event.matchId}`).emit("clip:ready", event); io.to(`tournament:${event.tournamentId}`).emit("clip:ready", event); break;
+        case "competition:updated": io.to(`tournament:${event.tournamentId}`).emit("competition:updated", event); break;
+        case "tournament:completed": io.to(`tournament:${event.tournamentId}`).emit("tournament:completed", event); break;
+        case "presence:updated": io.to(`match:${event.matchId}`).emit("presence:updated", event); break;
+        case "reaction:created": io.to(`match:${event.matchId}`).emit("reaction:created", event); break;
+        case "activity:created": io.emit("activity:created", event); if (event.matchId) io.to(`match:${event.matchId}`).emit("activity:created", event); break;
+        case "pulse:updated": io.to(`match:${event.matchId}`).emit("pulse:updated", event); break;
+        case "chat:message": io.to(`match:${event.matchId}`).emit("chat:message", event); break;
+        case "chat:moderated": io.to(`match:${event.matchId}`).emit("chat:moderated", event); break;
+      }
+    });
+
+    serverLogger.info("socket Redis adapter connected");
+  } catch (error) {
+    serverLogger.warn("socket Redis unavailable; continuing with in-memory adapter", {
+      error: error instanceof Error ? error.message : "unknown_error",
+    });
+    for (const client of [adapterPubClient, adapterSubClient, eventsSubscriber]) {
+      client?.disconnect();
+    }
+  }
+}
 
 io.on("connection", (socket) => {
-  socket.on("join:tournament", (tournamentId: string) => socket.join(`tournament:${tournamentId}`));
+  socket.on("join:tournament", (tournamentId: string) => {
+    if (typeof tournamentId === "string" && tournamentId.length <= 100) socket.join(`tournament:${tournamentId}`);
+  });
   socket.on("leave:tournament", (tournamentId: string) => socket.leave(`tournament:${tournamentId}`));
   socket.on("join:party", (code: string) => { if (/^[A-Z0-9]{8}$/.test(code)) socket.join(`party:${code}`); });
   socket.on("leave:party", (code: string) => socket.leave(`party:${code}`));
@@ -59,8 +108,18 @@ io.on("connection", (socket) => {
     if (!/^[A-Z0-9]{8}$/.test(code) || !state || typeof state.position !== "number" || typeof state.playing !== "boolean") return;
     socket.to(`party:${code}`).emit("party:sync", { position: Math.max(0, state.position), playing: state.playing, at: Date.now(), actorId: String(state.actorId).slice(0, 80) });
   });
-  socket.on("join:match", async (matchId: string) => { socket.join(`match:${matchId}`); const count = await io.in(`match:${matchId}`).allSockets(); io.to(`match:${matchId}`).emit("viewer:count", { matchId, count: count.size }); });
-  socket.on("leave:match", async (matchId: string) => { socket.leave(`match:${matchId}`); const count = await io.in(`match:${matchId}`).allSockets(); io.to(`match:${matchId}`).emit("viewer:count", { matchId, count: count.size }); });
+  socket.on("join:match", async (matchId: string) => {
+    if (typeof matchId !== "string" || matchId.length > 100) return;
+    socket.join(`match:${matchId}`);
+    const count = await io.in(`match:${matchId}`).allSockets();
+    io.to(`match:${matchId}`).emit("viewer:count", { matchId, count: count.size });
+  });
+  socket.on("leave:match", async (matchId: string) => {
+    if (typeof matchId !== "string" || matchId.length > 100) return;
+    socket.leave(`match:${matchId}`);
+    const count = await io.in(`match:${matchId}`).allSockets();
+    io.to(`match:${matchId}`).emit("viewer:count", { matchId, count: count.size });
+  });
   socket.on("disconnecting", () => {
     for (const room of socket.rooms) if (room.startsWith("match:")) {
       const matchId = room.slice("match:".length);
@@ -70,4 +129,5 @@ io.on("connection", (socket) => {
 });
 
 httpServer.listen(PORT, () => serverLogger.info("socket server listening", { port: PORT }));
+void connectRedis();
 startStationHeartbeat();
