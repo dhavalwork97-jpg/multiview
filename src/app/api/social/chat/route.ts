@@ -21,6 +21,7 @@ export async function GET(request: Request) {
   const matchId = url.searchParams.get("matchId")?.trim();
   if (!matchId || matchId.length > 64) return NextResponse.json({ error: "Invalid match" }, { status: 400, headers });
 
+  const viewer = await getCurrentUser();
   const rows = await db.$queryRaw<Array<{
     id: string; matchId: string; parentId: string | null; body: string; status: string; createdAt: Date;
     userId: string; username: string; displayName: string | null; avatarUrl: string | null;
@@ -35,7 +36,10 @@ export async function GET(request: Request) {
     LIMIT 100
   `;
 
-  return NextResponse.json({ messages: rows.reverse() }, { headers });
+  return NextResponse.json({
+    messages: rows.reverse(),
+    viewer: viewer ? { id: viewer.id, role: viewer.role } : null,
+  }, { headers });
 }
 
 export async function POST(request: Request) {
@@ -105,12 +109,16 @@ async function reportMessage(userId: string, input: unknown) {
 
 async function moderateMessage(user: { id: string; role: string }, input: unknown) {
   const parsed = moderateSchema.safeParse(input);
-  if (!parsed.success || !isModerator(user.role)) return NextResponse.json({ error: "Moderation not allowed" }, { status: 403, headers });
+  if (!parsed.success) return NextResponse.json({ error: "Invalid moderation action" }, { status: 400, headers });
   const rows = await db.$queryRaw<Array<{ id: string; matchId: string; userId: string }>>`
     SELECT id, match_id AS "matchId", user_id AS "userId" FROM chat_messages WHERE id = ${parsed.data.messageId} LIMIT 1
   `;
   const message = rows[0];
   if (!message) return NextResponse.json({ error: "Message not found" }, { status: 404, headers });
+
+  const moderator = isModerator(user.role);
+  const authorDelete = parsed.data.action === "delete" && message.userId === user.id;
+  if (!moderator && !authorDelete) return NextResponse.json({ error: "Moderation not allowed" }, { status: 403, headers });
 
   if (parsed.data.action === "mute") {
     const minutes = parsed.data.durationMinutes ?? 10;
