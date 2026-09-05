@@ -1,0 +1,2 @@
+"use client";
+export function LiveActivityFeed({ events }: { events: Array<{ id: string; message: string; createdAt: string }> }) { return <section className="surface-card p-4"><p className="page-kicker">Community activity</p><ul className="mt-3 space-y-2">{events.length ? events.slice(0, 5).map((event) => <li key={event.id} className="flex gap-2 text-sm text-ink-muted"><span className="text-signal-live">•</span>{event.message}</li>) : <li className="text-sm text-ink-muted">Be the first to react.</li>}</ul></section>; }

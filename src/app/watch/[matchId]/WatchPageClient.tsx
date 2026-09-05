@@ -5,6 +5,14 @@ import { useEffect, useState } from "react";
 import { useSocket } from "@/hooks/useSocket";
 import { VideoPlayer } from "@/components/watch/VideoPlayer";
 import { ClipControls } from "@/components/watch/ClipControls";
+import { LivePresenceBar } from "@/components/social/LivePresenceBar";
+import { ReactionTray } from "@/components/social/ReactionTray";
+import { FloatingReactionCanvas } from "@/components/social/FloatingReactionCanvas";
+import { MatchPulseCard } from "@/components/social/MatchPulseCard";
+import { LiveActivityFeed } from "@/components/social/LiveActivityFeed";
+import { WatchPartyPanel } from "@/components/social/WatchPartyPanel";
+import { ChatPanel } from "@/components/social/ChatPanel";
+import { useActivityFeed, usePresence, usePulse, useReactionStream } from "@/hooks/useSocial";
 
 type InitialMatch = { id: string; round: string | null; status: string; playerOneScore: number; playerTwoScore: number; tournamentId: string; playerOne: { gamertag: string }; playerTwo: { gamertag: string }; station: { id: string; label: string } | null; tournament: { name: string }; startedAt: string | null; youtubeVideoId: string | null; hlsPlaylistKey: string | null };
 
@@ -15,6 +23,10 @@ export function WatchPageClient({ initialMatch, isPremium }: { initialMatch: Ini
   const [connected, setConnected] = useState(false);
   const [lastUpdateAt, setLastUpdateAt] = useState<number | null>(null);
   const socket = useSocket({ matchId: initialMatch.id });
+  const presence = usePresence(initialMatch.id);
+  const { reactions, send } = useReactionStream(initialMatch.id);
+  const pulse = usePulse(initialMatch.id);
+  const activity = useActivityFeed(initialMatch.id);
 
   useEffect(() => {
     const key = "fgc_viewer_session";
@@ -50,7 +62,7 @@ export function WatchPageClient({ initialMatch, isPremium }: { initialMatch: Ini
         <header className="mb-5">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
             <div><p className="page-kicker">{match.tournament.name}{match.round && ` · ${match.round}`}</p><h1 className="page-title mt-1 text-3xl sm:text-4xl">Watch match</h1></div>
-            <div className="flex flex-wrap items-center gap-2" aria-live="polite">{match.status === "LIVE" && <span className="status-live"><span className="h-1.5 w-1.5 rounded-full bg-signal-live animate-live-pulse" />LIVE</span>}{viewerCount !== null && <span className="status-neutral">{viewerCount} watching</span>}{match.station && <span className="status-neutral">{match.station.label}</span>}<span className={connected ? "status-neutral" : "status-warning"}>{connected ? "Live updates" : "Reconnecting…"}</span>{lastUpdateAt !== null && <span className="status-neutral hidden sm:inline">Updated {new Date(lastUpdateAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</span>}</div>
+            <div className="flex flex-wrap items-center gap-2" aria-live="polite">{match.status === "LIVE" && <span className="status-live"><span className="h-1.5 w-1.5 rounded-full bg-signal-live animate-live-pulse" />LIVE</span>}<LivePresenceBar count={presence || viewerCount || 0} />{match.station && <span className="status-neutral">{match.station.label}</span>}<span className={connected ? "status-neutral" : "status-warning"}>{connected ? "Live updates" : "Reconnecting…"}</span>{lastUpdateAt !== null && <span className="status-neutral hidden sm:inline">Updated {new Date(lastUpdateAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</span>}</div>
           </div>
           {!connected && <div role="status" className="mt-3 rounded-card border border-corner-p2/30 bg-corner-p2/10 px-3 py-2 text-sm text-ink-secondary">The stream can continue while live score updates reconnect. We’ll resume live updates automatically.</div>}
           <nav aria-label="Match navigation" className="context-tabs mt-4">
@@ -61,19 +73,28 @@ export function WatchPageClient({ initialMatch, isPremium }: { initialMatch: Ini
           </nav>
         </header>
 
-        <section className="surface-card overflow-hidden p-2 sm:p-3">
-          {match.status === "LIVE" && match.station ? <VideoPlayer stationId={match.station.id} youtubeVideoId={match.youtubeVideoId} hlsPlaylistKey={match.hlsPlaylistKey} isPremium={isPremium} isLive /> : <div className="flex aspect-video w-full items-center justify-center rounded-card bg-arena-950 text-sm text-ink-muted">{match.station ? (match.status === "COMPLETED" ? "Stream ended" : "Waiting for stream") : "Not yet assigned to a station"}</div>}
+        <WatchPartyPanel matchId={match.id}>
+          <section className="surface-card relative overflow-hidden p-2 sm:p-3">
+            {match.status === "LIVE" && match.station ? <VideoPlayer stationId={match.station.id} youtubeVideoId={match.youtubeVideoId} hlsPlaylistKey={match.hlsPlaylistKey} isPremium={isPremium} isLive /> : <div className="flex aspect-video w-full items-center justify-center rounded-card bg-arena-950 text-sm text-ink-muted">{match.station ? (match.status === "COMPLETED" ? "Stream ended" : "Waiting for stream") : "Not yet assigned to a station"}</div>}
+            <FloatingReactionCanvas reactions={reactions} />
+          </section>
+        </WatchPartyPanel>
+
+        <section className="mt-3 grid gap-3 lg:grid-cols-[1fr_22rem]">
+          <section className="surface-card p-4 sm:p-6">
+            <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-3 sm:gap-6">
+              <div className="min-w-0 border-l-2 border-corner-p1 pl-3"><p className="truncate font-display text-xl uppercase tracking-wide sm:text-3xl">{match.playerOne.gamertag}</p><p className="page-kicker mt-1">Side A</p></div>
+              <div className="text-center"><span className="font-mono text-3xl font-bold tabular-nums sm:text-5xl">{match.playerOneScore}–{match.playerTwoScore}</span></div>
+              <div className="min-w-0 border-r-2 border-corner-p2 pr-3 text-right"><p className="truncate font-display text-xl uppercase tracking-wide sm:text-3xl">{match.playerTwo.gamertag}</p><p className="page-kicker mt-1">Side B</p></div>
+            </div>
+          </section>
+          <ChatPanel matchId={match.id} />
         </section>
 
-        <section className="surface-card mt-3 p-4 sm:p-6">
-          <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-3 sm:gap-6">
-            <div className="min-w-0 border-l-2 border-corner-p1 pl-3"><p className="truncate font-display text-xl uppercase tracking-wide sm:text-3xl">{match.playerOne.gamertag}</p><p className="page-kicker mt-1">Side A</p></div>
-            <div className="text-center"><span className="font-mono text-3xl font-bold tabular-nums sm:text-5xl">{match.playerOneScore}–{match.playerTwoScore}</span></div>
-            <div className="min-w-0 border-r-2 border-corner-p2 pr-3 text-right"><p className="truncate font-display text-xl uppercase tracking-wide sm:text-3xl">{match.playerTwo.gamertag}</p><p className="page-kicker mt-1">Side B</p></div>
-          </div>
-        </section>
-
-        <div className="mt-3"><ClipControls matchId={match.id} elapsedSeconds={elapsedSeconds} /></div>
+        <div className="mt-3 grid gap-3 lg:grid-cols-[1fr_18rem]">
+          <div className="space-y-3"><div className="sticky bottom-3 z-10 sm:static"><ReactionTray onReact={(reaction) => void send(reaction)} /></div><ClipControls matchId={match.id} elapsedSeconds={elapsedSeconds} /></div>
+          <aside className="grid gap-3 sm:grid-cols-2 lg:grid-cols-1"><MatchPulseCard score={pulse.score} reactions={pulse.reactions} /><LiveActivityFeed events={activity} /></aside>
+        </div>
       </div>
     </main>
   );
