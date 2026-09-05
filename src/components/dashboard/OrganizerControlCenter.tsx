@@ -16,7 +16,7 @@ export function OrganizerControlCenter({
 }) {
   const links: Array<[string, string]> = [
     ...(canCreateTournament ? [["/admin/tournaments/new", "Create tournament"] as [string, string]] : []),
-    ["/dashboard/team", "Team"],
+    ...(canManageOrganization ? [["/dashboard/team", "Team"] as [string, string]] : []),
     ["/tournaments", "Events"],
     ...(canManageOrganization ? [["/organization/settings", "Organization"] as [string, string]] : []),
     ...(canAccessAdmin ? [["/admin", "Admin"] as [string, string]] : []),
@@ -44,7 +44,7 @@ export function OrganizerControlCenter({
       </div>
       <div className="mt-4 flex items-center justify-between border-t border-arena-700 pt-4 text-xs text-ink-faint">
         <span>{tournamentCount} tournament{tournamentCount === 1 ? "" : "s"} in your workspace</span>
-        <Link href="/admin/tournaments" className="font-mono uppercase tracking-wide hover:text-signal-live">Open management</Link>
+        <Link href="/tournaments" className="font-mono uppercase tracking-wide hover:text-signal-live">View all events</Link>
       </div>
     </section>
   );
