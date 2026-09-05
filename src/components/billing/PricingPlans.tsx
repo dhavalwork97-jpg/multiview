@@ -1,9 +1,10 @@
 "use client";
 
+import Link from "next/link";
 import { useState } from "react";
 import { PLANS } from "@/lib/billing";
 
-export function PricingPlans({ trialActive = false }: { trialActive?: boolean }) {
+export function PricingPlans({ trialActive = false, signedIn = false }: { trialActive?: boolean; signedIn?: boolean }) {
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState("");
 
@@ -25,9 +26,13 @@ export function PricingPlans({ trialActive = false }: { trialActive?: boolean })
         <p className="font-mono text-[10px] uppercase tracking-widest text-signal-live">No payment required</p>
         <h2 className="mt-1 font-display text-2xl uppercase tracking-wide">Start your 14-day free trial</h2>
         <p className="mt-2 max-w-2xl text-sm text-ink-muted">Try the tournament Control Room, multi-station streaming workflow and YouTube Live integration before paid plans launch.</p>
-        <button disabled={loading || trialActive} onClick={startTrial} className="mt-4 rounded-card bg-signal-live px-5 py-2.5 font-mono text-xs uppercase tracking-wide text-arena-950 disabled:cursor-not-allowed disabled:opacity-50">
-          {trialActive ? "Free trial active" : loading ? "Starting…" : "Start free trial"}
-        </button>
+        {!signedIn ? (
+          <Link href="/sign-in?redirect_url=/pricing" className="mt-4 inline-flex rounded-card bg-signal-live px-5 py-2.5 font-mono text-xs uppercase tracking-wide text-arena-950">Sign in to start free trial</Link>
+        ) : (
+          <button disabled={loading || trialActive} onClick={startTrial} className="mt-4 rounded-card bg-signal-live px-5 py-2.5 font-mono text-xs uppercase tracking-wide text-arena-950 disabled:cursor-not-allowed disabled:opacity-50">
+            {trialActive ? "Free trial active" : loading ? "Starting…" : "Start free trial"}
+          </button>
+        )}
         {message && <p className="mt-2 text-xs text-ink-faint">{message}</p>}
       </div>
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">

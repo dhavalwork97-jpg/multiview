@@ -6,6 +6,7 @@ import { db } from "@/lib/db";
 import { BracketExplorer } from "@/components/bracket/BracketExplorer";
 import { CompetitionScoreboard } from "@/components/competition/CompetitionScoreboard";
 import { GameIcon } from "@/components/competition/GameIcon";
+import { TournamentCommandCenter } from "@/components/competition/TournamentCommandCenter";
 import { UniversalLiveViewer } from "@/components/competition/UniversalLiveViewer";
 import { getCompetitionViewerState } from "@/lib/competition/get-viewer-state";
 
@@ -31,9 +32,7 @@ function MatchCard({ match, live = false, result = false, tournamentId }: { matc
         </div>
         {match.station && <span className="status-neutral">{match.station.label}</span>}
       </div>
-      <div className="mt-4">
-        <CompetitionScoreboard sides={match.sides} />
-      </div>
+      <div className="mt-4"><CompetitionScoreboard sides={match.sides} /></div>
       <div className="mt-4 flex flex-wrap gap-2">
         {live ? <Link href={`/watch/${match.id}`} className="action-primary">Watch live</Link> : <Link href={`/watch/${match.id}`} className="action-secondary">Match view</Link>}
         <Link href={`/multiview?tournamentId=${tournamentId}`} className="action-secondary">Multi-View</Link>
@@ -69,6 +68,7 @@ export default async function TournamentPage({ params }: { params: Promise<{ tou
   const primaryLiveMatch = viewerState.live.matches.find((match) => match.id === viewerState.live.primaryMatchId) ?? viewerState.live.matches[0] ?? null;
   const nextMatch = viewerState.upcoming[0] ?? null;
   const recentResults = viewerState.recentResults.slice(0, 4);
+  const participantCount = isBattleRoyale ? tournament._count.entrants : isTeamCompetition ? tournament._count.teams : tournament._count.entrants;
 
   return (
     <main className="page-shell">
@@ -95,22 +95,24 @@ export default async function TournamentPage({ params }: { params: Promise<{ tou
         </header>
 
         <div className="space-y-6" style={{ ["--event-accent" as string]: tournament.organization.brandPrimaryColor ?? "#7cf7c5", ["--event-accent-2" as string]: tournament.organization.brandAccentColor ?? "#7c9cff" } as CSSProperties}>
+          <TournamentCommandCenter
+            tournamentId={tournament.id}
+            status={tournament.status}
+            participantCount={participantCount}
+            matchCount={tournament._count.matches}
+            stageCount={tournament._count.stages}
+            liveMatch={primaryLiveMatch}
+            nextMatch={nextMatch}
+          />
+
           <section className="surface-card p-4 sm:p-5">
             <div className="flex flex-wrap items-center gap-4">
               {tournament.organization.brandLogoUrl && <img src={tournament.organization.brandLogoUrl} alt="" className="h-12 w-12 rounded-card object-cover" />}
               <div><p className="font-mono text-[10px] uppercase tracking-widest" style={{ color: "var(--event-accent)" }}>{tournament.organization.name}</p><p className="text-sm text-ink-faint">{tournament.organization.tagline ?? "Official event broadcast hub"}</p></div>
             </div>
             <div className="mt-4 grid grid-cols-2 gap-px overflow-hidden rounded-card border border-arena-700 bg-arena-700 sm:grid-cols-4">
-              {[
-                ["Format", tournament.format ?? "Standard"],
-                ["Participants", isBattleRoyale ? "Battle Royale" : competitionParticipantLabel(tournament.participantMode, tournament.participantMode === "team" ? tournament._count.teams : tournament._count.entrants)],
-                ["Matches", String(tournament._count.matches)],
-                ["Stages", String(tournament._count.stages)],
-              ].map(([label, value]) => (
-                <div key={label} className="min-w-0 bg-arena-950/70 px-3 py-2.5">
-                  <span className="block font-mono text-[9px] uppercase tracking-widest text-ink-faint">{label}</span>
-                  <span className="mt-1 block truncate text-sm text-ink-muted">{value}</span>
-                </div>
+              {[["Format", tournament.format ?? "Standard"],["Participants", isBattleRoyale ? "Battle Royale" : competitionParticipantLabel(tournament.participantMode, participantCount)],["Matches", String(tournament._count.matches)],["Stages", String(tournament._count.stages)]].map(([label, value]) => (
+                <div key={label} className="min-w-0 bg-arena-950/70 px-3 py-2.5"><span className="block font-mono text-[9px] uppercase tracking-widest text-ink-faint">{label}</span><span className="mt-1 block truncate text-sm text-ink-muted">{value}</span></div>
               ))}
             </div>
           </section>
@@ -141,7 +143,6 @@ export default async function TournamentPage({ params }: { params: Promise<{ tou
               <div><p className="section-label">Competition</p><h2 className="page-title mt-1 text-2xl">{isBattleRoyale ? "Battle Royale standings" : isMultiStage ? "Tournament stages" : "Brackets"}</h2>{isBattleRoyale ? <p className="page-subtitle">Placement, kills and points determine the leaderboard.</p> : isMultiStage ? <p className="page-subtitle">Groups qualify automatically into playoffs, then the Grand Final.</p> : null}</div>
               <Link href={`/tournaments/${tournament.id}/standings`} className="action-secondary self-start">Standings</Link>
             </div>
-
             {isBattleRoyale ? <div className="surface-card p-5"><p className="text-sm text-ink-muted">Battle Royale tournaments do not use a bracket. View the standings to follow placement, kills and total points.</p></div> : isMultiStage ? <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">{tournament.stages.map((stage, index) => <div key={stage.id} className="surface-card p-4"><div className="flex items-center justify-between"><span className="section-label">Stage {index + 1}</span><span className="status-neutral">{stage.status}</span></div><h3 className="mt-2 font-display uppercase">{stage.name}</h3><p className="mt-1 text-xs text-ink-faint">{stage.kind} · {stage._count.matches} matches</p></div>)}</div> : <BracketExplorer brackets={tournament.brackets} tournamentId={tournament.id} />}
           </section>
         </div>

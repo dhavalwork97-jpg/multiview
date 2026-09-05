@@ -6,22 +6,54 @@
   --font-display: "Barlow Condensed", sans-serif;
   --font-body: "Inter", sans-serif;
   --font-mono: "JetBrains Mono", monospace;
+  --ui-header-height: 4.25rem;
+  --ui-content-gutter: 1rem;
+  --ui-section-gap: 2rem;
+  --ui-focus-ring: 0 0 0 3px rgba(58, 222, 124, .18);
 }
 
-html { background: #0A0B0F; }
+@media (min-width: 640px) {
+  :root { --ui-content-gutter: 1.5rem; }
+}
+
+@media (min-width: 1024px) {
+  :root { --ui-content-gutter: 2rem; --ui-section-gap: 2.5rem; }
+}
+
+html {
+  background: #0A0B0F;
+  color-scheme: dark;
+  scroll-behavior: smooth;
+}
+
 body {
   @apply bg-arena-950 text-ink font-body antialiased;
   overflow-x: hidden;
+  min-width: 320px;
 }
+
 button, a, input, select, textarea { -webkit-tap-highlight-color: transparent; }
 button:disabled { cursor: not-allowed; }
 a { text-underline-offset: 3px; }
+
+::selection { background: rgba(58, 222, 124, .22); color: #F2F1ED; }
+
+:focus-visible {
+  outline: none;
+  box-shadow: var(--ui-focus-ring);
+}
 
 @keyframes live-pulse {
   0%, 100% { opacity: 1; transform: scale(1); }
   50% { opacity: 0.35; transform: scale(.86); }
 }
 .animate-live-pulse { animation: live-pulse 1.6s ease-in-out infinite; }
+
+@keyframes live-glow {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(58, 222, 124, 0); }
+  50% { box-shadow: 0 0 0 4px rgba(58, 222, 124, .08); }
+}
+.animate-live-glow { animation: live-glow 2.4s ease-in-out infinite; }
 
 .bezel-cut {
   clip-path: polygon(0 0, calc(100% - 14px) 0, 100% 14px, 100% 100%, 0 100%);
@@ -37,6 +69,9 @@ a { text-underline-offset: 3px; }
   .action-primary {
     @apply inline-flex min-h-9 items-center justify-center rounded-card bg-signal-live px-3 font-mono text-[11px] font-bold uppercase tracking-wide text-arena-950 transition-all duration-200 hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-live/60 active:translate-y-px;
   }
+  .action-ghost {
+    @apply inline-flex min-h-9 items-center justify-center rounded-card px-3 font-mono text-[11px] font-semibold uppercase tracking-wide text-ink-muted transition-colors hover:bg-arena-800 hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-live/40;
+  }
 
   .page-shell {
     @apply min-h-screen bg-arena-950 px-4 py-6 sm:px-6 sm:py-8 lg:px-8;
@@ -50,9 +85,11 @@ a { text-underline-offset: 3px; }
 
   .surface-card { @apply rounded-card border border-arena-700 bg-arena-900/70 shadow-[0_12px_36px_rgba(0,0,0,.16)]; }
   .surface-card-interactive { @apply transition-all duration-200 hover:-translate-y-0.5 hover:border-signal-live/60 hover:bg-arena-800/80 hover:shadow-[0_16px_42px_rgba(0,0,0,.24)]; }
+  .surface-quiet { @apply rounded-card border border-arena-700/70 bg-arena-900/40; }
   .status-live { @apply inline-flex items-center gap-1.5 rounded-full border border-signal-live/30 bg-signal-live/10 px-2 py-1 font-mono text-[10px] font-bold uppercase tracking-widest text-signal-live; }
   .status-neutral { @apply inline-flex items-center gap-1.5 rounded-full border border-arena-600 bg-arena-800 px-2 py-1 font-mono text-[10px] font-bold uppercase tracking-widest text-ink-muted; }
   .section-label { @apply font-mono text-[10px] font-bold uppercase tracking-[0.16em] text-ink-faint; }
+  .section-heading { @apply font-display text-xl font-semibold uppercase tracking-[0.04em] text-ink sm:text-2xl; }
 
   .game-tab {
     @apply inline-flex min-h-10 shrink-0 items-center justify-center rounded-card border border-arena-700 bg-arena-900 px-3.5 font-mono text-[10px] font-bold uppercase tracking-[0.1em] text-ink-muted transition-all duration-200 hover:border-arena-600 hover:bg-arena-800 hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-live/40;
@@ -67,5 +104,15 @@ a { text-underline-offset: 3px; }
   .stream-tile-active { @apply border-signal-live/50 shadow-[0_0_0_1px_rgba(58,222,124,.08),0_12px_34px_rgba(0,0,0,.28)]; }
   .stream-tile-label { @apply pointer-events-none absolute inset-x-2 top-2 z-10 flex items-center justify-between gap-2 rounded-card border border-arena-700/80 bg-arena-950/90 px-2.5 py-1.5 font-mono text-[9px] font-bold uppercase tracking-[0.1em] text-ink-muted backdrop-blur; }
 
+  .score-value { @apply font-mono text-2xl font-bold tabular-nums tracking-tight text-ink sm:text-3xl; }
+  .metric-value { @apply font-mono text-sm font-bold tabular-nums text-ink; }
+  .metric-label { @apply font-mono text-[9px] font-semibold uppercase tracking-[0.12em] text-ink-faint; }
+  .live-dot { @apply h-1.5 w-1.5 rounded-full bg-signal-live; }
+
   .empty-state { @apply rounded-card border border-dashed border-arena-700 bg-arena-900/50 px-6 py-12 text-center; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
+  *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; }
 }
