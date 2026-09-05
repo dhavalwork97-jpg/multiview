@@ -235,3 +235,35 @@ export function canAdminTournamentRole(
 ) {
   return !!role && ORG_ROLE_RANK[role] >= ORG_ROLE_RANK.ADMIN;
 }
+
+export type DashboardRole = OrganizationRole | "ADMIN" | null;
+
+export function resolveDashboardRole(
+  userRole: Role,
+  organizationRoles: OrganizationRole[],
+): DashboardRole {
+  if (userRole === "ADMIN") return "ADMIN";
+
+  const rankedRole = organizationRoles.reduce<OrganizationRole | null>(
+    (highest, role) =>
+      !highest || ORG_ROLE_RANK[role] > ORG_ROLE_RANK[highest]
+        ? role
+        : highest,
+    null,
+  );
+
+  return rankedRole;
+}
+
+export function isOrganizerDashboardRole(
+  userRole: Role,
+  dashboardRole: DashboardRole,
+) {
+  return (
+    userRole === "ADMIN" ||
+    userRole === "ORGANIZER" ||
+    (dashboardRole !== null &&
+      dashboardRole !== "VIEWER" &&
+      canOperateTournamentRole(dashboardRole))
+  );
+}
