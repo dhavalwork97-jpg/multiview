@@ -45,6 +45,8 @@ eventsSubscriber.on("message", (_channel, raw) => {
     case "reaction:created": io.to(`match:${event.matchId}`).emit("reaction:created", event); break;
     case "activity:created": io.emit("activity:created", event); if (event.matchId) io.to(`match:${event.matchId}`).emit("activity:created", event); break;
     case "pulse:updated": io.to(`match:${event.matchId}`).emit("pulse:updated", event); break;
+    case "chat:message": io.to(`match:${event.matchId}`).emit("chat:message", event); break;
+    case "chat:moderated": io.to(`match:${event.matchId}`).emit("chat:moderated", event); break;
   }
 });
 
