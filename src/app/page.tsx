@@ -52,12 +52,12 @@ export default async function HomePage() {
         </section>
 
         <section className="mt-8">
-          <SectionHeader eyebrow="Live signal" title="Live right now" action={{ href: "/multiview", label: "Open multi-view" }} />
+          <SectionHeader eyebrow="Live signal" title="Live right now" href="/multiview" actionLabel="Open multi-view" />
           <div className="mt-4"><LiveGrid /></div>
         </section>
 
         <section className="mt-10 pb-4">
-          <SectionHeader eyebrow="Competition calendar" title={liveTournaments.length > 0 ? "Live & upcoming" : "Upcoming tournaments"} description="Know what is happening now and what is worth watching next." action={{ href: "/tournaments", label: "View all" }} />
+          <SectionHeader eyebrow="Competition calendar" title={liveTournaments.length > 0 ? "Live & upcoming" : "Upcoming tournaments"} description="Know what is happening now and what is worth watching next." href="/tournaments" actionLabel="View all" />
           {upcoming.length === 0 ? (
             <div className="empty-state mt-4"><p className="text-sm text-ink-faint">No public tournaments scheduled right now.</p><Link href="/tournaments" className="action-secondary mt-4">Browse competitions</Link></div>
           ) : (
