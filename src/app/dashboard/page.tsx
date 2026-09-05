@@ -11,14 +11,6 @@ import { ViewerDashboard } from "@/app/dashboard/ViewerDashboard";
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
-const STATUS_LABEL: Record<string, string> = {
-  LIVE: "Live",
-  SCHEDULED: "Upcoming",
-  COMPLETED: "Completed",
-  ARCHIVED: "Archived",
-  DRAFT: "Draft",
-};
-
 type DashboardData = {
   dashboardRole: ReturnType<typeof resolveDashboardRole>;
   canCreateTournament: boolean;
@@ -70,18 +62,12 @@ async function loadDashboardData(
       },
     });
 
-    return {
-      dashboardRole,
-      canCreateTournament,
-      tournaments,
-      dataWarning: false,
-    };
+    return { dashboardRole, canCreateTournament, tournaments, dataWarning: false };
   } catch (error) {
     console.error("FGC Stream dashboard data load failed", error);
     return {
       dashboardRole: user.role === "ADMIN" ? "ADMIN" : null,
-      canCreateTournament:
-        user.role === "ADMIN" || user.role === "ORGANIZER",
+      canCreateTournament: user.role === "ADMIN" || user.role === "ORGANIZER",
       tournaments: [],
       dataWarning: true,
     };
@@ -92,12 +78,8 @@ export default async function DashboardPage() {
   const user = await getCurrentUser();
   if (!user) redirect("/sign-in");
 
-  const {
-    dashboardRole,
-    canCreateTournament,
-    tournaments,
-    dataWarning,
-  } = await loadDashboardData(user);
+  const { dashboardRole, canCreateTournament, tournaments, dataWarning } =
+    await loadDashboardData(user);
   const isOrganizer = isOrganizerDashboardRole(user.role, dashboardRole);
 
   return (
@@ -137,10 +119,7 @@ export default async function DashboardPage() {
                   : "Plans"}
               </Link>
               {canCreateTournament && (
-                <Link
-                  href="/admin/tournaments/new"
-                  className="action-primary"
-                >
+                <Link href="/admin/tournaments/new" className="action-primary">
                   Create tournament
                 </Link>
               )}
@@ -150,8 +129,11 @@ export default async function DashboardPage() {
 
         {isOrganizer ? (
           <OrganizerDashboard
+            user={user}
             role={dashboardRole}
-            tournamentCount={tournaments.length}
+            tournaments={tournaments}
+            canCreateTournament={canCreateTournament}
+            dataWarning={dataWarning}
           />
         ) : (
           <ViewerDashboard />
