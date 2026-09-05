@@ -8,11 +8,17 @@ type Props = {
   showAdmin?: boolean;
 };
 
-type NavItem = { href: string; label: string; short?: string };
+type NavItem = { href: string; label: string; short?: string; live?: boolean };
 
 const PUBLIC_LINKS: NavItem[] = [
   { href: "/", label: "Home" },
-  { href: "/tournaments", label: "Tournaments", short: "Tournaments" },
+  { href: "/live", label: "Live", live: true },
+  { href: "/matches", label: "Matches" },
+  { href: "/tournaments", label: "Tournaments" },
+  { href: "/community", label: "Community" },
+];
+
+const SECONDARY_LINKS: NavItem[] = [
   { href: "/teams", label: "Teams" },
   { href: "/players", label: "Players" },
   { href: "/multiview", label: "Multi-View", short: "MultiView" },
@@ -23,6 +29,7 @@ export function NavLinks({ showDashboard = false, showAdmin = false }: Props) {
   const links: NavItem[] = [
     ...(showDashboard ? [{ href: "/dashboard", label: "Dashboard" }] : []),
     ...PUBLIC_LINKS,
+    ...SECONDARY_LINKS,
     ...(showAdmin ? [{ href: "/admin", label: "Admin" }] : []),
   ];
 
@@ -43,6 +50,7 @@ export function NavLinks({ showDashboard = false, showAdmin = false }: Props) {
                 : "border-transparent text-ink-muted hover:border-arena-600 hover:bg-arena-800/80 hover:text-ink"
             }`}
           >
+            {link.live && <span className="mr-1.5 h-1.5 w-1.5 rounded-full bg-signal-live animate-live-pulse" aria-hidden="true" />}
             {isActive && <span className="absolute inset-x-3 bottom-0 h-0.5 rounded-full bg-signal-live" aria-hidden="true" />}
             <span>{link.short ?? link.label}</span>
           </Link>
