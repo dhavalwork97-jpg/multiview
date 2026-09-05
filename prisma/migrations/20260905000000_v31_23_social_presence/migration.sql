@@ -7,6 +7,15 @@ ALTER TABLE "viewer_sessions" ADD COLUMN "userId" TEXT;
 ALTER TABLE "viewer_sessions" ADD CONSTRAINT "viewer_sessions_userId_fkey"
   FOREIGN KEY ("userId") REFERENCES "users"("id") ON DELETE SET NULL ON UPDATE CASCADE;
 CREATE INDEX "viewer_sessions_userId_lastSeenAt_idx" ON "viewer_sessions"("userId", "lastSeenAt");
+
+-- viewer_sessions predates the Match foreign key and may contain historical
+-- analytics rows whose match no longer exists. Remove only those orphan rows
+-- before enforcing the relation so deployment is deterministic on upgrades.
+DELETE FROM "viewer_sessions" vs
+WHERE NOT EXISTS (
+  SELECT 1 FROM "matches" m WHERE m."id" = vs."matchId"
+);
+
 ALTER TABLE "viewer_sessions" ADD CONSTRAINT "viewer_sessions_matchId_fkey"
   FOREIGN KEY ("matchId") REFERENCES "matches"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
