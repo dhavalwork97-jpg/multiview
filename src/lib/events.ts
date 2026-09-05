@@ -122,7 +122,7 @@ export async function publishEvent(event: AppEvent) {
     connected = false;
     serverLogger.error("failed to publish realtime event", {
       eventType: event.type,
-      tournamentId: event.tournamentId,
+      tournamentId: "tournamentId" in event ? event.tournamentId : undefined,
       error: error instanceof Error ? error.message : "unknown_error",
     });
   }
