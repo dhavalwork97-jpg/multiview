@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import Link from "next/link";
-import { getTournamentAccess } from "@/lib/auth";
+import { getTournamentAccess, getCurrentUser } from "@/lib/auth";
+import { getPrimaryOrganizationMembership } from "@/lib/organization";
 import { db } from "@/lib/db";
 import { InteractiveBracket } from "@/components/bracket/InteractiveBracket";
 import { StationAssignmentBoard } from "@/components/admin/StationAssignmentBoard";
@@ -19,14 +20,21 @@ export default async function AdminTournamentPage({
     redirect("/dashboard");
   }
 
-  if (!access.isPlatformAdmin && (access.role === "VIEWER")) {
+  if (!access.isPlatformAdmin && access.role === "VIEWER") {
     redirect("/dashboard");
   }
+
+  const user = await getCurrentUser();
+  const membership = user && user.role !== "ADMIN"
+    ? await getPrimaryOrganizationMembership(user.id)
+    : null;
 
   const tournament = await db.tournament.findUnique({
     where: { id: tournamentId },
     select: {
       id: true,
+      organizationId: true,
+      organizerId: true,
       name: true,
       slug: true,
       sport: true,
@@ -39,12 +47,18 @@ export default async function AdminTournamentPage({
   });
 
   if (!tournament) redirect("/dashboard");
+  if (
+    user?.role === "ORGANIZER" &&
+    tournament.organizerId !== user.id &&
+    (!membership || membership.organizationId !== tournament.organizationId)
+  ) {
+    redirect("/organizer");
+  }
 
   const isBattleRoyale =
     tournament.sport === "bgmi" || tournament.scoringMode === "battle_royale";
 
-  const isMultiStage =
-    tournament.stages.length > 1 && !isBattleRoyale;
+  const isMultiStage = tournament.stages.length > 1 && !isBattleRoyale;
 
   return (
     <main className="min-h-screen bg-arena-950 px-6 py-8">
