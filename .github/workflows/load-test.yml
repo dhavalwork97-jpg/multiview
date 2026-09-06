@@ -1,0 +1,38 @@
+name: Production Load Test
+
+on:
+  workflow_dispatch:
+    inputs:
+      base_url:
+        description: "Deployed staging URL, e.g. https://staging.example.com"
+        required: true
+        type: string
+      match_id:
+        description: "Optional public match ID to exercise the watch page"
+        required: false
+        type: string
+      target_vus:
+        description: "Target virtual viewers"
+        required: true
+        default: "25"
+        type: string
+      hold:
+        description: "Hold duration, e.g. 5m"
+        required: true
+        default: "5m"
+        type: string
+
+jobs:
+  load-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run k6
+        uses: grafana/setup-k6-action@v1
+      - name: Execute viewer load profile
+        env:
+          BASE_URL: ${{ inputs.base_url }}
+          MATCH_ID: ${{ inputs.match_id }}
+          TARGET_VUS: ${{ inputs.target_vus }}
+          HOLD: ${{ inputs.hold }}
+        run: k6 run tests/load/viewer-load.js
