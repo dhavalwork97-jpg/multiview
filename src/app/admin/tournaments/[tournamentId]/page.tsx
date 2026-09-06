@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import Link from "next/link";
 import { getCurrentUser } from "@/lib/auth";
+import { getPrimaryOrganizationMembership } from "@/lib/organization";
 import { db } from "@/lib/db";
 import { InteractiveBracket } from "@/components/bracket/InteractiveBracket";
 import { StationAssignmentBoard } from "@/components/admin/StationAssignmentBoard";
@@ -17,10 +18,12 @@ export default async function AdminTournamentPage({
     redirect("/dashboard");
   }
 
+  const membership = user.role === "ADMIN" ? null : await getPrimaryOrganizationMembership(user.id);
   const tournament = await db.tournament.findUnique({
     where: { id: tournamentId },
     select: {
       id: true,
+      organizationId: true,
       name: true,
       slug: true,
       sport: true,
@@ -33,6 +36,9 @@ export default async function AdminTournamentPage({
   });
 
   if (!tournament) redirect("/dashboard");
+  if (user.role === "ORGANIZER" && (!membership || membership.organizationId !== tournament.organizationId)) {
+    redirect("/organizer");
+  }
 
   const isBattleRoyale =
     tournament.sport === "bgmi" || tournament.scoringMode === "battle_royale";
