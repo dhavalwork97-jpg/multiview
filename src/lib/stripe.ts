@@ -17,6 +17,18 @@ export function getStripe(): Stripe {
   });
 }
 
+export function getStripePriceId(plan: "STARTER" | "PRO" | "EVENT"): string | null {
+  return {
+    STARTER: process.env.STRIPE_STARTER_PRICE_ID,
+    PRO: process.env.STRIPE_PRO_PRICE_ID,
+    EVENT: process.env.STRIPE_EVENT_PRICE_ID,
+  }[plan] ?? null;
+}
+
+export function getAppUrl(): string {
+  return process.env.NEXT_PUBLIC_APP_URL ?? process.env.NEXT_PUBLIC_BASE_URL ?? "http://localhost:3000";
+}
+
 export function mapStripeStatus(status: Stripe.Subscription.Status): "ACTIVE" | "PAST_DUE" | "CANCELED" | "NONE" {
   switch (status) {
     case "active":
