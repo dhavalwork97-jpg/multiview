@@ -28,7 +28,11 @@ function MatchRow({ match }: { match: Match }) {
   const score = `${match.playerOneScore ?? 0} — ${match.playerTwoScore ?? 0}`;
 
   return (
-    <Link href={live ? `/watch/${match.id}` : `/watch/${match.id}`} className="group block rounded-card border border-arena-700 bg-arena-900 p-4 transition hover:border-arena-500 hover:bg-arena-800/80">
+    <Link
+      href={`/watch/${match.id}`}
+      className="group block rounded-card border border-arena-700 bg-arena-900 p-4 transition hover:border-arena-500 hover:bg-arena-800/80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-live/60"
+      aria-label={`${one} versus ${two}, ${STATUS_LABELS[match.status] ?? match.status}`}
+    >
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-2">
           {live ? <LiveBadge compact /> : <span className="status-neutral">{STATUS_LABELS[match.status] ?? match.status}</span>}
@@ -53,14 +57,16 @@ export default function MatchesPage() {
   const [matches, setMatches] = useState<Match[]>([]);
   const [status, setStatus] = useState("LIVE");
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
+    setError(false);
     fetch(`/api/matches?status=${status}`)
       .then((res) => { if (!res.ok) throw new Error("Failed to load matches"); return res.json(); })
       .then((data) => { if (!cancelled) setMatches(Array.isArray(data.matches) ? data.matches : []); })
-      .catch(() => { if (!cancelled) setMatches([]); })
+      .catch(() => { if (!cancelled) { setMatches([]); setError(true); } })
       .finally(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
   }, [status]);
@@ -82,7 +88,7 @@ export default function MatchesPage() {
 
       <section className="flex flex-wrap gap-2 border-y border-arena-700 py-3" aria-label="Match status filters">
         {["LIVE", "QUEUED", "COMPLETED", "DISPUTED"].map((item) => (
-          <button key={item} type="button" onClick={() => setStatus(item)} className={`min-h-10 rounded-card border px-4 font-mono text-[10px] font-bold uppercase tracking-[0.12em] transition ${status === item ? "border-signal-live/50 bg-arena-800 text-ink" : "border-transparent text-ink-muted hover:border-arena-600 hover:text-ink"}`}>
+          <button key={item} type="button" onClick={() => setStatus(item)} aria-pressed={status === item} className={`min-h-10 rounded-card border px-4 font-mono text-[10px] font-bold uppercase tracking-[0.12em] transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-live/60 ${status === item ? "border-signal-live/50 bg-arena-800 text-ink" : "border-transparent text-ink-muted hover:border-arena-600 hover:text-ink"}`}>
             {STATUS_LABELS[item]}
           </button>
         ))}
@@ -90,10 +96,21 @@ export default function MatchesPage() {
 
       <section>
         <SectionHeader eyebrow={status === "LIVE" ? "On air" : "Match center"} title={STATUS_LABELS[status] ?? status} description={summary} />
-        <div className="mt-5 space-y-3">
-          {loading && <p className="text-sm text-ink-muted">Loading matches…</p>}
-          {!loading && matches.length === 0 && <div className="rounded-card border border-dashed border-arena-600 p-10 text-center text-sm text-ink-muted">No {STATUS_LABELS[status]?.toLowerCase() || "matching"} matches right now.</div>}
-          {!loading && matches.map((match) => <MatchRow key={match.id} match={match} />)}
+        <div className="mt-5 space-y-3" aria-live="polite" aria-busy={loading}>
+          {loading && (
+            <div className="space-y-3" aria-label="Loading matches">
+              {[1, 2, 3].map((item) => <div key={item} className="h-28 animate-pulse rounded-card border border-arena-700 bg-arena-900/70" />)}
+            </div>
+          )}
+          {!loading && error && (
+            <div className="rounded-card border border-signal-live/30 bg-arena-900 p-8 text-center">
+              <p className="font-semibold text-ink">Match data is temporarily unavailable.</p>
+              <p className="mt-2 text-sm text-ink-muted">Try the selected view again in a moment.</p>
+              <button type="button" onClick={() => setStatus((current) => current)} className="action-secondary mt-4">Retry</button>
+            </div>
+          )}
+          {!loading && !error && matches.length === 0 && <div className="rounded-card border border-dashed border-arena-600 p-10 text-center"><p className="text-sm text-ink-muted">No {STATUS_LABELS[status]?.toLowerCase() || "matching"} matches right now.</p><Link href="/live" className="action-secondary mt-4 inline-flex">Back to live</Link></div>}
+          {!loading && !error && matches.map((match) => <MatchRow key={match.id} match={match} />)}
         </div>
       </section>
     </main>
