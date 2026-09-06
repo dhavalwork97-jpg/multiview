@@ -61,13 +61,15 @@ export async function POST(request: Request) {
     case "invoice.payment_failed": {
       const invoice = event.data.object as Stripe.Invoice;
       const customerId = typeof invoice.customer === "string" ? invoice.customer : null;
-      if (customerId) await updateUser(customerId, null, "PAST_DUE");
+      const subscriptionId = typeof invoice.subscription === "string" ? invoice.subscription : null;
+      if (customerId && subscriptionId) await updateUser(customerId, subscriptionId, "PAST_DUE");
       break;
     }
     case "invoice.paid": {
       const invoice = event.data.object as Stripe.Invoice;
       const customerId = typeof invoice.customer === "string" ? invoice.customer : null;
-      if (customerId) await updateUser(customerId, null, "ACTIVE");
+      const subscriptionId = typeof invoice.subscription === "string" ? invoice.subscription : null;
+      if (customerId && subscriptionId) await updateUser(customerId, subscriptionId, "ACTIVE");
       break;
     }
     default:
