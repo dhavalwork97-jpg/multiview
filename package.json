@@ -18,6 +18,7 @@
     "clip-worker:dev": "tsx watch src/server/streaming/clip-worker.ts",
     "test:integration": "vitest run tests/integration",
     "test:e2e": "playwright test",
+    "test:load": "k6 run tests/load/viewer-load.js",
     "setup": "bash scripts/setup.sh",
     "demo:pack": "tsx prisma/seed-demo-pack.ts"
   },
