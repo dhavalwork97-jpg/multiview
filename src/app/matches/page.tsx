@@ -28,11 +28,7 @@ function MatchRow({ match }: { match: Match }) {
   const score = `${match.playerOneScore ?? 0} — ${match.playerTwoScore ?? 0}`;
 
   return (
-    <Link
-      href={`/watch/${match.id}`}
-      className="group block rounded-card border border-arena-700 bg-arena-900 p-4 transition hover:border-arena-500 hover:bg-arena-800/80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-live/60"
-      aria-label={`${one} versus ${two}, ${STATUS_LABELS[match.status] ?? match.status}`}
-    >
+    <Link href={`/watch/${match.id}`} className="group block rounded-card border border-arena-700 bg-arena-900 p-4 transition hover:border-arena-500 hover:bg-arena-800/80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-live/60" aria-label={`${one} versus ${two}, ${STATUS_LABELS[match.status] ?? match.status}`}>
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-2">
           {live ? <LiveBadge compact /> : <span className="status-neutral">{STATUS_LABELS[match.status] ?? match.status}</span>}
@@ -58,6 +54,7 @@ export default function MatchesPage() {
   const [status, setStatus] = useState("LIVE");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
+  const [reloadToken, setReloadToken] = useState(0);
 
   useEffect(() => {
     let cancelled = false;
@@ -69,7 +66,7 @@ export default function MatchesPage() {
       .catch(() => { if (!cancelled) { setMatches([]); setError(true); } })
       .finally(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
-  }, [status]);
+  }, [status, reloadToken]);
 
   const summary = useMemo(() => {
     if (status === "LIVE") return "Active matches, scores and broadcast stations.";
@@ -106,7 +103,7 @@ export default function MatchesPage() {
             <div className="rounded-card border border-signal-live/30 bg-arena-900 p-8 text-center">
               <p className="font-semibold text-ink">Match data is temporarily unavailable.</p>
               <p className="mt-2 text-sm text-ink-muted">Try the selected view again in a moment.</p>
-              <button type="button" onClick={() => setStatus((current) => current)} className="action-secondary mt-4">Retry</button>
+              <button type="button" onClick={() => setReloadToken((value) => value + 1)} className="action-secondary mt-4">Retry</button>
             </div>
           )}
           {!loading && !error && matches.length === 0 && <div className="rounded-card border border-dashed border-arena-600 p-10 text-center"><p className="text-sm text-ink-muted">No {STATUS_LABELS[status]?.toLowerCase() || "matching"} matches right now.</p><Link href="/live" className="action-secondary mt-4 inline-flex">Back to live</Link></div>}
