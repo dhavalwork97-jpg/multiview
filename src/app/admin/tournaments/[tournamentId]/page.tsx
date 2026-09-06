@@ -24,6 +24,7 @@ export default async function AdminTournamentPage({
     select: {
       id: true,
       organizationId: true,
+      organizerId: true,
       name: true,
       slug: true,
       sport: true,
@@ -36,7 +37,11 @@ export default async function AdminTournamentPage({
   });
 
   if (!tournament) redirect("/dashboard");
-  if (user.role === "ORGANIZER" && (!membership || membership.organizationId !== tournament.organizationId)) {
+  if (
+    user.role === "ORGANIZER" &&
+    tournament.organizerId !== user.id &&
+    (!membership || membership.organizationId !== tournament.organizationId)
+  ) {
     redirect("/organizer");
   }
 
