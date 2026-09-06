@@ -30,16 +30,23 @@ export const options = {
   },
 };
 
+const expectedStatus = (path, status) => {
+  if (path === "/api/health" || path === "/api/ready") return status === 200 || status === 503;
+  return status === 200;
+};
+
 const paths = ["/", "/live", "/matches", "/community", "/api/health", "/api/ready"];
 
 export default function () {
   for (const path of paths) {
     const response = http.get(`${baseUrl}${path}`, { tags: { endpoint: path } });
-    check(response, { [`${path} responds`]: (r) => r.status >= 200 && r.status < 500 });
+    check(response, { [`${path} responds with expected status`]: (r) => expectedStatus(path, r.status) });
   }
 
   if (matchId) {
-    const response = http.get(`${baseUrl}/watch/${encodeURIComponent(matchId)}`, { tags: { endpoint: "watch" } });
+    const response = http.get(`${baseUrl}/watch/${encodeURIComponent(matchId)}`, {
+      tags: { endpoint: "watch" },
+    });
     check(response, { "watch responds": (r) => r.status === 200 || r.status === 404 });
   }
 
