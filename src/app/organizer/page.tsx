@@ -15,9 +15,16 @@ export default async function OrganizerPage() {
   const allowed = user.role === "ADMIN" || user.role === "ORGANIZER" || membership?.role === "OWNER" || membership?.role === "ADMIN";
   if (!allowed) redirect("/dashboard");
 
-  const organizationIds = membership ? [membership.organizationId] : [];
   const tournaments = await db.tournament.findMany({
-    where: user.role === "ADMIN" ? {} : { organizationId: { in: organizationIds } },
+    where:
+      user.role === "ADMIN"
+        ? {}
+        : {
+            OR: [
+              { organizationId: membership?.organizationId ?? "__none__" },
+              ...(user.role === "ORGANIZER" ? [{ organizerId: user.id }] : []),
+            ],
+          },
     orderBy: { startDate: "desc" },
     take: 12,
     select: { id: true, slug: true, name: true, status: true, startDate: true },
