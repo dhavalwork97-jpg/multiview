@@ -15,7 +15,7 @@ const resolveSchema = z.object({ action: z.literal("resolvePrediction"), matchId
 export async function GET(request: Request) {
   const url = new URL(request.url); const matchId = url.searchParams.get("matchId")?.trim(); const tournamentId = url.searchParams.get("tournamentId")?.trim(); const user = await getCurrentUser();
   if (!matchId && !tournamentId) return NextResponse.json({ error: "matchId or tournamentId is required" }, { status: 400, headers });
-  let prediction = null; let leaderboard: Array<{ username: string; points: number }> = []; const polls: Array<{ id: string; question: string; options: string[]; counts: number[]; closesAt: string | null; votedIndex: number | null }> = []; let mvp: Array<{ playerId: string; gamertag: string; votes: number }> = []; let pickem = null; let pickemMatches: Array<{ id:string; round:string|null; playerOneId:string; playerOne:string; playerTwoId:string; playerTwo:string; status:string }> = [];
+  let prediction = null; let leaderboard: Array<{ username: string; points: number }> = []; let polls: Array<{ id: string; question: string; options: string[]; counts: number[]; closesAt: string | null; votedIndex: number | null }> = []; let mvp: Array<{ playerId: string; gamertag: string; votes: number }> = []; let pickem = null; let pickemMatches: Array<{ id:string; round:string|null; playerOneId:string; playerOne:string; playerTwoId:string; playerTwo:string; status:string }> = [];
   if (matchId) {
     const rows = user ? await db.$queryRaw<Array<{ id:string; playerId:string; confidence:number; points:number; resolved:boolean }>>`SELECT id,predicted_player_id AS "playerId",confidence,points,resolved FROM community_predictions WHERE match_id=${matchId} AND user_id=${user.id} LIMIT 1` : [];
     prediction = rows[0] ?? null;
@@ -28,7 +28,7 @@ export async function GET(request: Request) {
     }
   }
   if (tournamentId) {
-    leaderboard = await db.$queryRaw<Array<{ username:string; points:number }>>`SELECT u.username,COALESCE(SUM(p.points),0)::int AS points FROM users u LEFT JOIN community_predictions p ON p.user_id=u.id GROUP BY u.id,u.username ORDER BY points DESC,u.username ASC LIMIT 25`;
+    leaderboard = await db.$queryRaw<Array<{ username:string; points:number }>>`SELECT u.username,COALESCE(SUM(p.points),0)::int AS points FROM users u LEFT JOIN community_predictions p ON p.user_id=u.id JOIN matches m ON m.id=p.match_id AND m.tournament_id=${tournamentId} GROUP BY u.id,u.username ORDER BY points DESC,u.username ASC LIMIT 25`;
     const mv = await db.$queryRaw<Array<{ playerId:string; gamertag:string; votes:bigint }>>`SELECT v.player_id AS "playerId",p.gamertag,COUNT(v.id)::bigint AS votes FROM community_mvp_votes v JOIN players p ON p.id=v.player_id WHERE v.tournament_id=${tournamentId} GROUP BY v.player_id,p.gamertag ORDER BY votes DESC,p.gamertag ASC LIMIT 12`;
     mvp = mv.map(r=>({...r,votes:Number(r.votes)}));
     if(user){const pe=await db.$queryRaw<Array<{id:string;picks:unknown;points:number}>>`SELECT id,picks,points FROM community_pickems WHERE tournament_id=${tournamentId} AND user_id=${user.id} LIMIT 1`;pickem=pe[0]??null;}
