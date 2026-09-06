@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 import Link from "next/link";
-import { getCurrentUser } from "@/lib/auth";
+import { getTournamentAccess, getCurrentUser } from "@/lib/auth";
 import { getPrimaryOrganizationMembership } from "@/lib/organization";
 import { db } from "@/lib/db";
 import { InteractiveBracket } from "@/components/bracket/InteractiveBracket";
@@ -13,12 +13,22 @@ export default async function AdminTournamentPage({
   params: Promise<{ tournamentId: string }>;
 }) {
   const { tournamentId } = await params;
-  const user = await getCurrentUser();
-  if (!user || (user.role !== "ORGANIZER" && user.role !== "ADMIN")) {
+  let access;
+  try {
+    access = await getTournamentAccess(tournamentId);
+  } catch {
     redirect("/dashboard");
   }
 
-  const membership = user.role === "ADMIN" ? null : await getPrimaryOrganizationMembership(user.id);
+  if (!access.isPlatformAdmin && access.role === "VIEWER") {
+    redirect("/dashboard");
+  }
+
+  const user = await getCurrentUser();
+  const membership = user && user.role !== "ADMIN"
+    ? await getPrimaryOrganizationMembership(user.id)
+    : null;
+
   const tournament = await db.tournament.findUnique({
     where: { id: tournamentId },
     select: {
@@ -38,7 +48,7 @@ export default async function AdminTournamentPage({
 
   if (!tournament) redirect("/dashboard");
   if (
-    user.role === "ORGANIZER" &&
+    user?.role === "ORGANIZER" &&
     tournament.organizerId !== user.id &&
     (!membership || membership.organizationId !== tournament.organizationId)
   ) {
