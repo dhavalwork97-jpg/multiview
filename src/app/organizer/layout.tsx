@@ -5,14 +5,13 @@ import { getPrimaryOrganizationMembership } from "@/lib/organization";
 
 export const dynamic = "force-dynamic";
 
-const navigation = [
+const baseNavigation = [
   ["/organizer", "Overview"],
   ["/admin/tournaments/new", "Create tournament"],
   ["/tournaments", "Tournaments"],
   ["/teams", "Teams"],
   ["/players", "Players"],
   ["/multiview", "Broadcast"],
-  ["/organization/settings", "Organization"],
 ] as const;
 
 export default async function OrganizerLayout({ children }: { children: React.ReactNode }) {
@@ -22,6 +21,11 @@ export default async function OrganizerLayout({ children }: { children: React.Re
   const membership = await getPrimaryOrganizationMembership(user.id);
   const allowed = user.role === "ADMIN" || user.role === "ORGANIZER" || membership?.role === "OWNER" || membership?.role === "ADMIN";
   if (!allowed) redirect("/dashboard");
+
+  const canManageOrganization = user.role === "ADMIN" || membership?.role === "OWNER" || membership?.role === "ADMIN";
+  const navigation = canManageOrganization
+    ? [...baseNavigation, ["/organization/settings", "Organization"] as const]
+    : baseNavigation;
 
   return (
     <main className="min-h-screen bg-arena-950 text-ink">
