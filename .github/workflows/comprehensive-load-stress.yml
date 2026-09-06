@@ -1,0 +1,109 @@
+name: Comprehensive Load & Stress Test
+
+on:
+  push:
+    branches:
+      - feat/v31.30-comprehensive-load-stress-testing
+  workflow_dispatch:
+    inputs:
+      base_url:
+        description: Public application URL
+        required: true
+        default: https://multiview-fjtd-eusd06ulo-dhavalwork97-jpgs-projects.vercel.app
+      socket_url:
+        description: Socket.IO server URL (leave blank to skip realtime)
+        required: false
+      hls_url:
+        description: Public HLS .m3u8 URL (leave blank to skip media)
+        required: false
+      match_id:
+        description: Public match ID
+        required: false
+
+permissions:
+  contents: read
+
+jobs:
+  http-baseline:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: grafana/setup-k6-action@v1
+      - name: Baseline HTTP — 25 VUs
+        env:
+          BASE_URL: ${{ inputs.base_url || 'https://multiview-fjtd-eusd06ulo-dhavalwork97-jpgs-projects.vercel.app' }}
+          MATCH_ID: ${{ inputs.match_id }}
+          TARGET_VUS: 25
+          RAMP_UP: 30s
+          HOLD: 2m
+          RAMP_DOWN: 30s
+        run: k6 run --summary-export=http-25-summary.json tests/load/platform-load.js
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: http-25-summary
+          path: http-25-summary.json
+          if-no-files-found: ignore
+
+  http-stress:
+    needs: http-baseline
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        vus: [100, 500]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: grafana/setup-k6-action@v1
+      - name: HTTP stress — ${{ matrix.vus }} VUs
+        env:
+          BASE_URL: ${{ inputs.base_url || 'https://multiview-fjtd-eusd06ulo-dhavalwork97-jpgs-projects.vercel.app' }}
+          MATCH_ID: ${{ inputs.match_id }}
+          TARGET_VUS: ${{ matrix.vus }}
+          RAMP_UP: 60s
+          HOLD: 5m
+          RAMP_DOWN: 30s
+        run: k6 run --summary-export=http-${{ matrix.vus }}-summary.json tests/load/platform-load.js
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: http-${{ matrix.vus }}-summary
+          path: http-${{ matrix.vus }}-summary.json
+          if-no-files-found: ignore
+
+  realtime:
+    if: ${{ inputs.socket_url != '' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - name: Socket.IO load — 50 connections
+        env:
+          SOCKET_URL: ${{ inputs.socket_url }}
+          MATCH_ID: ${{ inputs.match_id || 'load-test-match' }}
+          SOCKET_CONNECTIONS: 50
+          SOCKET_HOLD_MS: 120000
+        run: node tests/load/realtime-load.mjs
+
+  streaming:
+    if: ${{ inputs.hls_url != '' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: HLS manifest load — 25 concurrent pollers
+        env:
+          HLS_URL: ${{ inputs.hls_url }}
+          HLS_CONNECTIONS: 25
+          HLS_HOLD_MS: 120000
+        run: node tests/load/hls-load.mjs
