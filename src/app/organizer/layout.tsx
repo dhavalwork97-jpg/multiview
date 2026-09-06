@@ -12,6 +12,7 @@ const baseNavigation = [
   ["/teams", "Teams"],
   ["/players", "Players"],
   ["/multiview", "Broadcast"],
+  ["/billing", "Billing"],
 ] as const;
 
 export default async function OrganizerLayout({ children }: { children: React.ReactNode }) {
