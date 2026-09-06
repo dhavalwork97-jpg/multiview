@@ -20,60 +20,72 @@ export async function POST(request: Request) {
 
   const existing = await db.webhookEvent.findUnique({ where: { source_eventId: { source: "stripe", eventId: event.id } } });
   if (existing) return NextResponse.json({ received: true, duplicate: true });
+
+  // Claim the event before processing so concurrent deliveries are deduplicated.
+  // If processing fails, remove the claim so Stripe can retry safely.
   await db.webhookEvent.create({ data: { source: "stripe", eventId: event.id } });
 
-  const updateUser = async (customerId: string, subscriptionId: string | null, status: "ACTIVE" | "PAST_DUE" | "CANCELED" | "NONE") => {
-    const user = await db.user.findFirst({ where: { stripeCustomerId: customerId } });
-    if (!user) return;
-    await db.user.update({
-      where: { id: user.id },
-      data: { stripeCustomerId: customerId, ...(subscriptionId ? { stripeSubscriptionId: subscriptionId } : {}), subscriptionStatus: status },
-    });
-  };
+  try {
+    const updateUser = async (customerId: string, subscriptionId: string | null, status: "ACTIVE" | "PAST_DUE" | "CANCELED" | "NONE") => {
+      const user = await db.user.findFirst({ where: { stripeCustomerId: customerId } });
+      if (!user) return;
+      await db.user.update({
+        where: { id: user.id },
+        data: { stripeCustomerId: customerId, ...(subscriptionId ? { stripeSubscriptionId: subscriptionId } : {}), subscriptionStatus: status },
+      });
+    };
 
-  switch (event.type) {
-    case "checkout.session.completed": {
-      const session = event.data.object as Stripe.Checkout.Session;
-      const userId = session.metadata?.userId;
-      const customerId = typeof session.customer === "string" ? session.customer : null;
-      const subscriptionId = typeof session.subscription === "string" ? session.subscription : null;
-      if (userId && customerId) {
-        await db.user.update({
-          where: { id: userId },
-          data: { stripeCustomerId: customerId, ...(subscriptionId ? { stripeSubscriptionId: subscriptionId, subscriptionStatus: "ACTIVE" } : {}) },
-        });
+    switch (event.type) {
+      case "checkout.session.completed": {
+        const session = event.data.object as Stripe.Checkout.Session;
+        const userId = session.metadata?.userId;
+        const customerId = typeof session.customer === "string" ? session.customer : null;
+        const subscriptionId = typeof session.subscription === "string" ? session.subscription : null;
+        if (userId && customerId) {
+          await db.user.update({
+            where: { id: userId },
+            data: {
+              stripeCustomerId: customerId,
+              ...(subscriptionId ? { stripeSubscriptionId: subscriptionId, subscriptionStatus: "ACTIVE" } : {}),
+            },
+          });
+        }
+        break;
       }
-      break;
+      case "customer.subscription.created":
+      case "customer.subscription.updated": {
+        const subscription = event.data.object as Stripe.Subscription;
+        const customerId = typeof subscription.customer === "string" ? subscription.customer : null;
+        if (customerId) await updateUser(customerId, subscription.id, mapStripeStatus(subscription.status));
+        break;
+      }
+      case "customer.subscription.deleted": {
+        const subscription = event.data.object as Stripe.Subscription;
+        const customerId = typeof subscription.customer === "string" ? subscription.customer : null;
+        if (customerId) await updateUser(customerId, subscription.id, "CANCELED");
+        break;
+      }
+      case "invoice.payment_failed": {
+        const invoice = event.data.object as Stripe.Invoice;
+        const customerId = typeof invoice.customer === "string" ? invoice.customer : null;
+        const subscriptionId = typeof invoice.subscription === "string" ? invoice.subscription : null;
+        if (customerId && subscriptionId) await updateUser(customerId, subscriptionId, "PAST_DUE");
+        break;
+      }
+      case "invoice.paid": {
+        const invoice = event.data.object as Stripe.Invoice;
+        const customerId = typeof invoice.customer === "string" ? invoice.customer : null;
+        const subscriptionId = typeof invoice.subscription === "string" ? invoice.subscription : null;
+        if (customerId && subscriptionId) await updateUser(customerId, subscriptionId, "ACTIVE");
+        break;
+      }
+      default:
+        break;
     }
-    case "customer.subscription.created":
-    case "customer.subscription.updated": {
-      const subscription = event.data.object as Stripe.Subscription;
-      const customerId = typeof subscription.customer === "string" ? subscription.customer : null;
-      if (customerId) await updateUser(customerId, subscription.id, mapStripeStatus(subscription.status));
-      break;
-    }
-    case "customer.subscription.deleted": {
-      const subscription = event.data.object as Stripe.Subscription;
-      const customerId = typeof subscription.customer === "string" ? subscription.customer : null;
-      if (customerId) await updateUser(customerId, subscription.id, "CANCELED");
-      break;
-    }
-    case "invoice.payment_failed": {
-      const invoice = event.data.object as Stripe.Invoice;
-      const customerId = typeof invoice.customer === "string" ? invoice.customer : null;
-      const subscriptionId = typeof invoice.subscription === "string" ? invoice.subscription : null;
-      if (customerId && subscriptionId) await updateUser(customerId, subscriptionId, "PAST_DUE");
-      break;
-    }
-    case "invoice.paid": {
-      const invoice = event.data.object as Stripe.Invoice;
-      const customerId = typeof invoice.customer === "string" ? invoice.customer : null;
-      const subscriptionId = typeof invoice.subscription === "string" ? invoice.subscription : null;
-      if (customerId && subscriptionId) await updateUser(customerId, subscriptionId, "ACTIVE");
-      break;
-    }
-    default:
-      break;
+  } catch (error) {
+    await db.webhookEvent.delete({ where: { source_eventId: { source: "stripe", eventId: event.id } } }).catch(() => undefined);
+    console.error("Stripe webhook processing failed", { eventId: event.id, type: event.type, error });
+    return NextResponse.json({ error: "Webhook processing failed" }, { status: 500 });
   }
 
   return NextResponse.json({ received: true });
