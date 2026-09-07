@@ -1,40 +1,113 @@
-# Render Blueprint — deploys all three non-Vercel, non-EC2 services in one
-# pass. In the Render dashboard: New → Blueprint → point at this repo →
-# Render reads this file and creates all three services with their env
-# var slots ready to fill in.
-#
-# The media transport is YouTube Live, so there is no self-hosted LiveKit
-# media server or UDP/TURN service in this deployment.
-#
-# All three are `type: web`, including the clip worker and AI worker,
-# which are functionally background job processors with no need to
-# listen on a port. This is deliberate: Render's "Background Worker"
-# service type has NO free tier at any level ($7/mo minimum, Starter and
-# up, regardless of Blueprint vs. manual creation) — only Web Services
-# and static sites do. src/lib/health-server.ts adds a one-line health
-# endpoint to both workers so they can register as Web Services instead
-# and actually get the free tier. See RENDER_DEPLOYMENT.md for the
-# keep-alive workaround for the cold-start tradeoff this implies.
-
 services:
+  - type: web
+    name: fgc-stream-web
+    env: node
+    plan: free
+    region: singapore
+    branch: main
+    buildCommand: npm ci && npx prisma generate && npm run build
+    startCommand: npm start
+    autoDeploy: yes
+    healthCheckPath: /api/health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: DATABASE_URL
+        sync: false
+      - key: DIRECT_URL
+        sync: false
+      - key: REDIS_URL
+        sync: false
+      - key: UPSTASH_REDIS_REST_URL
+        sync: false
+      - key: UPSTASH_REDIS_REST_TOKEN
+        sync: false
+      - key: NEXT_PUBLIC_APP_URL
+        sync: false
+      - key: NEXT_PUBLIC_SOCKET_URL
+        sync: false
+      - key: SOCKET_SERVER_PORT
+        value: 4000
+      - key: NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY
+        sync: false
+      - key: CLERK_SECRET_KEY
+        sync: false
+      - key: CLERK_ENCRYPTION_KEY
+        sync: false
+      - key: CLERK_WEBHOOK_SIGNING_SECRET
+        sync: false
+      - key: NEXT_PUBLIC_CLERK_SIGN_IN_URL
+        sync: false
+      - key: NEXT_PUBLIC_CLERK_SIGN_UP_URL
+        sync: false
+      - key: NEXT_PUBLIC_CLERK_AFTER_SIGN_IN_URL
+        sync: false
+      - key: NEXT_PUBLIC_CLERK_AFTER_SIGN_UP_URL
+        sync: false
+      - key: STRIPE_SECRET_KEY
+        sync: false
+      - key: STRIPE_WEBHOOK_SECRET
+        sync: false
+      - key: STRIPE_STARTER_PRICE_ID
+        sync: false
+      - key: STRIPE_PRO_PRICE_ID
+        sync: false
+      - key: STRIPE_EVENT_PRICE_ID
+        sync: false
+      - key: YOUTUBE_CLIENT_ID
+        sync: false
+      - key: YOUTUBE_CLIENT_SECRET
+        sync: false
+      - key: YOUTUBE_REFRESH_TOKEN
+        sync: false
+      - key: YOUTUBE_DAILY_QUOTA_BUDGET
+        sync: false
+      - key: LIVEKIT_API_KEY
+        sync: false
+      - key: LIVEKIT_API_SECRET
+        sync: false
+      - key: LIVEKIT_WS_URL
+        sync: false
+      - key: LIVEKIT_HTTP_URL
+        sync: false
+      - key: AWS_REGION
+        sync: false
+      - key: AWS_ACCESS_KEY_ID
+        sync: false
+      - key: AWS_SECRET_ACCESS_KEY
+        sync: false
+      - key: S3_ENDPOINT
+        sync: false
+      - key: S3_BUCKET_VODS
+        sync: false
+      - key: S3_BUCKET_CLIPS
+        sync: false
+      - key: NEXT_PUBLIC_SUPABASE_STORAGE_URL
+        sync: false
+      - key: NEXT_PUBLIC_SUPABASE_BUCKET
+        sync: false
+      - key: CLOUDFRONT_DOMAIN
+        sync: false
+      - key: NEXT_PUBLIC_CLOUDFRONT_DOMAIN
+        sync: false
+
   - type: web
     name: fgc-stream-socket
     env: docker
     dockerfilePath: ./Dockerfile.socket
     plan: free
+    region: singapore
+    branch: main
+    autoDeploy: yes
     envVars:
       - key: REDIS_URL
+        sync: false
+      - key: DATABASE_URL
         sync: false
       - key: NEXT_PUBLIC_APP_URL
         sync: false
       - key: SOCKET_SERVER_PORT
         value: 4000
-      # Added for the heartbeat poller (src/server/socket/heartbeat.ts) —
-      # it queries Postgres for LIVE stations and LiveKit for their actual
-      # room/participant state, so this service now needs both sets of
-      # credentials it previously had no reason to hold.
-      - key: DATABASE_URL
-        sync: false
       - key: YOUTUBE_CLIENT_ID
         sync: false
       - key: YOUTUBE_CLIENT_SECRET
@@ -47,6 +120,9 @@ services:
     env: docker
     dockerfilePath: ./Dockerfile.worker
     plan: free
+    region: singapore
+    branch: main
+    autoDeploy: yes
     envVars:
       - key: REDIS_URL
         sync: false
@@ -68,6 +144,9 @@ services:
     env: docker
     dockerfilePath: ./Dockerfile.ai-worker
     plan: free
+    region: singapore
+    branch: main
+    autoDeploy: yes
     envVars:
       - key: DATABASE_URL
         sync: false
