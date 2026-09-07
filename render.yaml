@@ -5,8 +5,8 @@ services:
     plan: free
     region: singapore
     branch: main
-    buildCommand: npm ci && npx prisma generate && npm run build
-    startCommand: npm start
+    buildCommand: npm ci && npm run build
+    startCommand: npm start -- -H 0.0.0.0
     autoDeploy: yes
     healthCheckPath: /api/health
     envVars:
