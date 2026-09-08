@@ -77,6 +77,12 @@ a { text-underline-offset: 3px; }
 }
 .ds-enter { animation: ds-enter .35s ease-out both; }
 
+@keyframes ds-scan {
+  from { transform: translateX(-100%); }
+  to { transform: translateX(100%); }
+}
+.ds-scan { animation: ds-scan 2.8s ease-in-out infinite; }
+
 .bezel-cut {
   clip-path: polygon(0 0, calc(100% - 14px) 0, 100% 14px, 100% 100%, 0 100%);
 }
@@ -108,12 +114,14 @@ a { text-underline-offset: 3px; }
   .page-kicker { @apply font-mono text-[10px] font-bold uppercase tracking-[.20em] text-ink-faint; }
   .page-title { @apply font-display text-4xl font-semibold uppercase leading-none tracking-[.055em] text-ink sm:text-5xl; }
   .page-subtitle { @apply mt-2 max-w-2xl text-sm leading-6 text-ink-muted; }
+  .display-hero { @apply font-display text-[clamp(4rem,11vw,10rem)] font-semibold uppercase leading-[.78] tracking-[.01em]; }
 
   .surface-card { @apply rounded-[16px] border border-arena-700/90 bg-arena-900/70 shadow-[0_16px_48px_rgba(0,0,0,.20)] backdrop-blur-md; }
   .surface-card-interactive { @apply transition-all duration-200 hover:-translate-y-0.5 hover:border-signal-live/50 hover:bg-arena-800/80 hover:shadow-[0_20px_54px_rgba(0,0,0,.28)]; }
   .surface-quiet { @apply rounded-[12px] border border-arena-700/70 bg-arena-900/40 backdrop-blur-sm; }
   .surface-elevated { @apply rounded-[16px] border border-arena-600/80 bg-arena-800/75 shadow-[0_24px_70px_rgba(0,0,0,.30)] backdrop-blur-xl; }
   .surface-signal { @apply rounded-[16px] border border-signal-live/20 bg-signal-live/[.045] shadow-[0_0_42px_rgba(58,222,124,.05)]; }
+  .surface-console { @apply rounded-[18px] border border-arena-600/80 bg-[linear-gradient(135deg,rgba(28,31,37,.92),rgba(10,12,16,.96))] shadow-[0_28px_90px_rgba(0,0,0,.38)] backdrop-blur-xl; }
 
   .status-live { @apply inline-flex items-center gap-1.5 rounded-full border border-signal-live/30 bg-signal-live/10 px-2.5 py-1 font-mono text-[10px] font-bold uppercase tracking-widest text-signal-live; }
   .status-neutral { @apply inline-flex items-center gap-1.5 rounded-full border border-arena-600 bg-arena-800 px-2.5 py-1 font-mono text-[10px] font-bold uppercase tracking-widest text-ink-muted; }
@@ -143,6 +151,17 @@ a { text-underline-offset: 3px; }
 
   .empty-state { @apply rounded-[16px] border border-dashed border-arena-700 bg-arena-900/50 px-6 py-14 text-center; }
   .divider { @apply h-px w-full bg-gradient-to-r from-transparent via-arena-700 to-transparent; }
+
+  .ds-section { @apply relative py-10 sm:py-14 lg:py-16; }
+  .ds-section-header { @apply mb-5 flex flex-col gap-3 border-b border-arena-700/80 pb-4 sm:flex-row sm:items-end sm:justify-between; }
+  .ds-section-header-copy { @apply min-w-0; }
+  .ds-index { @apply font-mono text-[9px] font-bold uppercase tracking-[.2em] text-signal-live; }
+  .ds-rule { @apply relative h-px overflow-hidden bg-arena-700; }
+  .ds-rule::after { content: ""; @apply absolute inset-y-0 left-0 w-24 bg-signal-live/60; }
+  .ds-grid { @apply relative overflow-hidden; background-image: linear-gradient(rgba(255,255,255,.018) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,.018) 1px, transparent 1px); background-size: 40px 40px; }
+  .ds-glow { @apply pointer-events-none absolute rounded-full bg-signal-live/[.06] blur-[90px]; }
+  .ds-hover-lift { @apply transition-transform duration-200 hover:-translate-y-1; }
+  .ds-number { @apply font-mono text-[clamp(2.5rem,6vw,5rem)] font-bold leading-none tracking-[-.05em] text-ink; }
 }
 
 @media (prefers-reduced-motion: reduce) {
