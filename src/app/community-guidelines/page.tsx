@@ -12,7 +12,7 @@ export default function CommunityGuidelinesPage() {
             <h2>Compete and watch in good faith</h2>
             <p>FGC Stream is for competition, fandom and community. Keep chat, profiles, tournament participation and shared content respectful and relevant.</p>
             <h2>Not allowed</h2>
-            <ul><li>Threats, targeted harassment or hateful abuse.</li><li>Sexual exploitation or sexual content involving minors.</li><li>Fraud, impersonation, doxxing or sharing private information.</li><li>Spam, scams, malicious links, malware or coordinated disruption.</li><li>Cheating, match manipulation or attempts to compromise tournament integrity.</li><li>Content that infringes another person's intellectual-property rights.</li></ul>
+            <ul><li>Threats, targeted harassment or hateful abuse.</li><li>Sexual exploitation or sexual content involving minors.</li><li>Fraud, impersonation, doxxing or sharing private information.</li><li>Spam, scams, malicious links, malware or coordinated disruption.</li><li>Cheating, match manipulation or attempts to compromise tournament integrity.</li><li>Content that infringes another person&apos;s intellectual-property rights.</li></ul>
             <h2>Live chat</h2>
             <p>Organizers and moderators may use timeouts, message removal, slow mode, blocked terms or bans to keep event chat usable. Platform administrators may take additional action for serious or repeated violations.</p>
             <h2>Reports</h2>
