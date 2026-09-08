@@ -40,25 +40,41 @@ async function cutClip(job: ClipJobData) {
   const outputPath = path.join(workDir, "clip.mp4");
 
   try {
+    // Supabase Free has a 50 MB maximum file size. Re-encode clips to a
+    // bounded 720p bitrate instead of stream-copying the source, so a
+    // 1–90 second viewer clip remains comfortably below that limit.
     await execFileAsync("ffmpeg", [
       "-y",
       "-ss", String(job.startSeconds),
       "-i", playlistUrl,
       "-t", String(job.endSeconds - job.startSeconds),
-      "-c", "copy",
+      "-vf", "scale=-2:720",
+      "-c:v", "libx264",
+      "-preset", "veryfast",
+      "-b:v", "2500k",
+      "-maxrate", "2800k",
+      "-bufsize", "5600k",
+      "-pix_fmt", "yuv420p",
+      "-c:a", "aac",
+      "-b:a", "96k",
       "-movflags", "+faststart",
       outputPath,
     ]);
 
-    const storageKey = `clips/${job.matchId}/${job.clipId}.mp4`;
     const fileBuffer = await import("node:fs/promises").then((fs) => fs.readFile(outputPath));
+    const maxBytes = 50 * 1024 * 1024;
+    if (fileBuffer.byteLength > maxBytes) {
+      throw new Error("Generated clip exceeds the Supabase Free 50 MB file limit");
+    }
 
+    const storageKey = `clips/${job.matchId}/${job.clipId}.mp4`;
     await storage.send(
       new PutObjectCommand({
         Bucket: process.env.NEXT_PUBLIC_SUPABASE_BUCKET,
         Key: storageKey,
         Body: fileBuffer,
         ContentType: "video/mp4",
+        CacheControl: "31536000",
       })
     );
 
