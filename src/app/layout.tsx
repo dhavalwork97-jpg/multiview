@@ -3,6 +3,7 @@ import { ClerkProvider } from "@clerk/nextjs";
 import { NavGate } from "@/components/layout/NavGate";
 import "./globals.css";
 import { Nav } from "@/components/layout/Nav";
+import { Footer } from "@/components/layout/Footer";
 
 export const metadata: Metadata = {
   title: "FGC Stream",
@@ -23,6 +24,7 @@ export default function RootLayout({
         <Nav />
       </NavGate>
       {children}
+      <Footer />
     </>
   );
 
