@@ -2,109 +2,52 @@
 
 ## Authentication & authorization
 
-- **Clerk** handles identity — password hashing, session management,
-  brute-force protection on sign-in are Clerk's problem, not this repo's.
-  A `users` table row is created/synced via a signature-verified webhook
-  (`api/webhooks/clerk`), never trusting client-supplied identity data.
-- **Role-based access** (`VIEWER < PLAYER < ORGANIZER < ADMIN`) is
-  enforced **server-side, in every route handler that needs it**
-  (`requireRole` in `src/lib/auth.ts`) — not just hidden in the UI.
-  Middleware (`src/middleware.ts`) adds a second layer for whole route
-  trees (`/admin/*`), but individual API routes don't rely on middleware
-  alone; they check again themselves, since middleware's coarse
-  path-matching is easy to get subtly wrong for mixed-access routes
-  (e.g. `/api/matches` is GET-public, POST-organizer-only on the same
-  path).
+- **Clerk** handles identity, password hashing, session management and sign-in abuse protection.
+- **Role-based access** (`VIEWER < PLAYER < ORGANIZER < ADMIN`) is enforced server-side with `requireRole` in `src/lib/auth.ts`; UI visibility is never treated as authorization.
+- Middleware (`src/middleware.ts`) adds route-tree protection while API handlers continue to authorize independently.
 
 ## Webhook verification
 
-Every inbound webhook verifies a cryptographic signature before trusting
-its payload — Clerk (`svix`), Stripe (`stripe.webhooks.constructEvent`),
-LiveKit (`WebhookReceiver`). None of them are trusted based on source IP
-or URL obscurity alone, which is the failure mode that matters here:
-anyone who discovers a webhook URL should still be unable to forge
-events without the signing secret.
+Inbound Clerk, Stripe and LiveKit webhooks verify cryptographic signatures before their payloads are trusted.
 
 ## Input validation
 
-Every route handler that accepts a body validates it with **Zod**
-against an explicit schema before it touches the database — malformed
-input gets a `400` with the specific validation failure, not a `500`
-with a stack trace (which would leak implementation details) or, worse,
-a query built from unvalidated input. Prisma parameterizes every query
-it builds, so classic SQL injection isn't a realistic vector here as
-long as no route drops to raw SQL — none currently do.
+Route bodies are validated with Zod before database writes. Prisma parameterizes normal queries and raw SQL is restricted to controlled health/readiness checks.
 
 ## Rate limiting
 
-Added this phase (`src/lib/rate-limit.ts`), applied to the two
-highest-risk endpoints:
+- Public search: 20 requests per 10 seconds per client IP.
+- Clip creation: 5 requests per minute per signed-in user.
+- Generic write limiter is available for additional mutating endpoints.
+- Production is fail-closed when the Upstash rate-limit credentials are absent, so a missing production limiter cannot silently become unlimited traffic.
 
-- **Search** (`/api/search`) — public, no auth required, so it's rate
-  limited per-IP (20 req/10s) rather than per-user.
-- **Clip creation** (`/api/clips` POST) — cheap to request, expensive to
-  fulfill (an FFmpeg job on a separate worker), rate limited per-user
-  (5/min) so one person can't starve the clip worker for everyone during
-  a hype match.
+High-cost organizer mutation endpoints should use the generic limiter as the organizer population grows.
 
-**Not yet applied everywhere it arguably should be** — the station
-assignment and score-update endpoints are organizer-only (smaller,
-trusted population) and weren't prioritized this pass; worth adding if
-the organizer population ever grows past "people you'd trust with admin
-access anyway."
+## Security headers
 
-## Security headers (`next.config.ts`)
-
-`X-Frame-Options: DENY`, `X-Content-Type-Options: nosniff`,
-`Strict-Transport-Security` with `preload`, a `Content-Security-Policy`
-that explicitly allow-lists exactly the external origins the app
-actually talks to (CloudFront for video, the Socket.IO server, the
-LiveKit WebRTC endpoint) rather than a permissive wildcard. Verified by
-a real E2E test (`tests/e2e/security-headers.spec.ts`) against a live
-deployment, not just a config-shape unit test — headers only matter if
-the hosting platform actually applies them.
+`next.config.ts` applies `X-Frame-Options: DENY`, `X-Content-Type-Options: nosniff`, HSTS, `Referrer-Policy`, `Permissions-Policy`, CSP and `frame-ancestors 'none'`. CSP is explicitly allow-listed for required media, realtime, auth and storage origins.
 
 ## Secrets
 
-- Nothing is committed — `.env.example` documents every variable's
-  *name* and *shape*, never a real value.
-- IAM scoping: the S3 credentials used by Egress and the clip worker are
-  scoped to `PutObject`/`GetObject` on exactly the two buckets they need
-  (`PHASE3_DEPLOYMENT_GUIDE.md` Stage A.3) — not broad S3 access.
-- LiveKit's viewer tokens are subscribe-only and short-lived (`ttl: "6h"`,
-  `src/lib/livekit.ts`) — a leaked viewer token can't be used to publish
-  fake video into a station's room.
-- Station stream keys are rotated (old ingress deleted, new one issued)
-  every time `POST /api/stations/:id/ingress` is called, rather than
-  reused — limits the blast radius of a leaked key to "until someone
-  notices and re-issues," not "forever."
+Secrets are kept in deployment environment configuration and are not committed to source. Media credentials are scoped to required operations, viewer LiveKit tokens are subscribe-only and short-lived, and station ingress keys are rotated when reissued.
 
-## Dependency scanning
+## Dependency and code scanning
 
-- **Dependabot** (`.github/dependabot.yml`) — weekly PRs for npm,
-  Docker base images, and GitHub Actions versions, with minor/patch
-  bumps grouped into one PR rather than a dozen separate ones.
-- **CodeQL** (`.github/workflows/codeql.yml`) — static analysis on every
-  push/PR plus a weekly scheduled run, so a vulnerability pattern
-  disclosed after code merges still gets caught.
+- Dependabot runs weekly for npm, GitHub Actions and Docker dependencies.
+- CodeQL runs on pushes/PRs and on a weekly schedule.
+- CI runs `npm audit --audit-level=high`; the audit workflow now uses Node 22 to match the supported application runtime.
 
-## Honest gaps
+## Production operations
 
-- **No WAF / DDoS layer in front of the app.** Vercel and CloudFront both
-  have some baked-in protection, but nothing here is a deliberate,
-  configured defense (e.g. Cloudflare in front, or AWS Shield on
-  CloudFront) — worth adding before this handles a genuinely high-profile
-  public event.
-- **No secrets manager.** Env vars live in each platform's own dashboard
-  (Vercel/Render/Fly/EC2's `docker compose` env), which is fine at this
-  scale but doesn't give centralized rotation or audit logging the way
-  AWS Secrets Manager or Doppler would.
-- **No automated penetration testing or dependency audit beyond
-  Dependabot/CodeQL** — no `npm audit` gate in CI, no scheduled DAST scan.
-  Adding `npm audit --audit-level=high` as a CI check is a small, worthwhile
-  next step that isn't in yet.
-- **Rate limiting isn't applied to every mutating endpoint** — see above.
-- **No documented incident response process** — who gets paged, how a
-  leaked key gets rotated across all six deployed stages, what the
-  rollback procedure is for a bad migration. This is a real gap for a
-  platform that will, eventually, have a real production incident.
+`INCIDENT_RESPONSE.md` documents severity levels, the first-response checklist, credential rotation, database connectivity handling and rollback guidance. Production services are monitored through Render and application health/readiness endpoints.
+
+## Launch gaps that remain intentional
+
+- **WAF/DDoS:** Render/Vercel/CloudFront provide baseline platform protection, but FGC does not yet have a deliberately configured application-edge WAF policy. Add one before a high-profile event or major traffic campaign.
+- **Central secrets manager:** secrets currently live in deployment-provider environment configuration. Centralized rotation/audit through a dedicated secrets manager remains a future hardening step.
+- **Independent penetration testing:** automated CodeQL and dependency auditing are not a substitute for a human-led penetration test. Schedule an external assessment before handling high-value commercial events at scale.
+- **DAST:** there is no scheduled authenticated dynamic application security scan yet. Add one against a controlled staging deployment before major public launch.
+- **Rate-limit coverage:** not every mutation uses a dedicated limiter yet; high-cost organizer mutations should be covered as the product scales.
+- **Operational edge controls:** production should eventually add documented alert thresholds, on-call ownership, backup-restore drills and a tested disaster-recovery runbook.
+
+Security issues should be reported privately through the repository's supported security-reporting mechanism. Never publish credentials, tokens, private user data or exploit details in a public issue.
