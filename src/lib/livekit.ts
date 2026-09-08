@@ -85,13 +85,13 @@ export async function mintViewerToken(roomName: string, identity: string) {
 }
 
 /**
- * Starts the MP4 + HLS egress into Supabase Storage's S3-compatible endpoint.
- * The same HLS objects are later consumed by the clip worker and served from
- * Supabase's public Storage URL. This removes the AWS S3 + CloudFront runtime
- * dependency while preserving the existing S3-compatible LiveKit egress API.
+ * Starts the HLS VOD egress into Supabase Storage's S3-compatible endpoint.
+ * We intentionally keep the VOD as segmented HLS rather than also creating
+ * a single MP4: the Supabase Free plan has a 50 MB maximum file size, while
+ * a full tournament match can easily exceed that size. Individual HLS
+ * segments stay small and remain streamable as a VOD playlist.
  */
 export async function startRoomEgress(roomName: string, matchId: string, stationId: string) {
-  const filePrefix = `vods/${stationId}/${matchId}`;
   const segmentPrefix = `recordings/${stationId}/${matchId}`;
 
   const participants = await getRoomService().listParticipants(roomName);
@@ -125,11 +125,6 @@ export async function startRoomEgress(roomName: string, matchId: string, station
   const info = await getEgressClient().startTrackCompositeEgress(
     roomName,
     {
-      file: new EncodedFileOutput({
-        fileType: EncodedFileType.MP4,
-        filepath: `${filePrefix}/full.mp4`,
-        output: { case: "s3", value: s3 },
-      }),
       segments: new SegmentedFileOutput({
         filenamePrefix: `${segmentPrefix}/segment`,
         playlistName: `${segmentPrefix}/index.m3u8`,
@@ -143,7 +138,7 @@ export async function startRoomEgress(roomName: string, matchId: string, station
   return {
     egressId: info.egressId,
     hlsPlaylistKey: `${segmentPrefix}/index.m3u8`,
-    mp4Key: `${filePrefix}/full.mp4`,
+    mp4Key: null,
   };
 }
 
