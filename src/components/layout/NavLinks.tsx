@@ -19,8 +19,6 @@ const PUBLIC_LINKS: NavItem[] = [
 ];
 
 const SECONDARY_LINKS: NavItem[] = [
-  { href: "/teams", label: "Teams" },
-  { href: "/players", label: "Players" },
   { href: "/multiview", label: "Multi-View", short: "MultiView" },
 ];
 
