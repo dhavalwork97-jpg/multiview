@@ -20,7 +20,15 @@ const isPublicRoute = createRouteMatcher([
 ]);
 
 export default clerkMiddleware(async (auth, req) => {
-  const watchMatch = req.nextUrl.pathname.match(/^\/watch\/([^/]+)\/?$/);
+  const pathname = req.nextUrl.pathname;
+
+  // Keep Clerk middleware active for static/404 requests. The root layout
+  // contains ClerkProvider, so missing assets must still have Clerk context.
+  if (pathname.includes(".")) {
+    return NextResponse.next();
+  }
+
+  const watchMatch = pathname.match(/^\/watch\/([^/]+)\/?$/);
   if (watchMatch && !/^c[a-z0-9]{24}$/.test(watchMatch[1])) {
     return new NextResponse(null, { status: 404 });
   }
@@ -28,11 +36,14 @@ export default clerkMiddleware(async (auth, req) => {
   if (!isPublicRoute(req)) {
     await auth.protect();
   }
+
+  return NextResponse.next();
 });
 
 export const config = {
   matcher: [
-    "/((?!_next|.*\\..*).*)",
+    "/((?!_next).*)",
     "/(api|trpc)(.*)",
+    "/__clerk/(.*)",
   ],
 };
