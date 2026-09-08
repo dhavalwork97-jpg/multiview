@@ -2,48 +2,53 @@
 @tailwind components;
 @tailwind utilities;
 
-/* FGC Design System 2.0
- * A single visual language shared by viewer, community, tournament and organizer surfaces.
- * Keep semantic classes here so existing pages can adopt the system without rewriting data flows.
- */
+/* FGC Design System 2.0 — broadcast language shared by viewer, community,
+ * tournament and organizer surfaces. Keep these semantic classes stable so
+ * data flows can evolve without forcing visual rewrites. */
 :root {
-  --font-display: "Barlow Condensed", sans-serif;
-  --font-body: "Inter", sans-serif;
-  --font-mono: "JetBrains Mono", monospace;
+  --font-display: Impact, "Haettenschweiler", "Arial Narrow Bold", sans-serif;
+  --font-body: Inter, ui-sans-serif, system-ui, sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
 
   --ui-header-height: 4.5rem;
   --ui-content-gutter: 1rem;
   --ui-section-gap: 2.5rem;
   --ui-radius-sm: 6px;
-  --ui-radius-md: 10px;
+  --ui-radius-md: 12px;
   --ui-radius-lg: 16px;
-  --ui-radius-xl: 24px;
-  --ui-focus-ring: 0 0 0 3px rgba(58, 222, 124, .20);
-  --ui-shadow-sm: 0 8px 24px rgba(0, 0, 0, .18);
-  --ui-shadow-md: 0 16px 48px rgba(0, 0, 0, .26);
-  --ui-shadow-glow: 0 0 42px rgba(58, 222, 124, .08);
+  --ui-radius-xl: 22px;
+  --ui-focus-ring: 0 0 0 3px rgba(32, 224, 164, .22);
+  --ui-shadow-sm: 0 8px 24px rgba(0, 0, 0, .22);
+  --ui-shadow-md: 0 18px 56px rgba(0, 0, 0, .32);
+  --ui-shadow-glow: 0 0 48px rgba(108, 99, 255, .10);
   --ui-grid-size: 48px;
 }
 
 @media (min-width: 640px) { :root { --ui-content-gutter: 1.5rem; } }
 @media (min-width: 1024px) { :root { --ui-content-gutter: 2rem; --ui-section-gap: 3.5rem; } }
 
-html { background: #08090C; color-scheme: dark; scroll-behavior: smooth; }
+html { background: #07070B; color-scheme: dark; scroll-behavior: smooth; }
 body {
   @apply bg-arena-950 text-ink font-body antialiased;
   overflow-x: hidden;
   min-width: 320px;
-  background-image: radial-gradient(circle at 15% -10%, rgba(62,142,247,.08), transparent 28rem), radial-gradient(circle at 85% 0%, rgba(58,222,124,.055), transparent 32rem);
+  background-image:
+    radial-gradient(circle at 10% -8%, rgba(108,99,255,.12), transparent 30rem),
+    radial-gradient(circle at 92% 0%, rgba(32,224,164,.075), transparent 34rem),
+    linear-gradient(rgba(255,255,255,.012) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255,255,255,.012) 1px, transparent 1px);
+  background-size: auto, auto, var(--ui-grid-size) var(--ui-grid-size), var(--ui-grid-size) var(--ui-grid-size);
+  background-attachment: fixed;
 }
 button, a, input, select, textarea { -webkit-tap-highlight-color: transparent; }
 button:disabled { cursor: not-allowed; }
 a { text-underline-offset: 3px; }
-::selection { background: rgba(58,222,124,.22); color: #F2F1ED; }
+::selection { background: rgba(108,99,255,.30); color: #F7F7FB; }
 :focus-visible { outline: none; box-shadow: var(--ui-focus-ring); }
 
 @keyframes live-pulse { 0%,100% { opacity:1; transform:scale(1); } 50% { opacity:.35; transform:scale(.86); } }
 .animate-live-pulse { animation: live-pulse 1.6s ease-in-out infinite; }
-@keyframes live-glow { 0%,100% { box-shadow:0 0 0 0 rgba(58,222,124,0); } 50% { box-shadow:0 0 0 4px rgba(58,222,124,.08); } }
+@keyframes live-glow { 0%,100% { box-shadow:0 0 0 0 rgba(32,224,164,0); } 50% { box-shadow:0 0 0 4px rgba(32,224,164,.09); } }
 .animate-live-glow { animation: live-glow 2.4s ease-in-out infinite; }
 @keyframes ds-enter { from { opacity:0; transform:translateY(6px); } to { opacity:1; transform:translateY(0); } }
 .ds-enter { animation: ds-enter .35s ease-out both; }
@@ -53,12 +58,12 @@ a { text-underline-offset: 3px; }
 
 @layer components {
   .field-label { @apply mb-1.5 block font-mono text-[10px] font-semibold uppercase tracking-[.14em] text-ink-faint; }
-  .field-input { @apply w-full rounded-[10px] border border-arena-600 bg-arena-950/90 px-3.5 py-3 text-sm text-ink outline-none transition-all placeholder:text-ink-faint focus:border-signal-live/70 focus:bg-arena-900 focus:ring-1 focus:ring-signal-live/20; }
-  .action-secondary { @apply inline-flex min-h-10 items-center justify-center rounded-[10px] border border-arena-600 bg-arena-900/60 px-3.5 font-mono text-[10px] font-bold uppercase tracking-[.11em] text-ink-muted transition-all duration-200 hover:-translate-y-px hover:border-arena-500 hover:bg-arena-800 hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-live/40 active:translate-y-0; }
-  .action-primary { @apply inline-flex min-h-10 items-center justify-center rounded-[10px] bg-signal-live px-3.5 font-mono text-[10px] font-bold uppercase tracking-[.11em] text-arena-950 shadow-[0_8px_24px_rgba(58,222,124,.10)] transition-all duration-200 hover:-translate-y-px hover:shadow-[0_12px_30px_rgba(58,222,124,.16)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-live/60 active:translate-y-0; }
-  .action-ghost { @apply inline-flex min-h-10 items-center justify-center rounded-[10px] px-3.5 font-mono text-[10px] font-bold uppercase tracking-[.11em] text-ink-muted transition-all hover:bg-arena-800 hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-live/40; }
+  .field-input { @apply w-full rounded-card border border-arena-600 bg-arena-950/90 px-3.5 py-3 text-sm text-ink outline-none transition-all placeholder:text-ink-faint focus:border-signal-live/70 focus:bg-arena-900 focus:ring-1 focus:ring-signal-live/20; }
+  .action-secondary { @apply inline-flex min-h-10 items-center justify-center rounded-card border border-arena-600 bg-arena-900/70 px-3.5 font-mono text-[10px] font-bold uppercase tracking-[.11em] text-ink-muted transition-all duration-200 hover:-translate-y-px hover:border-arena-500 hover:bg-arena-800 hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-live/40 active:translate-y-0; }
+  .action-primary { @apply inline-flex min-h-10 items-center justify-center rounded-card bg-signal-live px-3.5 font-mono text-[10px] font-bold uppercase tracking-[.11em] text-arena-950 shadow-signal transition-all duration-200 hover:-translate-y-px hover:brightness-105 hover:shadow-[0_12px_34px_rgba(32,224,164,.18)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-live/60 active:translate-y-0; }
+  .action-ghost { @apply inline-flex min-h-10 items-center justify-center rounded-card px-3.5 font-mono text-[10px] font-bold uppercase tracking-[.11em] text-ink-muted transition-all hover:bg-arena-800 hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-live/40; }
 
-  .page-shell { @apply min-h-screen px-4 py-7 sm:px-6 sm:py-9 lg:px-8; background-image: radial-gradient(circle at 85% 0%, rgba(124,247,197,.065), transparent 30rem), radial-gradient(circle at 5% 35%, rgba(62,142,247,.035), transparent 26rem), linear-gradient(rgba(255,255,255,.016) 1px,transparent 1px), linear-gradient(90deg,rgba(255,255,255,.016) 1px,transparent 1px); background-size:auto,auto,var(--ui-grid-size) var(--ui-grid-size),var(--ui-grid-size) var(--ui-grid-size); }
+  .page-shell { @apply min-h-screen px-4 py-7 sm:px-6 sm:py-9 lg:px-8; background-image: radial-gradient(circle at 85% 0%, rgba(32,224,164,.055), transparent 30rem), radial-gradient(circle at 5% 35%, rgba(108,99,255,.045), transparent 26rem), linear-gradient(rgba(255,255,255,.016) 1px,transparent 1px), linear-gradient(90deg,rgba(255,255,255,.016) 1px,transparent 1px); background-size:auto,auto,var(--ui-grid-size) var(--ui-grid-size),var(--ui-grid-size) var(--ui-grid-size); }
   .page-container { @apply mx-auto w-full max-w-[1680px]; }
   .page-kicker { @apply font-mono text-[10px] font-bold uppercase tracking-[.20em] text-ink-faint; }
   .page-title { @apply font-display text-4xl font-semibold uppercase leading-none tracking-[.055em] text-ink sm:text-5xl; }
@@ -66,13 +71,13 @@ a { text-underline-offset: 3px; }
   .display-hero { @apply font-display text-[clamp(4rem,11vw,10rem)] font-semibold uppercase leading-[.78] tracking-[.01em]; }
   .display-heading { @apply font-display font-semibold uppercase leading-[.86] tracking-[.025em]; }
 
-  .surface-card { @apply rounded-[16px] border border-arena-700/90 bg-arena-900/70 shadow-[0_16px_48px_rgba(0,0,0,.20)] backdrop-blur-md; }
-  .surface-card-interactive { @apply transition-all duration-200 hover:-translate-y-0.5 hover:border-signal-live/50 hover:bg-arena-800/80 hover:shadow-[0_20px_54px_rgba(0,0,0,.28)]; }
-  .surface-quiet { @apply rounded-[12px] border border-arena-700/70 bg-arena-900/40 backdrop-blur-sm; }
-  .surface-elevated { @apply rounded-[16px] border border-arena-600/80 bg-arena-800/75 shadow-[0_24px_70px_rgba(0,0,0,.30)] backdrop-blur-xl; }
-  .surface-signal { @apply rounded-[16px] border border-signal-live/20 bg-signal-live/[.045] shadow-[0_0_42px_rgba(58,222,124,.05)]; }
-  .surface-console { @apply rounded-[18px] border border-arena-600/80 bg-[linear-gradient(135deg,rgba(28,31,37,.92),rgba(10,12,16,.96))] shadow-[0_28px_90px_rgba(0,0,0,.38)] backdrop-blur-xl; }
-  .surface-rail { @apply border-y border-arena-700/80 bg-arena-950/80 backdrop-blur-xl; }
+  .surface-card { @apply rounded-card border border-arena-700/90 bg-arena-900/75 shadow-panel backdrop-blur-md; }
+  .surface-card-interactive { @apply transition-all duration-200 hover:-translate-y-0.5 hover:border-signal-live/50 hover:bg-arena-800/85 hover:shadow-elevated; }
+  .surface-quiet { @apply rounded-card border border-arena-700/70 bg-arena-900/45 backdrop-blur-sm; }
+  .surface-elevated { @apply rounded-panel border border-arena-600/80 bg-arena-800/80 shadow-elevated backdrop-blur-xl; }
+  .surface-signal { @apply rounded-panel border border-signal-live/20 bg-signal-live/[.045] shadow-signal; }
+  .surface-console { @apply rounded-shell border border-arena-600/80 bg-[linear-gradient(135deg,rgba(21,23,34,.94),rgba(7,7,11,.98))] shadow-[0_28px_90px_rgba(0,0,0,.42)] backdrop-blur-xl; }
+  .surface-rail { @apply border-y border-arena-700/80 bg-arena-950/85 backdrop-blur-xl; }
 
   .status-live { @apply inline-flex items-center gap-1.5 rounded-full border border-signal-live/30 bg-signal-live/10 px-2.5 py-1 font-mono text-[10px] font-bold uppercase tracking-widest text-signal-live; }
   .status-neutral { @apply inline-flex items-center gap-1.5 rounded-full border border-arena-600 bg-arena-800 px-2.5 py-1 font-mono text-[10px] font-bold uppercase tracking-widest text-ink-muted; }
@@ -85,23 +90,23 @@ a { text-underline-offset: 3px; }
   .metric-value { @apply font-mono text-sm font-bold tabular-nums text-ink; }
   .metric-label { @apply font-mono text-[9px] font-semibold uppercase tracking-[.12em] text-ink-faint; }
   .score-value { @apply font-mono text-2xl font-bold tabular-nums tracking-tight text-ink sm:text-3xl; }
-  .live-dot { @apply h-1.5 w-1.5 rounded-full bg-signal-live shadow-[0_0_10px_rgba(58,222,124,.7)]; }
+  .live-dot { @apply h-1.5 w-1.5 rounded-full bg-signal-live shadow-[0_0_10px_rgba(32,224,164,.7)]; }
 
-  .game-tab { @apply inline-flex min-h-10 shrink-0 items-center justify-center rounded-[10px] border border-arena-700 bg-arena-900 px-3.5 font-mono text-[10px] font-bold uppercase tracking-[.1em] text-ink-muted transition-all duration-200 hover:border-arena-600 hover:bg-arena-800 hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-live/40; }
-  .game-tab-active { @apply border-signal-live/60 bg-signal-live text-arena-950 shadow-[0_8px_24px_rgba(58,222,124,.18)]; }
-  .context-tabs { @apply flex gap-1 overflow-x-auto rounded-[12px] border border-arena-700 bg-arena-900/80 p-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden; }
+  .game-tab { @apply inline-flex min-h-10 shrink-0 items-center justify-center rounded-card border border-arena-700 bg-arena-900 px-3.5 font-mono text-[10px] font-bold uppercase tracking-[.1em] text-ink-muted transition-all duration-200 hover:border-arena-600 hover:bg-arena-800 hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-live/40; }
+  .game-tab-active { @apply border-signal-live/60 bg-signal-live text-arena-950 shadow-signal; }
+  .context-tabs { @apply flex gap-1 overflow-x-auto rounded-card border border-arena-700 bg-arena-900/85 p-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden; }
   .context-tab { @apply inline-flex min-h-9 shrink-0 items-center justify-center rounded-[9px] px-3 font-mono text-[10px] font-bold uppercase tracking-[.1em] text-ink-faint transition-all hover:bg-arena-800 hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-live/40; }
   .context-tab-active { @apply bg-arena-700 text-ink shadow-sm; }
 
-  .stream-tile { @apply relative overflow-hidden rounded-[14px] border border-arena-700 bg-arena-950 shadow-[0_14px_40px_rgba(0,0,0,.24)]; }
-  .stream-tile-active { @apply border-signal-live/50 shadow-[0_0_0_1px_rgba(58,222,124,.08),0_18px_48px_rgba(0,0,0,.32)]; }
+  .stream-tile { @apply relative overflow-hidden rounded-card border border-arena-700 bg-arena-950 shadow-panel; }
+  .stream-tile-active { @apply border-signal-live/50 shadow-signal; }
   .stream-tile-label { @apply pointer-events-none absolute inset-x-2 top-2 z-10 flex items-center justify-between gap-2 rounded-[9px] border border-arena-700/80 bg-arena-950/90 px-2.5 py-1.5 font-mono text-[9px] font-bold uppercase tracking-[.1em] text-ink-muted backdrop-blur; }
   .data-table { @apply w-full border-collapse text-left; }
   .data-table th { @apply border-b border-arena-700 px-3 py-2 font-mono text-[9px] font-bold uppercase tracking-[.14em] text-ink-faint; }
   .data-table td { @apply border-b border-arena-800/80 px-3 py-3 text-sm text-ink-muted; }
   .data-table tbody tr { @apply transition-colors hover:bg-arena-800/45; }
 
-  .empty-state { @apply rounded-[16px] border border-dashed border-arena-700 bg-arena-900/50 px-6 py-14 text-center; }
+  .empty-state { @apply rounded-panel border border-dashed border-arena-700 bg-arena-900/50 px-6 py-14 text-center; }
   .divider { @apply h-px w-full bg-gradient-to-r from-transparent via-arena-700 to-transparent; }
   .ds-section { @apply relative py-10 sm:py-14 lg:py-16; }
   .ds-section-header { @apply mb-5 flex flex-col gap-3 border-b border-arena-700/80 pb-4 sm:flex-row sm:items-end sm:justify-between; }
