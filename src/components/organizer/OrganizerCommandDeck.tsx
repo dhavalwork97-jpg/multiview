@@ -3,124 +3,36 @@
 import Link from "next/link";
 import { motion } from "framer-motion";
 
-type Tournament = {
-  id: string;
-  slug: string | null;
-  name: string;
-  status: string;
-  startDate: string;
-  publicEnabled: boolean;
-  matches: number;
-  competitors: number;
-  stations: number;
-  incidents: number;
-  readiness: number;
-};
+type Tournament = { id: string; slug: string | null; name: string; status: string; startDate: string; publicEnabled: boolean; matches: number; competitors: number; stations: number; incidents: number; readiness: number };
+type Props = { tournaments: Tournament[]; canCreateTournament: boolean; canManageOrganization: boolean; liveCount: number; upcomingCount: number; openIncidentCount: number };
+const nav = [["Command", "#command"], ["Events", "#events"], ["Operations", "#operations"], ["Insights", "#insights"]] as const;
 
-type Props = {
-  tournaments: Tournament[];
-  canCreateTournament: boolean;
-  canManageOrganization: boolean;
-  liveCount: number;
-  upcomingCount: number;
-  openIncidentCount: number;
-};
-
-const nav = [
-  ["Command", "#command"],
-  ["Events", "#events"],
-  ["Operations", "#operations"],
-  ["Insights", "#insights"],
-] as const;
-
-export default function OrganizerCommandDeck({
-  tournaments,
-  canCreateTournament,
-  canManageOrganization,
-  liveCount,
-  upcomingCount,
-  openIncidentCount,
-}: Props) {
+export default function OrganizerCommandDeck({ tournaments, canCreateTournament, canManageOrganization, liveCount, upcomingCount, openIncidentCount }: Props) {
   const nextEvent = tournaments.find((t) => t.status.toUpperCase() !== "COMPLETED");
   const readiness = nextEvent?.readiness ?? 0;
-
   return (
     <div className="min-h-screen bg-[#07070a] text-ink">
-      <div className="pointer-events-none fixed inset-0 overflow-hidden">
-        <div className="absolute -left-32 top-20 h-96 w-96 rounded-full bg-fuchsia-500/10 blur-3xl" />
-        <div className="absolute right-0 top-0 h-[32rem] w-[32rem] rounded-full bg-cyan-400/10 blur-3xl" />
-        <div className="absolute inset-0 opacity-[0.035] [background-image:linear-gradient(rgba(255,255,255,.7)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,.7)_1px,transparent_1px)] [background-size:32px_32px]" />
-      </div>
-
+      <div className="pointer-events-none fixed inset-0 overflow-hidden"><div className="absolute -left-32 top-20 h-96 w-96 rounded-full bg-fuchsia-500/10 blur-3xl" /><div className="absolute right-0 top-0 h-[32rem] w-[32rem] rounded-full bg-cyan-400/10 blur-3xl" /><div className="absolute inset-0 opacity-[0.035] [background-image:linear-gradient(rgba(255,255,255,.7)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,.7)_1px,transparent_1px)] [background-size:32px_32px]" /></div>
       <div className="relative mx-auto max-w-[1600px] px-4 py-5 sm:px-6 lg:px-10">
         <header className="sticky top-3 z-30 mb-8 flex items-center justify-between rounded-2xl border border-white/10 bg-black/60 px-4 py-3 shadow-2xl backdrop-blur-xl">
-          <div className="flex items-center gap-3">
-            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-white text-black font-black">F</div>
-            <div><p className="text-sm font-semibold tracking-wide">FGC // COMMAND</p><p className="font-mono text-[9px] uppercase tracking-[.22em] text-white/40">Organizer OS · V32</p></div>
-          </div>
-          <nav className="hidden gap-6 md:flex">
-            {nav.map(([label, href]) => <a key={href} href={href} className="text-xs uppercase tracking-[.16em] text-white/45 transition hover:text-white">{label}</a>)}
-          </nav>
-          <div className="flex gap-2">
-            {canCreateTournament && <Link href="/admin/tournaments/new" className="rounded-xl bg-white px-3 py-2 text-xs font-bold text-black transition hover:-translate-y-0.5">+ New event</Link>}
-            <Link href="/dashboard" className="hidden rounded-xl border border-white/10 px-3 py-2 text-xs text-white/70 sm:block">Viewer</Link>
-          </div>
+          <div className="flex items-center gap-3"><div className="flex h-9 w-9 items-center justify-center rounded-xl bg-white font-black text-black">F</div><div><p className="text-sm font-semibold tracking-wide">FGC // COMMAND</p><p className="font-mono text-[9px] uppercase tracking-[.22em] text-white/40">Organizer OS · V32</p></div></div>
+          <nav className="hidden gap-6 md:flex">{nav.map(([label, href]) => <a key={href} href={href} className="text-xs uppercase tracking-[.16em] text-white/45 transition hover:text-white">{label}</a>)}</nav>
+          <div className="flex gap-2">{canCreateTournament && <Link href="/admin/tournaments/new" className="rounded-xl bg-white px-3 py-2 text-xs font-bold text-black transition hover:-translate-y-0.5">+ New event</Link>}<Link href="/dashboard" className="hidden rounded-xl border border-white/10 px-3 py-2 text-xs text-white/70 sm:block">Viewer</Link></div>
         </header>
-
         <main id="command" className="space-y-8">
           <section className="grid gap-5 lg:grid-cols-[1.5fr_.7fr]">
             <motion.div initial={{ opacity: 0, y: 14 }} animate={{ opacity: 1, y: 0 }} className="relative overflow-hidden rounded-[28px] border border-white/10 bg-white/[.035] p-7 shadow-2xl backdrop-blur-xl sm:p-10">
-              <div className="absolute right-8 top-8 font-mono text-[9px] uppercase tracking-[.3em] text-cyan-300/50">Live operations layer</div>
-              <p className="mb-3 font-mono text-[10px] uppercase tracking-[.3em] text-fuchsia-300">V32 / command deck</p>
-              <h1 className="max-w-3xl text-4xl font-black leading-[.95] tracking-[-.045em] sm:text-6xl">Run the event.<br /><span className="text-white/35">Own the moment.</span></h1>
-              <p className="mt-5 max-w-2xl text-sm leading-6 text-white/50">One cinematic control surface over the tournament, broadcast, stations, competitors and incident flow you already built.</p>
-              <div className="mt-8 flex flex-wrap gap-2">
-                {nextEvent ? <Link href={`/admin/tournaments/${nextEvent.id}`} className="rounded-xl bg-white px-4 py-3 text-xs font-bold text-black">Open next event</Link> : null}
-                {nextEvent?.publicEnabled ? <Link href={`/tournaments/${nextEvent.slug ?? nextEvent.id}`} className="rounded-xl border border-white/10 px-4 py-3 text-xs text-white/70">Preview public page</Link> : null}
-              </div>
+              <div className="absolute right-8 top-8 font-mono text-[9px] uppercase tracking-[.3em] text-cyan-300/50">Live operations layer</div><p className="mb-3 font-mono text-[10px] uppercase tracking-[.3em] text-fuchsia-300">V32 / command deck</p><h1 className="max-w-3xl text-4xl font-black leading-[.95] tracking-[-.045em] sm:text-6xl">Run the event.<br /><span className="text-white/35">Own the moment.</span></h1><p className="mt-5 max-w-2xl text-sm leading-6 text-white/50">One cinematic control surface over the tournament, broadcast, stations, competitors and incident flow you already built.</p>
+              <div className="mt-8 flex flex-wrap gap-2">{nextEvent && <Link href={`/admin/tournaments/${nextEvent.id}`} className="rounded-xl bg-white px-4 py-3 text-xs font-bold text-black">Open next event</Link>}{nextEvent?.publicEnabled && <Link href={`/tournaments/${nextEvent.slug ?? nextEvent.id}`} className="rounded-xl border border-white/10 px-4 py-3 text-xs text-white/70">Preview public page</Link>}</div>
             </motion.div>
-
-            <motion.div initial={{ opacity: 0, scale: .98 }} animate={{ opacity: 1, scale: 1 }} transition={{ delay: .08 }} className="rounded-[28px] border border-white/10 bg-gradient-to-br from-white/[.07] to-white/[.02] p-7">
-              <div className="flex items-center justify-between"><p className="font-mono text-[10px] uppercase tracking-[.22em] text-white/40">Event readiness</p><span className="h-2 w-2 rounded-full bg-emerald-300 shadow-[0_0_18px_rgba(110,231,183,.9)]" /></div>
-              <div className="mt-8 flex items-end gap-2"><span className="text-7xl font-black tracking-[-.07em]">{readiness}</span><span className="pb-2 text-sm text-white/30">%</span></div>
-              <div className="mt-4 h-2 overflow-hidden rounded-full bg-white/10"><motion.div initial={{ width: 0 }} animate={{ width: `${readiness}%` }} transition={{ duration: 1 }} className="h-full rounded-full bg-gradient-to-r from-fuchsia-400 to-cyan-300" /></div>
-              <p className="mt-4 text-xs leading-5 text-white/40">Matches · competitors · stations · public state · incidents</p>
-            </motion.div>
+            <motion.div initial={{ opacity: 0, scale: .98 }} animate={{ opacity: 1, scale: 1 }} transition={{ delay: .08 }} className="rounded-[28px] border border-white/10 bg-gradient-to-br from-white/[.07] to-white/[.02] p-7"><div className="flex items-center justify-between"><p className="font-mono text-[10px] uppercase tracking-[.22em] text-white/40">Event readiness</p><span className="h-2 w-2 rounded-full bg-emerald-300 shadow-[0_0_18px_rgba(110,231,183,.9)]" /></div><div className="mt-8 flex items-end gap-2"><span className="text-7xl font-black tracking-[-.07em]">{readiness}</span><span className="pb-2 text-sm text-white/30">%</span></div><div className="mt-4 h-2 overflow-hidden rounded-full bg-white/10"><motion.div initial={{ width: 0 }} animate={{ width: `${readiness}%` }} transition={{ duration: 1 }} className="h-full rounded-full bg-gradient-to-r from-fuchsia-400 to-cyan-300" /></div><p className="mt-4 text-xs leading-5 text-white/40">Matches · competitors · stations · public state · incidents</p></motion.div>
           </section>
-
-          <section className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-            {[['LIVE NOW', liveCount, 'broadcasts'], ['UPCOMING', upcomingCount, 'events'], ['ISSUES', openIncidentCount, 'open incidents'], ['EVENTS', tournaments.length, 'in workspace']].map(([label, value, sub], i) => (
-              <motion.div key={String(label)} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * .05 }} className="rounded-2xl border border-white/10 bg-white/[.025] p-5">
-                <p className="font-mono text-[9px] uppercase tracking-[.22em] text-white/35">{label}</p><p className="mt-3 text-3xl font-black tracking-[-.04em]">{value}</p><p className="mt-1 text-[11px] text-white/35">{sub}</p>
-              </motion.div>
-            ))}
-          </section>
-
+          <section className="grid grid-cols-2 gap-3 lg:grid-cols-4">{[["LIVE NOW", liveCount, "broadcasts"], ["UPCOMING", upcomingCount, "events"], ["ISSUES", openIncidentCount, "open incidents"], ["EVENTS", tournaments.length, "in workspace"]].map(([label, value, sub], i) => <motion.div key={String(label)} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * .05 }} className="rounded-2xl border border-white/10 bg-white/[.025] p-5"><p className="font-mono text-[9px] uppercase tracking-[.22em] text-white/35">{label}</p><p className="mt-3 text-3xl font-black tracking-[-.04em]">{value}</p><p className="mt-1 text-[11px] text-white/35">{sub}</p></motion.div>)}</section>
           <section id="events" className="grid gap-5 xl:grid-cols-[1.25fr_.75fr]">
-            <div className="overflow-hidden rounded-[24px] border border-white/10 bg-white/[.025]">
-              <div className="flex items-center justify-between border-b border-white/10 px-5 py-4"><div><p className="font-mono text-[9px] uppercase tracking-[.22em] text-cyan-300/70">Event radar</p><h2 className="mt-1 text-lg font-bold">Your competitions</h2></div><Link href="/tournaments" className="text-xs text-white/40 hover:text-white">View all →</Link></div>
-              <div className="divide-y divide-white/10">
-                {tournaments.length ? tournaments.map((t) => (
-                  <div key={t.id} className="group flex flex-col gap-4 px-5 py-5 transition hover:bg-white/[.035] sm:flex-row sm:items-center sm:justify-between">
-                    <div className="min-w-0"><div className="flex flex-wrap items-center gap-2"><p className="truncate font-semibold">{t.name}</p><span className="rounded-full border border-white/10 px-2 py-0.5 font-mono text-[8px] uppercase text-white/45">{t.status}</span></div><p className="mt-1 font-mono text-[9px] uppercase tracking-[.13em] text-white/30">{new Date(t.startDate).toLocaleDateString()} · {t.matches} matches · {t.competitors} competitors · {t.stations} stations</p></div>
-                    <div className="flex shrink-0 gap-2"><Link href={`/admin/tournaments/${t.id}`} className="rounded-lg border border-white/10 px-3 py-2 text-xs text-white/65 transition group-hover:border-white/20">Manage</Link><Link href={`/tournaments/${t.slug ?? t.id}`} className="rounded-lg bg-white/10 px-3 py-2 text-xs text-white">Open</Link></div>
-                  </div>
-                )) : <div className="px-5 py-10 text-sm text-white/35">No events yet. Create your first competition to activate the command deck.</div>}
-              </div>
-            </div>
-
-            <div id="operations" className="rounded-[24px] border border-white/10 bg-white/[.025] p-5">
-              <p className="font-mono text-[9px] uppercase tracking-[.22em] text-fuchsia-300/70">Operations rail</p><h2 className="mt-1 text-lg font-bold">Jump into the work</h2>
-              <div className="mt-5 grid gap-2">
-                {[["Tournament ops", "/admin/tournaments"], ["Stations", "/admin/tournaments"], ["Broadcast control", "/admin/tournaments"], ["Teams & players", "/teams"], ["Organization", "/organization/settings"]].map(([label, href]) => <Link key={label} href={href} className="group flex items-center justify-between rounded-xl border border-white/10 bg-black/20 px-4 py-3 text-sm text-white/65 transition hover:border-white/20 hover:bg-white/[.05]"><span>{label}</span><span className="text-white/20 transition group-hover:translate-x-1 group-hover:text-white">→</span></Link>)}
-              </div>
-              {canManageOrganization && <p className="mt-4 border-t border-white/10 pt-4 font-mono text-[8px] uppercase tracking-[.16em] text-white/25">Organization controls enabled</p>}
-            </div>
+            <div className="overflow-hidden rounded-[24px] border border-white/10 bg-white/[.025]"><div className="flex items-center justify-between border-b border-white/10 px-5 py-4"><div><p className="font-mono text-[9px] uppercase tracking-[.22em] text-cyan-300/70">Event radar</p><h2 className="mt-1 text-lg font-bold">Your competitions</h2></div><Link href="/tournaments" className="text-xs text-white/40 hover:text-white">View all →</Link></div><div className="divide-y divide-white/10">{tournaments.length ? tournaments.map((t) => <div key={t.id} className="group flex flex-col gap-4 px-5 py-5 transition hover:bg-white/[.035] sm:flex-row sm:items-center sm:justify-between"><div className="min-w-0"><div className="flex flex-wrap items-center gap-2"><p className="truncate font-semibold">{t.name}</p><span className="rounded-full border border-white/10 px-2 py-0.5 font-mono text-[8px] uppercase text-white/45">{t.status}</span></div><p className="mt-1 font-mono text-[9px] uppercase tracking-[.13em] text-white/30">{new Date(t.startDate).toLocaleDateString()} · {t.matches} matches · {t.competitors} competitors · {t.stations} stations</p></div><div className="flex shrink-0 gap-2"><Link href={`/admin/tournaments/${t.id}`} className="rounded-lg border border-white/10 px-3 py-2 text-xs text-white/65">Manage</Link><Link href={`/tournaments/${t.slug ?? t.id}`} className="rounded-lg bg-white/10 px-3 py-2 text-xs text-white">Open</Link></div></div>) : <div className="px-5 py-10 text-sm text-white/35">No events yet. Create your first competition to activate the command deck.</div>}</div></div>
+            <div id="operations" className="rounded-[24px] border border-white/10 bg-white/[.025] p-5"><p className="font-mono text-[9px] uppercase tracking-[.22em] text-fuchsia-300/70">Operations rail</p><h2 className="mt-1 text-lg font-bold">Jump into the work</h2><div className="mt-5 grid gap-2">{[["Tournament operations", "/organizer"], ["Tournament explorer", "/tournaments"], ["Broadcast control", "/multiview"], ["Teams & players", "/teams"], ...(canManageOrganization ? [["Organization", "/organization/settings"]] : [])].map(([label, href]) => <Link key={label} href={href} className="group flex items-center justify-between rounded-xl border border-white/10 bg-black/20 px-4 py-3 text-sm text-white/65 transition hover:border-white/20 hover:bg-white/[.05]"><span>{label}</span><span className="text-white/20 transition group-hover:translate-x-1 group-hover:text-white">→</span></Link>)}</div><p className="mt-4 border-t border-white/10 pt-4 font-mono text-[8px] uppercase tracking-[.16em] text-white/25">Existing V31 engines remain the source of truth</p></div>
           </section>
-
-          <section id="insights" className="grid gap-5 md:grid-cols-3">
-            {[["01", "Momentum", "Surface live matches, crowd activity and the next broadcast cue without leaving operations."], ["02", "Signal", "Turn incidents and readiness checks into a single visual priority queue for producers."], ["03", "Velocity", "Keep the existing competition engine underneath; V32 makes the workflow faster to scan and act on."]].map(([n, title, copy]) => <div key={n} className="rounded-[22px] border border-white/10 bg-white/[.02] p-6"><span className="font-mono text-[9px] text-white/25">{n}</span><h3 className="mt-8 text-xl font-bold">{title}</h3><p className="mt-2 text-xs leading-5 text-white/35">{copy}</p></div>)}
-          </section>
+          <section id="insights" className="grid gap-5 md:grid-cols-3">{[["01", "Momentum", "Surface live matches, crowd activity and the next broadcast cue without leaving operations."], ["02", "Signal", "Turn incidents and readiness checks into a single visual priority queue for producers."], ["03", "Velocity", "Keep the existing competition engine underneath; V32 makes the workflow faster to scan and act on."]].map(([n, title, copy]) => <div key={n} className="rounded-[22px] border border-white/10 bg-white/[.02] p-6"><span className="font-mono text-[9px] text-white/25">{n}</span><h3 className="mt-8 text-xl font-bold">{title}</h3><p className="mt-2 text-xs leading-5 text-white/35">{copy}</p></div>)}</section>
         </main>
       </div>
     </div>
