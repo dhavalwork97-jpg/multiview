@@ -1,10 +1,7 @@
 import type { Config } from "tailwindcss";
 
-// Design tokens for the "broadcast control room" direction:
-// near-black arena background, red/blue player-corner accents (the
-// universal fighting-game P1/P2 convention), a signal-green LIVE pulse,
-// and a mono face for anything that reads like a scoreboard (scores,
-// station labels, timestamps, bitrate).
+// FGC design system: broadcast-control-room visual language shared by
+// organizer surfaces, viewer experiences, live overlays, and data UI.
 export default {
   content: ["./src/**/*.{ts,tsx}"],
   theme: {
@@ -18,8 +15,8 @@ export default {
           600: "#2A2E3A",
         },
         corner: {
-          p1: "#E8384F", // crimson — player one
-          p2: "#3E8EF7", // electric blue — player two
+          p1: "#E8384F",
+          p2: "#3E8EF7",
         },
         signal: {
           live: "#3ADE7C",
@@ -39,6 +36,17 @@ export default {
       },
       borderRadius: {
         card: "6px",
+        control: "6px",
+        pill: "9999px",
+      },
+      boxShadow: {
+        surface: "0 12px 36px rgba(0,0,0,.16)",
+        elevated: "0 16px 42px rgba(0,0,0,.24)",
+        focus: "0 0 0 3px rgba(58,222,124,.18)",
+      },
+      spacing: {
+        gutter: "var(--ui-content-gutter)",
+        section: "var(--ui-section-gap)",
       },
     },
   },
