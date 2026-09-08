@@ -20,35 +20,10 @@ type BracketMatch = {
   station: { id: string; label: string } | null;
 };
 
-type StructureSlot = {
-  playerOneId: string | null;
-  playerTwoId: string | null;
-  round: string;
-};
-
+type StructureSlot = { playerOneId: string | null; playerTwoId: string | null; round: string };
 type StructureRound = { name: string; matches: StructureSlot[] };
 
-export function InteractiveBracket({
-  bracketId,
-  tournamentId,
-  onWatch,
-  selectedMatchId,
-}: {
-  bracketId: string;
-  // Optional: when present, the bracket re-fetches itself whenever a
-  // match in this tournament updates, so a reported winner visibly
-  // advances into the next round's slot without a page refresh — see
-  // advanceBracket() in src/lib/bracket-progression.ts for the write
-  // side of this.
-  tournamentId?: string;
-  // Viewer-facing bracket pages pass this to keep the click local (opens
-  // the match in the small watch dock instead of navigating away, so
-  // browsing the rest of the bracket doesn't lose your place). Omit it
-  // (as the admin/organizer bracket view does) to keep the original
-  // navigate-straight-to-/watch/:matchId behavior.
-  onWatch?: (match: BracketMatch) => void;
-  selectedMatchId?: string | null;
-}) {
+export function InteractiveBracket({ bracketId, tournamentId, onWatch, selectedMatchId }: { bracketId: string; tournamentId?: string; onWatch?: (match: BracketMatch) => void; selectedMatchId?: string | null }) {
   const router = useRouter();
   const [rounds, setRounds] = useState<StructureRound[]>([]);
   const [matches, setMatches] = useState<BracketMatch[]>([]);
@@ -59,140 +34,86 @@ export function InteractiveBracket({
 
   useEffect(() => {
     let cancelled = false;
-    function load() {
-      return fetch(`/api/brackets/${bracketId}`)
-        .then((r) => r.json())
-        .then((data) => {
-          if (cancelled) return;
-          setRounds(data.bracket.structure);
-          setMatches(data.matches);
-          setLiveMatchByPlayerId(data.liveMatchByPlayerId);
-          setGamertagByPlayerId(data.gamertagByPlayerId ?? {});
-        })
-        .finally(() => !cancelled && setLoading(false));
+    async function load() {
+      try {
+        const response = await fetch(`/api/brackets/${bracketId}`);
+        if (!response.ok) throw new Error("Bracket request failed");
+        const data = await response.json();
+        if (cancelled) return;
+        setRounds(data.bracket.structure ?? []);
+        setMatches(data.matches ?? []);
+        setLiveMatchByPlayerId(data.liveMatchByPlayerId ?? {});
+        setGamertagByPlayerId(data.gamertagByPlayerId ?? {});
+      } catch {
+        if (!cancelled) { setRounds([]); setMatches([]); }
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
     }
-    load();
-
-    // A winner reported on any match in this tournament can advance this
-    // bracket (new Match row instantiated, structure JSON updated) — cheap
-    // enough to just refetch the whole bracket rather than diff the event
-    // payload against local state.
-    if (tournamentId) {
-      socket.on("match:updated", load);
-    }
-
-    // Socket.IO is an enhancement, not the source of truth. In deployments
-    // where the separate socket service is sleeping/unavailable, the bracket
-    // must still reflect a newly-created next-round match. Polling the small
-    // public bracket endpoint keeps the UI correct without requiring a
-    // manual page refresh.
-    const poll = window.setInterval(load, 5000);
-
+    void load();
+    if (tournamentId) socket.on("match:updated", load);
+    const poll = window.setInterval(() => void load(), 5000);
     return () => {
       cancelled = true;
       window.clearInterval(poll);
       if (tournamentId) socket.off("match:updated", load);
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [bracketId, tournamentId, socket]);
 
   if (loading) return <p className="text-sm text-ink-muted">Loading bracket…</p>;
+  if (rounds.length === 0) return <p className="text-sm text-ink-faint">No bracket published yet.</p>;
 
-  // A slot from the static structure may or may not have a real Match row
-  // yet (only slots with two known players get one — see the import
-  // route). Match on player ids + round name to find it.
-  function findMatch(slot: StructureSlot): BracketMatch | undefined {
-    return matches.find(
-      (m) =>
-        m.round === slot.round &&
-        m.playerOneId === slot.playerOneId &&
-        m.playerTwoId === slot.playerTwoId
-    );
+  function findMatch(slot: StructureSlot) {
+    return matches.find((m) => m.round === slot.round && m.playerOneId === slot.playerOneId && m.playerTwoId === slot.playerTwoId);
   }
-
   function openMatch(match: BracketMatch | undefined) {
     if (!match) return;
-    if (onWatch) {
-      onWatch(match);
-    } else {
-      router.push(`/watch/${match.id}`);
-    }
+    if (onWatch) onWatch(match); else router.push(`/watch/${match.id}`);
   }
-
   function openIfLive(playerId: string | null) {
     if (!playerId) return;
-    const liveMatchId = liveMatchByPlayerId[playerId];
-    if (!liveMatchId) return;
-    const match = matches.find((m) => m.id === liveMatchId);
-    openMatch(match);
+    openMatch(matches.find((m) => m.id === liveMatchByPlayerId[playerId]));
   }
 
   return (
-    <div className="flex gap-6 overflow-x-auto pb-4">
-      {rounds.map((round) => (
-        <div key={round.name} className="flex min-w-[220px] flex-col gap-4">
-          <h3 className="font-mono text-xs uppercase tracking-widest text-ink-faint">
-            {round.name}
-          </h3>
-          {round.matches.map((slot, i) => {
-            const match = findMatch(slot);
-            const isLive = match?.status === "LIVE";
-            const isSelected = !!match && match.id === selectedMatchId;
-            const p1Name =
-              match?.playerOne?.gamertag ??
-             (slot.playerOneId
-               ? gamertagByPlayerId[slot.playerOneId] ?? "…"
-               : "TBD");
-
-            const p2Name =
-              match?.playerTwo?.gamertag ??
-             (slot.playerTwoId
-               ? gamertagByPlayerId[slot.playerTwoId] ?? "…"
-               : "TBD");
-
-            return (
-              <div
-                key={`${round.name}-${i}`}
-                className={`rounded-card border bg-arena-800 text-sm transition-colors ${
-                  isSelected ? "border-signal-live" : "border-arena-600"
-                }`}
-              >
-                <button
-                  type="button"
-                  onClick={() => openIfLive(slot.playerOneId)}
-                  disabled={!slot.playerOneId || !liveMatchByPlayerId[slot.playerOneId]}
-                  className="flex w-full items-center justify-between border-b border-arena-700 border-l-2 border-l-corner-p1 px-3 py-2 text-left disabled:cursor-default enabled:hover:bg-arena-700"
-                >
-                  <span className="truncate">{p1Name}</span>
-                  {match && <span className="font-mono text-ink-muted">{match.playerOneScore}</span>}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => openIfLive(slot.playerTwoId)}
-                  disabled={!slot.playerTwoId || !liveMatchByPlayerId[slot.playerTwoId]}
-                  className="flex w-full items-center justify-between border-l-2 border-l-corner-p2 px-3 py-2 text-left disabled:cursor-default enabled:hover:bg-arena-700"
-                >
-                  <span className="truncate">{p2Name}</span>
-                  {match && <span className="font-mono text-ink-muted">{match.playerTwoScore}</span>}
-                </button>
-
-                {match?.station && (
-                  <button
-                    type="button"
-                    onClick={() => openMatch(match)}
-                    className="flex w-full items-center gap-1.5 border-t border-arena-700 px-3 py-1.5 text-xs text-ink-faint hover:text-signal-live"
-                  >
-                    {isLive && (
-                      <span className="h-1.5 w-1.5 rounded-full bg-signal-live animate-live-pulse" />
-                    )}
-                    {match.station.label}
-                  </button>
-                )}
-              </div>
-            );
-          })}
+    <div className="rounded-panel border border-arena-700 bg-arena-950/60 p-3 sm:p-4">
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <p className="font-mono text-[9px] uppercase tracking-[0.2em] text-signal-live">Competition tree</p>
+          <p className="mt-1 text-xs text-ink-faint">Live nodes update automatically. Select any completed or live match for its watch view.</p>
         </div>
-      ))}
+        <div className="flex items-center gap-2 font-mono text-[9px] uppercase tracking-widest text-ink-faint"><span className="h-1.5 w-1.5 rounded-full bg-signal-live animate-live-pulse" /> Live</div>
+      </div>
+      <div className="flex gap-6 overflow-x-auto pb-2">
+        {rounds.map((round) => (
+          <div key={round.name} className="flex min-w-[230px] flex-1 flex-col gap-3">
+            <div className="border-b border-arena-700 pb-2">
+              <h3 className="font-display text-lg uppercase tracking-wide text-ink">{round.name}</h3>
+              <p className="font-mono text-[9px] uppercase tracking-widest text-ink-faint">{round.matches.length} slot{round.matches.length === 1 ? "" : "s"}</p>
+            </div>
+            {round.matches.map((slot, i) => {
+              const match = findMatch(slot);
+              const isLive = match?.status === "LIVE";
+              const isSelected = Boolean(match && match.id === selectedMatchId);
+              const p1Name = match?.playerOne?.gamertag ?? (slot.playerOneId ? gamertagByPlayerId[slot.playerOneId] ?? "…" : "TBD");
+              const p2Name = match?.playerTwo?.gamertag ?? (slot.playerTwoId ? gamertagByPlayerId[slot.playerTwoId] ?? "…" : "TBD");
+              return (
+                <article key={`${round.name}-${i}`} className={`overflow-hidden rounded-card border bg-arena-800 transition-all ${isSelected ? "border-signal-live shadow-signal" : isLive ? "border-signal-live/50" : "border-arena-600"}`}>
+                  <button type="button" onClick={() => openIfLive(slot.playerOneId)} disabled={!liveMatchByPlayerId[slot.playerOneId ?? ""]} className="flex w-full items-center justify-between border-b border-arena-700 border-l-2 border-l-corner-p1 px-3 py-2.5 text-left disabled:cursor-default enabled:hover:bg-arena-700/70">
+                    <span className={`truncate text-sm ${match?.winnerId === match?.playerOneId ? "font-semibold text-ink" : "text-ink-muted"}`}>{p1Name}</span>
+                    {match && <span className="ml-3 font-mono text-sm font-semibold tabular-nums text-ink">{match.playerOneScore}</span>}
+                  </button>
+                  <button type="button" onClick={() => openIfLive(slot.playerTwoId)} disabled={!liveMatchByPlayerId[slot.playerTwoId ?? ""]} className="flex w-full items-center justify-between border-l-2 border-l-corner-p2 px-3 py-2.5 text-left disabled:cursor-default enabled:hover:bg-arena-700/70">
+                    <span className={`truncate text-sm ${match?.winnerId === match?.playerTwoId ? "font-semibold text-ink" : "text-ink-muted"}`}>{p2Name}</span>
+                    {match && <span className="ml-3 font-mono text-sm font-semibold tabular-nums text-ink">{match.playerTwoScore}</span>}
+                  </button>
+                  {match && <button type="button" onClick={() => openMatch(match)} className="flex w-full items-center justify-between border-t border-arena-700 px-3 py-2 text-left font-mono text-[10px] uppercase tracking-widest text-ink-faint hover:bg-arena-700/70 hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-live focus-visible:ring-inset"><span className="flex items-center gap-2">{isLive && <span className="h-1.5 w-1.5 rounded-full bg-signal-live animate-live-pulse" />}{isLive ? "On air" : match.status === "COMPLETED" ? "Final · Match view" : "Match view"}</span><span>{match.station?.label ?? "Open →"}</span></button>}
+                </article>
+              );
+            })}
+          </div>
+        ))}
+      </div>
     </div>
   );
 }

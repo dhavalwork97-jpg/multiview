@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 
 type Props = { matchId?: string; tournamentId: string; playerOne?: { id: string; gamertag: string } | null; playerTwo?: { id: string; gamertag: string } | null; mvpCandidates?: { id: string; gamertag: string }[] };
 type Data = { prediction: { playerId:string; confidence:number; points:number }|null; polls:{id:string;question:string;options:string[];counts:number[];votedIndex:number|null}[]; leaderboard:{username:string;points:number}[]; mvp:{playerId:string;gamertag:string;votes:number}[]; pickem:{picks:Record<string,string>;points:number}|null; pickemMatches:{id:string;round:string|null;playerOneId:string;playerOne:string;playerTwoId:string;playerTwo:string;status:string}[]; viewer:{id:string;username:string}|null };
@@ -8,8 +8,8 @@ type Data = { prediction: { playerId:string; confidence:number; points:number }|
 export function CommunityEngagementPanel({ matchId, tournamentId, playerOne, playerTwo, mvpCandidates = [] }: Props) {
   const [data,setData]=useState<Data>({prediction:null,polls:[],leaderboard:[],mvp:[],pickem:null,pickemMatches:[],viewer:null});
   const [busy,setBusy]=useState(false); const [message,setMessage]=useState(""); const [confidence,setConfidence]=useState(70); const [picks,setPicks]=useState<Record<string,string>>({});
-  async function load(){const qs=new URLSearchParams({tournamentId});if(matchId)qs.set("matchId",matchId);const res=await fetch(`/api/community/engagement?${qs.toString()}`,{cache:"no-store"});if(res.ok){const next=await res.json() as Data;setData(next);if(next.pickem?.picks)setPicks(next.pickem.picks);if(next.prediction)setConfidence(next.prediction.confidence);}}
-  useEffect(()=>{void load();},[matchId,tournamentId]);
+  const load = useCallback(async () => { const qs=new URLSearchParams({tournamentId}); if(matchId)qs.set("matchId",matchId); const res=await fetch(`/api/community/engagement?${qs.toString()}`,{cache:"no-store"}); if(res.ok){const next=await res.json() as Data;setData(next);if(next.pickem?.picks)setPicks(next.pickem.picks);if(next.prediction)setConfidence(next.prediction.confidence);} },[matchId,tournamentId]);
+  useEffect(()=>{void load();},[load]);
   async function act(body:Record<string,unknown>){setBusy(true);setMessage("");try{const res=await fetch("/api/community/engagement",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)});const json=await res.json().catch(()=>({}));if(!res.ok)throw new Error(json.error||"Action failed");setMessage("Saved");await load();}catch(e){setMessage(e instanceof Error?e.message:"Action failed");}finally{setBusy(false);}}
   const predictionOptions=useMemo(()=>[playerOne,playerTwo].filter(Boolean) as {id:string;gamertag:string}[],[playerOne,playerTwo]);
   const mvpOptions=mvpCandidates.length?mvpCandidates.map(x=>({id:x.id,name:x.gamertag})):data.mvp.map(x=>({id:x.playerId,name:x.gamertag}));

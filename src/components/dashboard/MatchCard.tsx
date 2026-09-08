@@ -14,66 +14,51 @@ export type MatchCardData = {
   station: { id: string; label: string } | null;
 };
 
+const statusCopy: Record<MatchCardData["status"], string> = {
+  LIVE: "ON AIR",
+  QUEUED: "UP NEXT",
+  COMPLETED: "FINAL",
+  DISPUTED: "REVIEW",
+};
+
 export function MatchCard({ match }: { match: MatchCardData }) {
   const isHype = (match.hypeScore ?? 0) >= 70;
+  const isLive = match.status === "LIVE";
 
   return (
     <Link
       href={`/watch/${match.id}`}
-      className="group relative flex flex-col overflow-hidden rounded-card bg-arena-800 bezel-cut ring-1 ring-arena-600 transition hover:ring-ink-faint"
+      className="group relative flex min-w-0 flex-col overflow-hidden rounded-[16px] border border-arena-600 bg-arena-900 shadow-panel transition duration-200 hover:-translate-y-1 hover:border-signal-live/50 hover:shadow-elevated focus-visible:outline-none"
     >
-      {/* station label + live indicator */}
-      <div className="flex items-center justify-between px-3 py-2 text-xs font-mono text-ink-muted">
-        <span>{match.station?.label ?? "Unassigned"}</span>
-        {match.status === "LIVE" && (
-          <span className="flex items-center gap-1.5 text-signal-live">
-            <span className="h-1.5 w-1.5 rounded-full bg-signal-live animate-live-pulse" />
-            LIVE
-          </span>
+      <div className="relative aspect-video overflow-hidden bg-arena-950">
+        {isLive ? (
+          <YouTubePlayer
+            stationId={match.station?.id ?? ""}
+            videoId={match.youtubeVideoId ?? null}
+            isLive
+            muted
+          />
+        ) : (
+          <div className="absolute inset-0 flex items-center justify-center bg-[radial-gradient(circle_at_50%_20%,rgba(108,99,255,.16),transparent_45%),linear-gradient(135deg,#101119,#08080c)]">
+            <div className="text-center"><div className="font-display text-4xl uppercase tracking-wide text-ink/80">{statusCopy[match.status]}</div><p className="mt-1 font-mono text-[9px] uppercase tracking-[.18em] text-ink-faint">{match.status === "QUEUED" ? "Waiting for broadcast" : "Broadcast unavailable"}</p></div>
+          </div>
         )}
+        <div className="pointer-events-none absolute inset-x-0 top-0 z-10 flex items-center justify-between bg-gradient-to-b from-black/80 to-transparent px-3 pb-7 pt-3">
+          <span className="font-mono text-[9px] font-bold uppercase tracking-[.16em] text-white/75">{match.station?.label ?? "STATION UNASSIGNED"}</span>
+          <span className={isLive ? "status-live" : "status-neutral"}>{isLive && <span className="live-dot animate-live-pulse" aria-hidden="true" />}{statusCopy[match.status]}</span>
+        </div>
+        {isHype && <span className="absolute bottom-2 left-2 z-10 rounded-full border border-signal-warn/40 bg-arena-950/85 px-2 py-1 font-mono text-[9px] font-bold uppercase tracking-[.14em] text-signal-warn backdrop-blur">High hype</span>}
       </div>
 
-      {match.status === "LIVE" ? (
-        <YouTubePlayer
-          stationId={match.station?.id ?? ""}
-          videoId={match.youtubeVideoId ?? null}
-          isLive
-          muted
-        />
-      ) : (
-        <div className="flex aspect-video w-full items-center justify-center bg-arena-900 text-xs font-mono uppercase tracking-wide text-ink-faint">
-          {match.status === "QUEUED" ? "Waiting for stream" : "Stream ended"}
-        </div>
-      )}
+      <div className="border-b border-arena-700 bg-arena-950/45 px-4 py-2.5"><div className="flex items-center justify-between gap-3"><span className="font-mono text-[9px] font-bold uppercase tracking-[.16em] text-ink-faint">{match.round ?? "Match"}</span><span className="font-mono text-[9px] uppercase tracking-[.12em] text-ink-faint">Match {match.id.slice(0, 6).toUpperCase()}</span></div></div>
 
-      {/* player row */}
-      <div className="flex items-stretch text-sm">
-        <div className="flex flex-1 items-center gap-2 border-l-2 border-corner-p1 px-3 py-2">
-          <span className="truncate font-display text-base uppercase tracking-wide">
-  {match.playerOne?.gamertag ?? "TBD"}
-</span>
-        </div>
-        <div className="flex items-center px-2 font-mono text-base text-ink">
-          {match.playerOneScore}–{match.playerTwoScore}
-        </div>
-        <div className="flex flex-1 items-center justify-end gap-2 border-r-2 border-corner-p2 px-3 py-2">
-          <span className="truncate font-display text-base uppercase tracking-wide">
-  {match.playerTwo?.gamertag ?? "TBD"}
-</span>
-        </div>
+      <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-3 px-4 py-4 sm:px-5">
+        <div className="min-w-0"><p className="truncate font-display text-xl uppercase tracking-wide text-ink">{match.playerOne?.gamertag ?? "TBD"}</p><p className="mt-1 font-mono text-[9px] uppercase tracking-[.12em] text-corner-p1">Side A</p></div>
+        <div className="text-center"><div className="font-mono text-2xl font-bold tabular-nums tracking-[-.04em] text-ink">{match.playerOneScore}<span className="px-1 text-ink-faint">:</span>{match.playerTwoScore}</div><span className="font-mono text-[8px] uppercase tracking-[.16em] text-ink-faint">score</span></div>
+        <div className="min-w-0 text-right"><p className="truncate font-display text-xl uppercase tracking-wide text-ink">{match.playerTwo?.gamertag ?? "TBD"}</p><p className="mt-1 font-mono text-[9px] uppercase tracking-[.12em] text-corner-p2">Side B</p></div>
       </div>
 
-      {match.round && (
-        <div className="border-t border-arena-600 px-3 py-1.5 text-xs text-ink-faint">
-          {match.round}
-        </div>
-      )}
-
-      {isHype && (
-        <div className="absolute right-2 top-9 rounded bg-signal-warn/90 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-arena-950">
-          Hype
-        </div>
-      )}
+      <div className="flex items-center justify-between border-t border-arena-700 px-4 py-2.5 sm:px-5"><span className="font-mono text-[9px] uppercase tracking-[.14em] text-ink-faint">{isLive ? "Watch live" : "Open match center"}</span><span className="font-mono text-[10px] font-bold text-ink transition group-hover:text-signal-live">→</span></div>
     </Link>
   );
 }

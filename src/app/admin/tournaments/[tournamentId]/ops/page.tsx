@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 import Link from "next/link";
-import { getCurrentUser } from "@/lib/auth";
+import { getTournamentAccess } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { StationOpsDashboard } from "@/components/admin/StationOpsDashboard";
 
@@ -10,10 +10,13 @@ export default async function TournamentOpsPage({
   params: Promise<{ tournamentId: string }>;
 }) {
   const { tournamentId } = await params;
-  const user = await getCurrentUser();
-  if (!user || (user.role !== "ORGANIZER" && user.role !== "ADMIN")) {
+  let access;
+  try {
+    access = await getTournamentAccess(tournamentId);
+  } catch {
     redirect("/dashboard");
   }
+  if (!access.isPlatformAdmin && access.role === "VIEWER") redirect("/dashboard");
 
   const tournament = await db.tournament.findUnique({
     where: { id: tournamentId },
@@ -22,24 +25,21 @@ export default async function TournamentOpsPage({
   if (!tournament) redirect("/dashboard");
 
   return (
-    <main className="min-h-screen bg-arena-950 px-6 py-8">
-      <header className="mb-8 flex items-start justify-between">
-        <div>
-          <p className="font-mono text-xs uppercase tracking-widest text-ink-faint">
-            {tournament.game}
-          </p>
-          <h1 className="font-display text-3xl uppercase tracking-wide">{tournament.name}</h1>
-          <p className="mt-1 text-sm text-ink-muted">Live ops</p>
-        </div>
-        <Link
-          href={`/admin/tournaments/${tournament.id}`}
-          className="rounded-card border border-arena-600 px-3 py-1.5 font-mono text-xs uppercase tracking-wide text-ink-faint transition-colors hover:border-signal-live hover:text-signal-live"
-        >
-          Back to admin
-        </Link>
-      </header>
-
-      <StationOpsDashboard tournamentId={tournament.id} />
+    <main className="min-h-screen bg-arena-950 px-4 py-6 sm:px-6 sm:py-8">
+      <div className="mx-auto max-w-7xl">
+        <header className="mb-8 flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+          <div>
+            <p className="font-mono text-[10px] uppercase tracking-[0.24em] text-ink-faint">{tournament.game} · station operations</p>
+            <h1 className="mt-1 font-display text-3xl uppercase tracking-wide">{tournament.name}</h1>
+            <p className="mt-1 text-sm text-ink-muted">Live station health, encoder telemetry and queue readiness.</p>
+          </div>
+          <div className="flex gap-2">
+            <Link href={`/admin/tournaments/${tournament.id}`} className="action-secondary">Back to admin</Link>
+            <Link href={`/admin/tournaments/${tournament.id}/control-room`} className="action-secondary">Control room</Link>
+          </div>
+        </header>
+        <StationOpsDashboard tournamentId={tournament.id} />
+      </div>
     </main>
   );
 }
