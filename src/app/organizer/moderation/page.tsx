@@ -25,6 +25,7 @@ export default async function OrganizerModerationPage() {
           id: true,
           tournamentId: true,
           title: true,
+          details: true,
           severity: true,
           status: true,
           createdAt: true,
@@ -76,6 +77,7 @@ export default async function OrganizerModerationPage() {
                       <span className="metric-label">{incident.tournament.name}</span>
                     </div>
                     <h2 className="mt-2 font-semibold text-ink">{incident.title}</h2>
+                    {incident.details && <p className="mt-2 max-w-3xl text-sm leading-6 text-ink-muted">{incident.details}</p>}
                     <div className="mt-3 flex flex-wrap gap-4 font-mono text-[9px] uppercase tracking-widest text-ink-faint">
                       <time dateTime={new Date(incident.createdAt).toISOString()}>Opened {new Date(incident.createdAt).toLocaleString()}</time>
                       {incident.resolvedAt && <time dateTime={new Date(incident.resolvedAt).toISOString()}>Resolved {new Date(incident.resolvedAt).toLocaleString()}</time>}
