@@ -1,31 +1,7 @@
-import { clerkMiddleware, createRouteMatcher } from "@clerk/nextjs/server";
+import { clerkMiddleware } from "@clerk/nextjs/server";
 import { NextResponse } from "next/server";
 
-const isPublicRoute = createRouteMatcher([
-  "/",
-  "/sign-in(.*)",
-  "/sign-up(.*)",
-  "/pricing(.*)",
-  "/community(.*)",
-  "/community-guidelines(.*)",
-  "/terms(.*)",
-  "/privacy(.*)",
-  "/copyright(.*)",
-  "/refunds(.*)",
-  "/tournaments(.*)",
-  "/teams(.*)",
-  "/players(.*)",
-  "/live(.*)",
-  "/matches(.*)",
-  "/watch(.*)",
-  "/multiview(.*)",
-  "/api/matches",
-  "/api/webhooks/clerk(.*)",
-  "/api/health",
-  "/api/ready",
-]);
-
-export default clerkMiddleware(async (auth, req) => {
+export default clerkMiddleware(async (_auth, req) => {
   const pathname = req.nextUrl.pathname;
 
   // Keep Clerk middleware active for static/404 requests. The root layout
@@ -39,10 +15,10 @@ export default clerkMiddleware(async (auth, req) => {
     return new NextResponse(null, { status: 404 });
   }
 
-  if (!isPublicRoute(req)) {
-    await auth.protect();
-  }
-
+  // Authentication and authorization are enforced at the resource boundary
+  // (pages, route handlers, and server functions). Keeping middleware focused
+  // on attaching Clerk context avoids turning protected App Router pages into
+  // opaque 404s while preserving the same server-side access checks.
   return NextResponse.next();
 });
 
