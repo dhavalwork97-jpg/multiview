@@ -12,7 +12,7 @@ export const options = {
 const base = (__ENV.BASE_URL || 'http://localhost:3000').replace(/\/$/, '');
 const tournamentId = __ENV.TOURNAMENT_ID;
 
-export default function () {
+function publicEventLoad() {
   if (!tournamentId) throw new Error('Set TOURNAMENT_ID');
   const responses = [
     http.get(`${base}/api/tournaments/${tournamentId}`),
@@ -24,3 +24,5 @@ export default function () {
   }
   sleep(1);
 }
+
+export default publicEventLoad;
