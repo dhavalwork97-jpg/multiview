@@ -74,7 +74,7 @@ export function StationOpsDashboard({ tournamentId }: { tournamentId: string }) 
         <FilterPill label="All" count={stations.length} active={filter === "ALL"} onClick={() => setFilter("ALL")} />
         <FilterPill label="Live" count={counts.LIVE} active={filter === "LIVE"} onClick={() => setFilter("LIVE")} />
         <FilterPill label="Ready" count={counts.READY} active={filter === "READY"} onClick={() => setFilter("READY")} />
-        <FilterPill label="Alerts" count={counts.ALERT} active={filter === "ALERT"} error />
+        <FilterPill label="Alerts" count={counts.ALERT} active={filter === "ALERT"} error onClick={() => setFilter("ALERT")} />
         {filter === "ALERT" && <button type="button" className="sr-only" onClick={() => setFilter("ALL")}>Clear station filter</button>}
         {lastRefreshed && <span className="ml-auto font-mono text-[10px] uppercase tracking-wide text-ink-faint">Updated {lastRefreshed.toLocaleTimeString()}</span>}
       </div>
