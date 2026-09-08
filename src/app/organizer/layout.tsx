@@ -8,6 +8,7 @@ export const dynamic = "force-dynamic";
 const baseNavigation = [
   ["/organizer", "Overview"],
   ["/organizer/schedule", "Schedule radar"],
+  ["/organizer/notifications", "Signal inbox"],
   ["/admin/tournaments/new", "Create tournament"],
   ["/tournaments", "Tournaments"],
   ["/teams", "Teams"],
