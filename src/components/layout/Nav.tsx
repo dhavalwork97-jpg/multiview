@@ -10,11 +10,7 @@ export async function Nav() {
   return (
     <header className="sticky top-0 z-50 border-b border-arena-700/80 bg-arena-950/90 shadow-[0_12px_48px_rgba(0,0,0,.34)] backdrop-blur-2xl">
       <div className="mx-auto flex min-h-[4.5rem] max-w-[1680px] items-center gap-2 px-3 sm:gap-3 sm:px-5 lg:px-7">
-        <Link
-          href="/"
-          aria-label="FGC Stream home"
-          className="group shrink-0 rounded-[10px] px-1 py-2 outline-none focus-visible:ring-2 focus-visible:ring-signal-live/60"
-        >
+        <Link href="/" aria-label="FGC Stream home" className="group shrink-0 rounded-[10px] px-1 py-2 outline-none focus-visible:ring-2 focus-visible:ring-signal-live/60">
           <span className="block font-mono text-[8px] font-bold uppercase tracking-[.24em] text-ink-faint">Competitive network</span>
           <span className="block font-display text-[25px] font-semibold uppercase leading-none tracking-[.07em] text-ink">
             FGC<span className="text-signal-live transition-opacity group-hover:opacity-80">Stream</span>
@@ -29,7 +25,15 @@ export async function Nav() {
 
         <div className="hidden shrink-0 items-center gap-2 md:flex">
           <Link href="/pricing" className="action-ghost min-h-10">Plans</Link>
-          {user && <Link href="/dashboard" className="action-secondary min-h-10">Dashboard</Link>}
+          {user && (
+            <Link
+              href="/dashboard"
+              className="action-secondary min-h-10 border-signal-live/30 bg-signal-live/[.06] text-ink"
+              aria-label="Open organizer control room"
+            >
+              Control Room
+            </Link>
+          )}
           {canManage && <Link href="/admin/tournaments/new" className="action-primary min-h-10">Create tournament</Link>}
         </div>
 
