@@ -1,24 +1,40 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
-// cdn.ts reads its env var at module load time, so each test that needs
-// a different env state re-imports the module fresh after stubbing —
-// otherwise every test after the first would see whatever the first
-// test's env happened to be.
 describe("cdnUrl", () => {
   beforeEach(() => {
     vi.resetModules();
   });
 
-  it("builds an https CloudFront URL from an S3 key", async () => {
-    vi.stubEnv("NEXT_PUBLIC_CLOUDFRONT_DOMAIN", "d123.cloudfront.net");
+  it("builds a public Supabase Storage URL from a storage key", async () => {
+    vi.stubEnv("NEXT_PUBLIC_SUPABASE_STORAGE_URL", "https://project.supabase.co/storage/v1");
+    vi.stubEnv("NEXT_PUBLIC_SUPABASE_BUCKET", "media");
     const { cdnUrl } = await import("@/lib/cdn");
     expect(cdnUrl("recordings/station-1/match-1/index.m3u8")).toBe(
-      "https://d123.cloudfront.net/recordings/station-1/match-1/index.m3u8"
+      "https://project.supabase.co/storage/v1/object/public/media/recordings/station-1/match-1/index.m3u8"
     );
   });
 
-  it("throws rather than silently returning a broken URL when unconfigured", async () => {
-    vi.stubEnv("NEXT_PUBLIC_CLOUDFRONT_DOMAIN", "");
+  it("accepts a Supabase project URL as the base", async () => {
+    vi.stubEnv("NEXT_PUBLIC_SUPABASE_STORAGE_URL", "https://project.supabase.co");
+    vi.stubEnv("NEXT_PUBLIC_SUPABASE_BUCKET", "media");
+    const { cdnUrl } = await import("@/lib/cdn");
+    expect(cdnUrl("clips/match-1/clip-1.mp4")).toBe(
+      "https://project.supabase.co/storage/v1/object/public/media/clips/match-1/clip-1.mp4"
+    );
+  });
+
+  it("encodes bucket and storage-key path segments", async () => {
+    vi.stubEnv("NEXT_PUBLIC_SUPABASE_STORAGE_URL", "https://project.supabase.co");
+    vi.stubEnv("NEXT_PUBLIC_SUPABASE_BUCKET", "media files");
+    const { cdnUrl } = await import("@/lib/cdn");
+    expect(cdnUrl("clips/match 1/clip #1.mp4")).toBe(
+      "https://project.supabase.co/storage/v1/object/public/media%20files/clips/match%201/clip%20%231.mp4"
+    );
+  });
+
+  it("throws when Supabase Storage is unconfigured", async () => {
+    vi.stubEnv("NEXT_PUBLIC_SUPABASE_STORAGE_URL", "");
+    vi.stubEnv("NEXT_PUBLIC_SUPABASE_BUCKET", "");
     const { cdnUrl } = await import("@/lib/cdn");
     expect(() => cdnUrl("clips/match-1/clip-1.mp4")).toThrow();
   });

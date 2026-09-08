@@ -9,11 +9,13 @@ export function HlsPlayer({
   muted = false,
   autoPlay = true,
   className = "",
+  isLive = true,
 }: {
   src: string;
   muted?: boolean;
   autoPlay?: boolean;
   className?: string;
+  isLive?: boolean;
 }) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const hlsRef = useRef<Hls | null>(null);
@@ -68,7 +70,15 @@ export function HlsPlayer({
       video.src = src;
       if (autoPlay) void video.play().catch(() => undefined);
     } else if (Hls.isSupported()) {
-      hls = new Hls({ enableWorker: true, lowLatencyMode: true, backBufferLength: 30, maxBufferLength: 30, manifestLoadingMaxRetry: 3, levelLoadingMaxRetry: 3, fragLoadingMaxRetry: 3 });
+      hls = new Hls({
+        enableWorker: true,
+        lowLatencyMode: isLive,
+        backBufferLength: 30,
+        maxBufferLength: 30,
+        manifestLoadingMaxRetry: 3,
+        levelLoadingMaxRetry: 3,
+        fragLoadingMaxRetry: 3,
+      });
       hlsRef.current = hls;
       hls.loadSource(src);
       hls.attachMedia(video);
@@ -79,15 +89,23 @@ export function HlsPlayer({
       hls.on(Hls.Events.ERROR, (_event, data) => {
         if (disposed || !data.fatal) return;
         if (data.type === Hls.ErrorTypes.NETWORK_ERROR) scheduleRecovery();
-        else if (data.type === Hls.ErrorTypes.MEDIA_ERROR) { retryCountRef.current = 0; hls?.recoverMediaError(); }
-        else scheduleRecovery();
+        else if (data.type === Hls.ErrorTypes.MEDIA_ERROR) {
+          retryCountRef.current = 0;
+          hls?.recoverMediaError();
+        } else scheduleRecovery();
       });
     } else setError(true);
 
-    const onPlaying = () => { retryCountRef.current = 0; setPlaying(true); setError(false); };
+    const onPlaying = () => {
+      retryCountRef.current = 0;
+      setPlaying(true);
+      setError(false);
+    };
     const onWaiting = () => setPlaying(false);
     const onVideoError = () => setError(true);
-    const onVisibilityChange = () => { if (document.visibilityState === "visible" && hlsRef.current) hlsRef.current.startLoad(); };
+    const onVisibilityChange = () => {
+      if (document.visibilityState === "visible" && hlsRef.current) hlsRef.current.startLoad();
+    };
     video.addEventListener("playing", onPlaying);
     video.addEventListener("waiting", onWaiting);
     video.addEventListener("error", onVideoError);
@@ -106,13 +124,22 @@ export function HlsPlayer({
       video.removeAttribute("src");
       video.load();
     };
-  }, [autoPlay, src]);
+  }, [autoPlay, isLive, src]);
 
   return (
     <div className={`relative aspect-video w-full overflow-hidden rounded-card bg-arena-900 ${className}`}>
       <video ref={videoRef} autoPlay={autoPlay} muted={muted} playsInline controls className="h-full w-full object-contain" onError={() => setError(true)} />
-      {!playing && !error && autoPlay && <button type="button" onClick={() => void videoRef.current?.play().catch(() => undefined)} className="absolute inset-x-3 bottom-3 rounded bg-arena-950/85 px-3 py-2 text-xs text-ink-muted backdrop-blur">Tap to resume live playback</button>}
-      {error && <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-arena-950/90 px-4 text-center text-xs text-ink-muted"><span>Live stream playback is temporarily unavailable.</span><button type="button" onClick={retry} className="rounded border border-ink-faint/30 px-3 py-1.5 text-ink hover:bg-arena-800">Retry stream</button></div>}
+      {!playing && !error && autoPlay && (
+        <button type="button" onClick={() => void videoRef.current?.play().catch(() => undefined)} className="absolute inset-x-3 bottom-3 rounded bg-arena-950/85 px-3 py-2 text-xs text-ink-muted backdrop-blur">
+          Tap to resume {isLive ? "live playback" : "playback"}
+        </button>
+      )}
+      {error && (
+        <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-arena-950/90 px-4 text-center text-xs text-ink-muted">
+          <span>{isLive ? "Live stream playback is temporarily unavailable." : "Match playback is temporarily unavailable."}</span>
+          <button type="button" onClick={retry} className="rounded border border-ink-faint/30 px-3 py-1.5 text-ink hover:bg-arena-800">Retry playback</button>
+        </div>
+      )}
     </div>
   );
 }

@@ -15,4 +15,4 @@ COPY package.json tsconfig.json ./
 COPY src/server ./src/server
 COPY src/lib ./src/lib
 
-CMD ["npx", "tsx", "src/server/ai/hype-worker.ts"]
+CMD ["npx", "tsx", "src/server/streaming/clip-worker.ts"]
