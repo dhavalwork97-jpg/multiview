@@ -2,7 +2,7 @@
 # This is intentionally a separate image from the Next.js app: the two
 # scale on different axes (stateless request/response vs. long-lived
 # connections) and deploy to different platforms (Vercel vs. Fly.io here).
-FROM node:20-slim AS base
+FROM node:26-slim AS base
 WORKDIR /app
 
 FROM base AS deps
