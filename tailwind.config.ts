@@ -1,25 +1,23 @@
 import type { Config } from "tailwindcss";
 
-// Design tokens for the "broadcast control room" direction:
-// near-black arena background, red/blue player-corner accents (the
-// universal fighting-game P1/P2 convention), a signal-green LIVE pulse,
-// and a mono face for anything that reads like a scoreboard (scores,
-// station labels, timestamps, bitrate).
+// FGC Design System 2.0 tokens. Keep semantic names stable so product surfaces
+// can evolve without coupling UI decisions to individual pages.
 export default {
   content: ["./src/**/*.{ts,tsx}"],
   theme: {
     extend: {
       colors: {
         arena: {
-          950: "#0A0B0F",
+          950: "#08090C",
           900: "#101218",
-          800: "#14161C",
-          700: "#1D2029",
-          600: "#2A2E3A",
+          800: "#151821",
+          700: "#1E222D",
+          600: "#2A2F3B",
+          500: "#39404D",
         },
         corner: {
-          p1: "#E8384F", // crimson — player one
-          p2: "#3E8EF7", // electric blue — player two
+          p1: "#E8384F",
+          p2: "#3E8EF7",
         },
         signal: {
           live: "#3ADE7C",
@@ -28,8 +26,8 @@ export default {
         },
         ink: {
           DEFAULT: "#F2F1ED",
-          muted: "#9CA0AE",
-          faint: "#5B5F6E",
+          muted: "#A4A8B5",
+          faint: "#626776",
         },
       },
       fontFamily: {
@@ -38,7 +36,18 @@ export default {
         mono: ["var(--font-mono)", "monospace"],
       },
       borderRadius: {
-        card: "6px",
+        card: "10px",
+        panel: "16px",
+        shell: "24px",
+      },
+      boxShadow: {
+        panel: "0 16px 48px rgba(0,0,0,.20)",
+        elevated: "0 24px 70px rgba(0,0,0,.30)",
+        signal: "0 0 42px rgba(58,222,124,.08)",
+      },
+      backgroundImage: {
+        "arena-radial": "radial-gradient(circle at 50% -20%, rgba(62,142,247,.08), transparent 36rem)",
+        "signal-radial": "radial-gradient(circle at 90% 0%, rgba(58,222,124,.06), transparent 30rem)",
       },
     },
   },
