@@ -25,7 +25,7 @@ export default function TournamentOperationsPage() {
   const steps = buildEventSetupChecklist();
 
   const refresh = useCallback(async () => {
-    if (!tournamentId || refreshing) return;
+    if (!tournamentId) return;
     setRefreshing(true);
     setError(null);
     try {
@@ -45,7 +45,7 @@ export default function TournamentOperationsPage() {
     } finally {
       setRefreshing(false);
     }
-  }, [tournamentId, refreshing]);
+  }, [tournamentId]);
   useEffect(() => { void refresh(); }, [refresh]);
 
   async function reconcile() {
