@@ -1,11 +1,17 @@
 import Link from "next/link";
 import { SignedIn, SignedOut, SignInButton, UserButton } from "@clerk/nextjs";
 import { getCurrentUser } from "@/lib/auth";
+import { getPrimaryOrganizationMembership } from "@/lib/organization";
 import { NavLinks } from "./NavLinks";
 
 export async function Nav() {
   const user = await getCurrentUser();
-  const canManage = user?.role === "ADMIN" || user?.role === "ORGANIZER";
+  const membership = user ? await getPrimaryOrganizationMembership(user.id) : null;
+  const canManage =
+    user?.role === "ADMIN" ||
+    user?.role === "ORGANIZER" ||
+    membership?.role === "OWNER" ||
+    membership?.role === "ADMIN";
 
   return (
     <header className="sticky top-0 z-50 border-b border-arena-700/80 bg-arena-950/90 shadow-[0_12px_48px_rgba(0,0,0,.34)] backdrop-blur-2xl">
