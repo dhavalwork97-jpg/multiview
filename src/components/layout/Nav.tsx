@@ -20,14 +20,14 @@ export async function Nav() {
         <div className="hidden h-8 w-px shrink-0 bg-arena-700 sm:block" aria-hidden="true" />
 
         <div className="min-w-0 flex-1 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-          <NavLinks showDashboard={Boolean(user)} showAdmin={canManage} />
+          <NavLinks showDashboard={canManage} showAdmin={canManage} />
         </div>
 
         <div className="hidden shrink-0 items-center gap-2 md:flex">
           <Link href="/pricing" className="action-ghost min-h-10">Plans</Link>
-          {user && (
+          {canManage && (
             <Link
-              href="/dashboard"
+              href="/organizer"
               className="action-secondary min-h-10 border-signal-live/30 bg-signal-live/[.06] text-ink"
               aria-label="Open organizer control room"
             >
