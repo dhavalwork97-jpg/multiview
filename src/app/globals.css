@@ -31,9 +31,6 @@
   --ui-shadow-md: 0 22px 70px rgba(0,0,0,.38);
   --ui-grid-size: 56px;
 }
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
 html { background: var(--fgc-bg); color-scheme: dark; scroll-behavior: smooth; }
 body { @apply text-ink antialiased; min-width:320px; overflow-x:hidden; background: var(--fgc-bg); background-image: radial-gradient(circle at 12% -5%, rgba(111,60,255,.18), transparent 32rem), radial-gradient(circle at 88% 8%, rgba(32,217,255,.07), transparent 30rem), linear-gradient(rgba(255,255,255,.012) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,.012) 1px, transparent 1px); background-size:auto,auto,var(--ui-grid-size) var(--ui-grid-size),var(--ui-grid-size) var(--ui-grid-size); background-attachment:fixed; }
 button,a,input,select,textarea { -webkit-tap-highlight-color: transparent; } button:disabled { cursor:not-allowed; } a { text-underline-offset:3px; } ::selection { background:rgba(111,60,255,.34); color:#fff; } :focus-visible { outline:none; box-shadow:var(--ui-focus-ring); }
