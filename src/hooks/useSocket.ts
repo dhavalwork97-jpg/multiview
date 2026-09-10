@@ -11,18 +11,16 @@ function resolveSocketUrl() {
     return configuredSocketUrl || "http://localhost:4000";
   }
 
-  // The browser must connect to the dedicated public Socket.IO service.
-  // Never let a tournament route, station LAN IP, or the Next.js web service
-  // become the Socket.IO origin. Those values produce URLs such as
-  // /admin/tournaments/<id>/192.168.x.x and cannot work from a public site.
-  if (!configuredSocketUrl) {
-    console.error(
-      "[socket] NEXT_PUBLIC_SOCKET_URL is not set in production; using the " +
-        DEFAULT_PRODUCTION_SOCKET_URL
-    );
+  // Production always has a safe canonical Socket.IO origin. Treat the
+  // documentation placeholder and empty value as "not configured" rather
+  // than allowing them to produce noisy console warnings or malformed URLs.
+  if (!configuredSocketUrl || configuredSocketUrl.includes("<actual-fgc-stream-socket>")) {
     return DEFAULT_PRODUCTION_SOCKET_URL;
   }
 
+  // Never let a tournament route, station LAN IP, or the Next.js web service
+  // become the Socket.IO origin. Those values produce URLs such as
+  // /admin/tournaments/<id>/192.168.x.x and cannot work from a public site.
   try {
     const url = new URL(configuredSocketUrl);
     const hostname = url.hostname.toLowerCase();
@@ -36,19 +34,11 @@ function resolveSocketUrl() {
     const hasAppRoute = url.pathname !== "/" && url.pathname !== "";
 
     if (isPrivateLanHost || hasAppRoute) {
-      console.warn(
-        "[socket] Ignoring an invalid production NEXT_PUBLIC_SOCKET_URL:",
-        configuredSocketUrl
-      );
       return DEFAULT_PRODUCTION_SOCKET_URL;
     }
 
     return url.origin;
   } catch {
-    console.warn(
-      "[socket] Ignoring an invalid production NEXT_PUBLIC_SOCKET_URL:",
-      configuredSocketUrl
-    );
     return DEFAULT_PRODUCTION_SOCKET_URL;
   }
 }
