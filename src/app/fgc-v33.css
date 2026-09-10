@@ -1,0 +1,90 @@
+/* FGC V33 — pixel-fidelity refinement layer.
+ * Kept separate from the V32 foundation so the visual contract can be tuned
+ * without destabilising product primitives.
+ */
+:root {
+  --fgc-v33-header: 68px;
+  --fgc-v33-gutter: clamp(16px, 3vw, 48px);
+  --fgc-v33-max: 1600px;
+  --fgc-v33-hairline: rgba(255,255,255,.075);
+}
+
+body {
+  font-family: var(--font-body);
+  letter-spacing: -0.006em;
+}
+
+header.sticky {
+  height: var(--fgc-v33-header);
+  background: rgba(5,8,23,.82);
+  border-bottom-color: var(--fgc-v33-hairline);
+}
+
+header.sticky > div {
+  max-width: var(--fgc-v33-max);
+  padding-inline: var(--fgc-v33-gutter);
+}
+
+.fgc-logo-mark {
+  font-size: 36px;
+  letter-spacing: -.075em;
+  transform: skewX(-7deg);
+  transform-origin: left center;
+  text-shadow: 0 0 24px rgba(111,60,255,.14);
+}
+
+.page-shell {
+  padding-inline: var(--fgc-v33-gutter);
+}
+
+.page-container {
+  max-width: var(--fgc-v33-max);
+}
+
+.ds-grid::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  opacity: .34;
+  background-image:
+    linear-gradient(90deg, transparent 0, transparent calc(100% - 1px), rgba(255,255,255,.025) 100%),
+    linear-gradient(180deg, rgba(255,255,255,.028), transparent 18%);
+  background-size: 100% 100%, 100% 100%;
+  mix-blend-mode: screen;
+}
+
+.surface-card,
+.surface-elevated,
+.surface-console {
+  box-shadow: 0 18px 55px rgba(0,0,0,.26), inset 0 1px 0 rgba(255,255,255,.025);
+}
+
+.surface-card-interactive:hover {
+  transform: translateY(-2px);
+}
+
+.action-primary,
+.action-secondary,
+.action-ghost {
+  letter-spacing: .095em;
+}
+
+@media (max-width: 767px) {
+  header.sticky > div {
+    gap: 8px;
+  }
+  .fgc-logo-mark {
+    font-size: 31px;
+  }
+  .page-shell {
+    padding-top: 18px;
+  }
+  .display-hero {
+    font-size: clamp(4rem, 19vw, 6.4rem);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .surface-card-interactive:hover { transform: none; }
+}
