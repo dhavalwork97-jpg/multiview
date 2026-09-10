@@ -31,9 +31,9 @@ export default {
         },
       },
       fontFamily: {
-        display: ["Barlow Condensed", "Arial Narrow", "sans-serif"],
-        body: ["Inter", "ui-sans-serif", "system-ui", "sans-serif"],
-        mono: ["JetBrains Mono", "ui-monospace", "SFMono-Regular", "Menlo", "monospace"],
+        display: ["var(--font-display-local)", "Arial Narrow", "sans-serif"],
+        body: ["var(--font-body-local)", "ui-sans-serif", "system-ui", "sans-serif"],
+        mono: ["var(--font-mono-local)", "ui-monospace", "SFMono-Regular", "Menlo", "monospace"],
       },
       borderRadius: {
         card: "12px",
