@@ -13,7 +13,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with: { node-version: "20", cache: "npm" }
       # Keep npm ci deterministic while first reconciling the repository's
       # legacy lockfile with the current package manifest. The generated
