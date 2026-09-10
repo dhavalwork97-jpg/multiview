@@ -76,7 +76,9 @@ export function LiveGrid({ tournamentId }: { tournamentId?: string }) {
     }
 
     socket.on("match:updated", handleMatchUpdated);
-    return () => socket.off("match:updated", handleMatchUpdated);
+    return () => {
+      socket.off("match:updated", handleMatchUpdated);
+    };
   }, [socket, tournamentId]);
 
   if (loading) {
