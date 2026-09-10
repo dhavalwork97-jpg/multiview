@@ -17,11 +17,11 @@ const CONTENT_SECURITY_POLICY = [
   // playback is blocked even when the manifest itself loaded fine.
   `media-src 'self' blob: https://*.cloudfront.net https://*.supabase.co`,
   // connect-src covers the Socket.IO server, the LiveKit WebRTC
-  // signaling/media endpoints, Clerk's API, and Supabase Storage (hls.js
-  // fetches the manifest/segments via XHR, a separate origin from the
-  // app itself) — all have to be explicitly allow-listed or the
-  // corresponding feature silently breaks under this policy.
-  `connect-src 'self' https://*.cloudfront.net https://*.supabase.co wss://*.onrender.com wss://*.fly.dev wss://media.fgcstream.com https://media.fgcstream.com https://*.clerk.accounts.dev https://*.clerk.com https://challenges.cloudflare.com`,
+  // signaling/media endpoints, Clerk's API, Supabase Storage, and the
+  // browser-to-local-OBS WebSocket used by the Control Room. The local
+  // OBS entries are intentionally limited to the standard OBS WebSocket
+  // port rather than allowing arbitrary local connections.
+  `connect-src 'self' https://*.cloudfront.net https://*.supabase.co wss://*.onrender.com wss://*.fly.dev wss://media.fgcstream.com https://media.fgcstream.com https://*.clerk.accounts.dev https://*.clerk.com https://challenges.cloudflare.com ws://127.0.0.1:4455 ws://localhost:4455`,
   "img-src 'self' data: https:",
   "font-src 'self' data:",
   "frame-src https://*.clerk.accounts.dev https://*.clerk.com https://challenges.cloudflare.com https://www.youtube-nocookie.com https://www.youtube.com",
