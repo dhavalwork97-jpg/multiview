@@ -14,6 +14,25 @@ export type CompetitionPreset = ReturnType<
   typeof getCompetitionDefinition
 >;
 
+export {
+  CompetitionStageConfigSchema,
+  DynamicCompetitionConfigSchema,
+  AdvancementRuleSchema,
+  SessionModeSchema,
+  ScoringRuleSchema,
+  StageFormatSchema,
+  VictoryConditionSchema,
+  createBattleRoyalePreset,
+  getAllowedStageFormats,
+  isBattleRoyaleStage,
+  validateDynamicCompetition,
+} from "@/lib/dynamic-competition";
+
+export type {
+  CompetitionStageConfig,
+  DynamicCompetitionConfig,
+} from "@/lib/dynamic-competition";
+
 export function getCompetitionPreset(
   sport: string,
 ): CompetitionPreset {
