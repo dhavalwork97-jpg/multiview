@@ -60,23 +60,28 @@ export async function POST(
     return NextResponse.json(await progressBattleRoyaleStage(db, match.id));
   }
 
+  if (parsed.data.action !== "score") {
+    return NextResponse.json({ error: "Unsupported Battle Royale action" }, { status: 400 });
+  }
+
+  const scoreData = parsed.data;
   const match = await db.match.findFirst({
-    where: { id: parsed.data.matchId, tournamentId, scoringAdapter: "battle_royale" },
+    where: { id: scoreData.matchId, tournamentId, scoringAdapter: "battle_royale" },
     include: { sides: { include: { participants: true } }, stage: true },
   });
   if (!match) return NextResponse.json({ error: "Battle Royale lobby not found" }, { status: 404 });
   if (!match.stage) return NextResponse.json({ error: "Lobby is not attached to a competition stage" }, { status: 409 });
 
   const playerIds = new Set(match.sides.flatMap((side) => side.participants.map((participant) => participant.playerId).filter((id): id is string => Boolean(id))));
-  const submitted = new Set(parsed.data.results.map((row) => row.playerId));
-  for (const result of parsed.data.results) {
+  const submitted = new Set(scoreData.results.map((row) => row.playerId));
+  for (const result of scoreData.results) {
     if (!playerIds.has(result.playerId)) return NextResponse.json({ error: `Player ${result.playerId} is not in this lobby` }, { status: 400 });
   }
   if (submitted.size !== playerIds.size) return NextResponse.json({ error: "Submit one result for every lobby participant" }, { status: 400 });
-  if (new Set(parsed.data.results.map((row) => row.placement)).size !== parsed.data.results.length) return NextResponse.json({ error: "Placements must be unique within a lobby" }, { status: 400 });
+  if (new Set(scoreData.results.map((row) => row.placement)).size !== scoreData.results.length) return NextResponse.json({ error: "Placements must be unique within a lobby" }, { status: 400 });
 
   await db.$transaction(async (tx) => {
-    for (const result of parsed.data.results) {
+    for (const result of scoreData.results) {
       const side = match.sides.find((candidate) => candidate.participants.some((participant) => participant.playerId === result.playerId));
       if (!side) throw new Error("Lobby participant side not found");
       const nextSequence = (await tx.matchScoreEvent.count({ where: { matchId: match.id } })) + 1;
@@ -89,12 +94,12 @@ export async function POST(
         await tx.matchScoreEvent.create({ data: { matchId: match.id, sideId: side.id, sequence: nextSequence + events.indexOf(event), metric: event.metric, value: event.value } });
       }
     }
-    if (parsed.data.complete) {
+    if (scoreData.complete) {
       await tx.match.update({ where: { id: match.id }, data: { status: "COMPLETED", endedAt: new Date() } });
     }
   });
 
-  if (!parsed.data.complete) return NextResponse.json(await getBattleRoyaleStandings(db, tournamentId, match.stageId));
+  if (!scoreData.complete) return NextResponse.json(await getBattleRoyaleStandings(db, tournamentId, match.stageId));
   const progression = await progressBattleRoyaleStage(db, match.id);
   return NextResponse.json(progression);
 }
