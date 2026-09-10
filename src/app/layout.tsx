@@ -3,6 +3,7 @@ import { ClerkProvider } from "@clerk/nextjs";
 import { NavGate } from "@/components/layout/NavGate";
 import "./globals.css";
 import "./fgc-v32.css";
+import "./fgc-v33.css";
 import { Nav } from "@/components/layout/Nav";
 import { Footer } from "@/components/layout/Footer";
 
