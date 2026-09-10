@@ -1,13 +1,12 @@
-@import url('https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700;800&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500;600;700&display=swap');
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
-/* FGC Design System 2.0 — mockup-locked foundation. */
+/* FGC Design System 2.0 — mockup-locked foundation. Fonts are self-hosted by next/font so the strict CSP never needs Google Fonts. */
 :root {
-  --font-display: 'Barlow Condensed', 'Arial Narrow', sans-serif;
-  --font-body: Inter, ui-sans-serif, system-ui, sans-serif;
-  --font-mono: 'JetBrains Mono', ui-monospace, monospace;
+  --font-display: var(--font-display-local), 'Arial Narrow', sans-serif;
+  --font-body: var(--font-body-local), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-mono-local), ui-monospace, monospace;
   --fgc-bg: #050817;
   --fgc-panel: #0a1024;
   --fgc-panel-2: #0d1530;
