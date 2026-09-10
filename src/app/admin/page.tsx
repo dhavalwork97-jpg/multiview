@@ -9,18 +9,10 @@ export default async function AdminPage() {
   if (user.role === "ORGANIZER") redirect("/organizer");
   if (user.role !== "ADMIN") redirect("/dashboard");
 
-  const tournaments = await db.tournament.findMany({
-    orderBy: { updatedAt: "desc" },
-    take: 24,
-    select: { id: true, name: true, slug: true, sport: true, game: true, status: true, startDate: true, participantMode: true },
-  });
-  const [users, teams, players] = await Promise.all([
-    db.user.count(),
-    db.team.count(),
-    db.player.count(),
-  ]);
-
+  const tournaments = await db.tournament.findMany({ orderBy: { updatedAt: "desc" }, take: 24, select: { id: true, name: true, slug: true, sport: true, game: true, status: true, startDate: true, participantMode: true } });
+  const [users, teams, players] = await Promise.all([db.user.count(), db.team.count(), db.player.count()]);
   const tools = [
+    ["/admin/showcase", "Showcase setup", "One-click FGC Masters demo dataset with teams, players, stages, scoring and Battle Royale."],
     ["/showcase", "Championship showcase", "Open the full viewer-facing Championship Weekend experience."],
     ["/admin/broadcast", "Broadcast center", "Launch OBS/browser-source overlays and live tournament views for any competition."],
     ["/admin/tournaments/new", "Create tournament", "Start a new competition with sport, participant and scoring rules."],
