@@ -32,7 +32,7 @@ export default async function PlayerPage({
           <div className="pointer-events-none absolute inset-0 bg-broadcast-grid bg-[length:42px_42px] opacity-25" aria-hidden="true" />
           <div className="relative grid gap-8 lg:grid-cols-[1fr_auto] lg:items-end">
             <div>
-              <div className="flex flex-wrap items-center gap-2"><span className="status-neutral">PLAYER PROFILE</span>{player.isActive && <span className="status-live"><span className="live-dot animate-live-pulse" aria-hidden="true" />ACTIVE</span>}</div>
+              <div className="flex flex-wrap items-center gap-2"><span className="status-neutral">PLAYER PROFILE</span></div>
               <p className="mt-6 font-mono text-[10px] font-bold uppercase tracking-[.24em] text-ink-faint">FGC / competitor identity</p>
               <h1 className="mt-2 font-display text-5xl uppercase leading-[.88] tracking-[.015em] text-ink sm:text-7xl lg:text-8xl">{player.gamertag}</h1>
               {player.realName && <p className="mt-3 text-sm text-ink-muted sm:text-base">{player.realName}</p>}
