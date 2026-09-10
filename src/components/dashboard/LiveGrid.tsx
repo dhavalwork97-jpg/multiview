@@ -5,9 +5,8 @@ import { MatchCard, type MatchCardData } from "./MatchCard";
 import { useSocket } from "@/hooks/useSocket";
 
 // One REST call for the initial snapshot, then Socket.IO carries every
-// update after that — no polling. If the socket drops, socket.io-client
-// reconnects on its own and we re-fetch the snapshot on reconnect so the
-// grid can't drift silently out of sync.
+// update after that. Reconnects re-sync the snapshot so the grid stays
+// consistent with the live match feed.
 export function LiveGrid({ tournamentId }: { tournamentId?: string }) {
   const [matches, setMatches] = useState<MatchCardData[]>([]);
   const [loading, setLoading] = useState(true);
@@ -36,7 +35,7 @@ export function LiveGrid({ tournamentId }: { tournamentId?: string }) {
     }
 
     load();
-    socket.on("connect", load); // re-sync snapshot after any reconnect
+    socket.on("connect", load);
     return () => {
       cancelled = true;
       socket.off("connect", load);
@@ -54,7 +53,6 @@ export function LiveGrid({ tournamentId }: { tournamentId?: string }) {
         const exists = prev.some((m) => m.id === event.matchId);
 
         if (event.status !== "LIVE") {
-          // match ended or was pulled off-air — drop it from the grid
           return exists ? prev.filter((m) => m.id !== event.matchId) : prev;
         }
 
@@ -66,9 +64,6 @@ export function LiveGrid({ tournamentId }: { tournamentId?: string }) {
           );
         }
 
-        // A match just went live that we don't have a full card for yet
-        // (e.g. it wasn't LIVE at initial load) — cheapest correct thing
-        // to do is re-fetch rather than reconstruct a partial card here.
         const params = new URLSearchParams({ status: "LIVE" });
         if (tournamentId) params.set("tournamentId", tournamentId);
         fetch(`/api/matches?${params.toString()}`)
@@ -81,32 +76,48 @@ export function LiveGrid({ tournamentId }: { tournamentId?: string }) {
     }
 
     socket.on("match:updated", handleMatchUpdated);
-    return () => {
-      socket.off("match:updated", handleMatchUpdated);
-    };
+    return () => socket.off("match:updated", handleMatchUpdated);
   }, [socket, tournamentId]);
 
   if (loading) {
-    return <p className="text-sm text-ink-muted">Loading live matches…</p>;
+    return (
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4" aria-label="Loading live matches">
+        {Array.from({ length: 4 }).map((_, index) => (
+          <div key={index} className="surface-card overflow-hidden rounded-[12px]">
+            <div className="aspect-video animate-pulse bg-white/[.035]" />
+            <div className="space-y-3 p-4">
+              <div className="h-2.5 w-1/3 animate-pulse rounded bg-white/[.06]" />
+              <div className="h-5 w-2/3 animate-pulse rounded bg-white/[.06]" />
+              <div className="h-2.5 w-1/2 animate-pulse rounded bg-white/[.045]" />
+            </div>
+          </div>
+        ))}
+      </div>
+    );
   }
 
   if (error) {
-    return <p className="text-sm text-signal-error">Couldn't load live matches: {error}</p>;
+    return (
+      <div className="empty-state border-signal-error/25 bg-signal-error/[.03]">
+        <p className="section-label text-signal-error">Live feed unavailable</p>
+        <p className="mt-2 text-sm text-ink-muted">{error}</p>
+      </div>
+    );
   }
 
   if (matches.length === 0) {
     return (
-      <div className="rounded-card border border-dashed border-arena-600 p-8 text-center text-ink-muted">
-        No stations are live right now. Check back once matches start.
+      <div className="empty-state">
+        <span className="mx-auto flex h-10 w-10 items-center justify-center rounded-full border border-corner-p2/30 bg-corner-p2/[.07] text-corner-p2" aria-hidden="true">◉</span>
+        <p className="mt-4 font-display text-2xl uppercase tracking-wide text-ink">No stations are live</p>
+        <p className="mt-1 text-sm text-ink-muted">Check back once matches start broadcasting.</p>
       </div>
     );
   }
 
   return (
-    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-      {matches.map((match) => (
-        <MatchCard key={match.id} match={match} />
-      ))}
+    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+      {matches.map((match) => <MatchCard key={match.id} match={match} />)}
     </div>
   );
 }
