@@ -3,24 +3,57 @@
 import { useEffect, useRef } from "react";
 import { io, type Socket } from "socket.io-client";
 
-const SOCKET_URL = process.env.NEXT_PUBLIC_SOCKET_URL ?? "http://localhost:4000";
+const DEFAULT_PRODUCTION_SOCKET_URL = "https://fgc-stream-socket.onrender.com";
+const configuredSocketUrl = process.env.NEXT_PUBLIC_SOCKET_URL?.trim();
 
-if (!process.env.NEXT_PUBLIC_SOCKET_URL && process.env.NODE_ENV === "production") {
-  // Falling back silently here means the socket just reconnect-loops
-  // forever against a localhost address the production CSP correctly
-  // blocks (see connect-src in next.config.ts) — every attempt shows up
-  // as a CSP violation in the console with nothing pointing at "you
-  // forgot to set an env var on Vercel." This is that pointer.
-  console.error(
-    "[socket] NEXT_PUBLIC_SOCKET_URL is not set — falling back to " +
-      "http://localhost:4000, which the production Content-Security-Policy " +
-      "blocks. Set NEXT_PUBLIC_SOCKET_URL in Vercel (Project Settings → " +
-      "Environment Variables) to your Render socket URL, e.g. " +
-      "wss://fgc-stream-socket-xxxx.onrender.com, then redeploy — " +
-      "NEXT_PUBLIC_* vars are baked in at build time, so a save alone " +
-      "won't apply to the current deployment."
-  );
+function resolveSocketUrl() {
+  if (process.env.NODE_ENV !== "production") {
+    return configuredSocketUrl || "http://localhost:4000";
+  }
+
+  // The browser must connect to the dedicated public Socket.IO service.
+  // Never let a tournament route, station LAN IP, or the Next.js web service
+  // become the Socket.IO origin. Those values produce URLs such as
+  // /admin/tournaments/<id>/192.168.x.x and cannot work from a public site.
+  if (!configuredSocketUrl) {
+    console.error(
+      "[socket] NEXT_PUBLIC_SOCKET_URL is not set in production; using the " +
+        DEFAULT_PRODUCTION_SOCKET_URL
+    );
+    return DEFAULT_PRODUCTION_SOCKET_URL;
+  }
+
+  try {
+    const url = new URL(configuredSocketUrl);
+    const hostname = url.hostname.toLowerCase();
+    const isPrivateLanHost =
+      hostname === "localhost" ||
+      hostname === "127.0.0.1" ||
+      hostname === "0.0.0.0" ||
+      hostname.startsWith("192.168.") ||
+      hostname.startsWith("10.") ||
+      /^172\.(1[6-9]|2\d|3[0-1])\./.test(hostname);
+    const hasAppRoute = url.pathname !== "/" && url.pathname !== "";
+
+    if (isPrivateLanHost || hasAppRoute) {
+      console.warn(
+        "[socket] Ignoring an invalid production NEXT_PUBLIC_SOCKET_URL:",
+        configuredSocketUrl
+      );
+      return DEFAULT_PRODUCTION_SOCKET_URL;
+    }
+
+    return url.origin;
+  } catch {
+    console.warn(
+      "[socket] Ignoring an invalid production NEXT_PUBLIC_SOCKET_URL:",
+      configuredSocketUrl
+    );
+    return DEFAULT_PRODUCTION_SOCKET_URL;
+  }
 }
+
+const SOCKET_URL = resolveSocketUrl();
 
 // One shared connection per browser tab, reused across every component
 // that calls this hook, rather than one socket per component instance.
@@ -28,7 +61,10 @@ let sharedSocket: Socket | null = null;
 
 function getSocket() {
   if (!sharedSocket) {
-    sharedSocket = io(SOCKET_URL, { transports: ["websocket"] });
+    sharedSocket = io(SOCKET_URL, {
+      transports: ["websocket"],
+      autoConnect: true,
+    });
   }
   return sharedSocket;
 }
