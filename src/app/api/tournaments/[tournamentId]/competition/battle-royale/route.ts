@@ -99,7 +99,12 @@ export async function POST(
     }
   });
 
-  if (!scoreData.complete) return NextResponse.json(await getBattleRoyaleStandings(db, tournamentId, match.stageId));
+  if (!scoreData.complete) {
+    if (!match.stageId) {
+      return NextResponse.json({ error: "Lobby is missing a competition stage" }, { status: 409 });
+    }
+    return NextResponse.json(await getBattleRoyaleStandings(db, tournamentId, match.stageId));
+  }
   const progression = await progressBattleRoyaleStage(db, match.id);
   return NextResponse.json(progression);
 }
