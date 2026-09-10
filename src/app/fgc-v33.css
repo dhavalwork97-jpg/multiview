@@ -177,17 +177,116 @@ header .action-ghost {
   color: transparent;
 }
 
+/* Viewer-facing tournament cards: intentionally scoped to the public shell. */
+.page-shell .surface-card-interactive {
+  position: relative;
+  overflow: hidden;
+  border-radius: 14px;
+  background:
+    radial-gradient(circle at 88% 0%, rgba(111,60,255,.10), transparent 38%),
+    linear-gradient(145deg, rgba(12,20,47,.96), rgba(5,10,27,.94));
+}
+
+.page-shell .surface-card-interactive::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: linear-gradient(120deg, rgba(255,255,255,.045), transparent 24%, transparent 72%, rgba(32,217,255,.025));
+}
+
+.page-shell .surface-card-interactive h2 {
+  font-size: clamp(1.65rem, 2vw, 2.1rem);
+  line-height: .95;
+}
+
+/* Player-facing profile treatment. Organizer dashboard styles are not targeted. */
+main.min-h-screen.bg-arena-950 {
+  background-color: #050817;
+  background-image:
+    radial-gradient(circle at 78% 8%, rgba(111,60,255,.12), transparent 34rem),
+    linear-gradient(rgba(255,255,255,.012) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255,255,255,.012) 1px, transparent 1px);
+  background-size: auto, 56px 56px, 56px 56px;
+}
+
+main.min-h-screen.bg-arena-950 > div > section:first-child {
+  border-color: rgba(137,112,255,.34);
+  border-radius: 16px;
+  box-shadow: 0 28px 80px rgba(0,0,0,.34), inset 0 1px 0 rgba(255,255,255,.035);
+}
+
+main.min-h-screen.bg-arena-950 .surface-quiet {
+  border-color: rgba(83,112,191,.24);
+}
+
+/* Viewer mobile navigation. It is rendered only for non-organizer/admin users. */
+.fgc-mobile-nav {
+  position: fixed;
+  inset-inline: 10px;
+  bottom: max(10px, env(safe-area-inset-bottom));
+  z-index: 60;
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 3px;
+  padding: 6px;
+  border: 1px solid rgba(116,92,255,.30);
+  border-radius: 18px;
+  background: rgba(5,8,23,.94);
+  box-shadow: 0 18px 60px rgba(0,0,0,.55), 0 0 40px rgba(111,60,255,.10);
+  backdrop-filter: blur(20px);
+}
+
+.fgc-mobile-nav__item {
+  display: flex;
+  min-width: 0;
+  min-height: 54px;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  border-radius: 12px;
+  color: rgba(213,220,246,.55);
+  font-family: var(--font-mono);
+  font-size: 8px;
+  font-weight: 700;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+  transition: background .2s ease, color .2s ease, transform .2s ease;
+}
+
+.fgc-mobile-nav__item:hover,
+.fgc-mobile-nav__item:focus-visible {
+  color: #fff;
+  background: rgba(111,60,255,.10);
+}
+
+.fgc-mobile-nav__icon {
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  border: 1px solid rgba(125,143,204,.20);
+  border-radius: 7px;
+  color: #a98cff;
+  font-size: 11px;
+  line-height: 1;
+}
+
 @media (max-width: 767px) {
   :root { --fgc-v33-header: 64px; }
   header.sticky > div { gap: 8px; }
   .fgc-logo-mark { font-size: 32px; }
-  .page-shell { padding-top: 12px; }
+  .page-shell { padding-top: 12px; padding-bottom: 82px; }
   .display-hero { font-size: clamp(4rem, 19vw, 6.4rem); }
   .surface-card,
   .surface-elevated,
   .surface-console { border-radius: 14px; }
+  main.min-h-screen.bg-arena-950 { padding-bottom: 96px; }
+  main.min-h-screen.bg-arena-950 > div > section:first-child { border-radius: 16px; }
 }
 
 @media (prefers-reduced-motion: reduce) {
   .surface-card-interactive:hover { transform: none; }
+  .fgc-mobile-nav__item { transition: none; }
 }

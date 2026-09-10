@@ -32,10 +32,10 @@ export function NavLinks({ showDashboard = false, showAdmin = false }: Props) {
             key={link.href}
             href={link.href}
             aria-current={isActive ? "page" : undefined}
-            className={`group relative inline-flex min-h-11 items-center whitespace-nowrap rounded-[10px] border px-3.5 py-2 font-mono text-[10px] font-bold uppercase tracking-[.12em] transition-all duration-200 sm:text-[11px] ${isActive ? "border-signal-live/30 bg-signal-live/[.07] text-ink shadow-[inset_0_0_24px_rgba(58,222,124,.025)]" : "border-transparent text-ink-muted hover:border-arena-700 hover:bg-arena-800/70 hover:text-ink"}`}
+            className={`group relative inline-flex min-h-11 items-center whitespace-nowrap rounded-[10px] border px-3.5 py-2 font-mono text-[10px] font-bold uppercase tracking-[.12em] transition-all duration-200 sm:text-[11px] ${isActive ? "border-corner-p2/35 bg-corner-p2/[.10] text-ink shadow-[inset_0_0_24px_rgba(111,60,255,.07)]" : "border-transparent text-ink-muted hover:border-arena-700 hover:bg-arena-800/70 hover:text-ink"}`}
           >
             {link.live && <span className="live-dot mr-1.5 animate-live-pulse" aria-hidden="true" />}
-            {isActive && <span className="absolute inset-x-3 bottom-0 h-0.5 rounded-full bg-signal-live" aria-hidden="true" />}
+            {isActive && <span className="absolute inset-x-3 bottom-0 h-0.5 rounded-full bg-corner-p2" aria-hidden="true" />}
             <span>{link.short ?? link.label}</span>
           </Link>
         );
