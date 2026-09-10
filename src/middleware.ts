@@ -27,29 +27,24 @@ const isPublicRoute = createRouteMatcher([
   "/api/ready",
 ]);
 
-const demoEnabled = process.env.FGC_PUBLIC_DEMO_ENABLED === "true";
+// Temporary product-video mode. Set FGC_PUBLIC_DEMO_ENABLED=false to disable.
+const demoEnabled = process.env.FGC_PUBLIC_DEMO_ENABLED !== "false";
 const demoCookie = "fgc-demo";
 
 export default clerkMiddleware(async (auth, req) => {
   const pathname = req.nextUrl.pathname;
   const demoRequested = demoEnabled && req.cookies.get(demoCookie)?.value === "1";
 
-  if (pathname.includes(".")) {
-    return NextResponse.next();
-  }
+  if (pathname.includes(".")) return NextResponse.next();
 
   const watchMatch = pathname.match(/^\/watch\/([^/]+)\/?$/);
-  if (watchMatch && !/^c[a-z0-9]{24}$/.test(watchMatch[1])) {
-    return new NextResponse(null, { status: 404 });
-  }
+  if (watchMatch && !/^c[a-z0-9]{24}$/.test(watchMatch[1])) return new NextResponse(null, { status: 404 });
 
   if (demoRequested && pathname.startsWith("/api/") && !["GET", "HEAD", "OPTIONS"].includes(req.method)) {
     return new NextResponse("Demo mode is read-only", { status: 403 });
   }
 
-  if (!isPublicRoute(req) && !demoRequested) {
-    await auth.protect();
-  }
+  if (!isPublicRoute(req) && !demoRequested) await auth.protect();
 
   if (demoEnabled && pathname.startsWith("/demo")) {
     const response = NextResponse.next();
@@ -67,9 +62,5 @@ export default clerkMiddleware(async (auth, req) => {
 });
 
 export const config = {
-  matcher: [
-    "/((?!_next).*)",
-    "/(api|trpc)(.*)",
-    "/__clerk/(.*)",
-  ],
+  matcher: ["/((?!_next).*)", "/(api|trpc)(.*)", "/__clerk/(.*)"],
 };
