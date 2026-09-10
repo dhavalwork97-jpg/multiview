@@ -1,0 +1,193 @@
+/* FGC V33 — approved mockup fidelity layer.
+ * This layer intentionally sits above the stable V32 primitives.
+ */
+:root {
+  --fgc-v33-header: 74px;
+  --fgc-v33-gutter: clamp(14px, 2.35vw, 36px);
+  --fgc-v33-max: 1600px;
+  --fgc-v33-hairline: rgba(103,128,206,.20);
+  --fgc-v33-panel: rgba(8,13,32,.88);
+}
+
+body {
+  font-family: var(--font-body);
+  letter-spacing: -0.006em;
+  background-color: #050817;
+  background-image:
+    radial-gradient(circle at 50% -18%, rgba(111,60,255,.14), transparent 42rem),
+    radial-gradient(circle at 92% 12%, rgba(32,217,255,.045), transparent 32rem),
+    linear-gradient(rgba(255,255,255,.012) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255,255,255,.012) 1px, transparent 1px);
+  background-size: auto, auto, 56px 56px, 56px 56px;
+}
+
+header.sticky {
+  height: var(--fgc-v33-header);
+  background: linear-gradient(180deg, rgba(5,8,23,.96), rgba(5,8,23,.84));
+  border-bottom: 1px solid var(--fgc-v33-hairline);
+  box-shadow: 0 12px 48px rgba(0,0,0,.42);
+}
+
+header.sticky > div {
+  max-width: var(--fgc-v33-max);
+  padding-inline: var(--fgc-v33-gutter);
+}
+
+.fgc-logo-mark {
+  position: relative;
+  display: inline-block;
+  font-family: var(--font-display);
+  font-size: 39px;
+  font-style: italic;
+  font-weight: 800;
+  line-height: .78;
+  letter-spacing: -.085em;
+  transform: skewX(-7deg);
+  transform-origin: left center;
+  color: #fff;
+  background: linear-gradient(100deg,#ffffff 0%,#f0ebff 36%,#9a6cff 68%,#6f3cff 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  filter: drop-shadow(0 0 12px rgba(111,60,255,.30));
+}
+
+.fgc-logo-mark::after {
+  content: "";
+  position: absolute;
+  left: 2px;
+  right: 1px;
+  bottom: -4px;
+  height: 2px;
+  transform: skewX(-8deg);
+  background: linear-gradient(90deg, #fff, #9a6cff, transparent 82%);
+  opacity: .72;
+}
+
+header .action-primary {
+  min-height: 36px;
+  padding-inline: 14px;
+  border-radius: 999px;
+  font-size: 9px;
+  letter-spacing: .06em;
+}
+
+header .action-secondary,
+header .action-ghost {
+  min-height: 36px;
+  font-size: 9px;
+}
+
+.page-shell {
+  padding-inline: var(--fgc-v33-gutter);
+  padding-top: 18px;
+}
+
+.page-container {
+  max-width: var(--fgc-v33-max);
+}
+
+.ds-grid {
+  border-color: rgba(102,126,201,.28);
+  background: #070b1b;
+}
+
+.ds-grid::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  opacity: .42;
+  background-image:
+    linear-gradient(90deg, transparent 0, transparent calc(100% - 1px), rgba(255,255,255,.022) 100%),
+    linear-gradient(180deg, rgba(255,255,255,.026), transparent 22%);
+  background-size: 100% 100%, 100% 100%;
+  mix-blend-mode: screen;
+}
+
+.surface-card,
+.surface-elevated,
+.surface-console,
+.surface-quiet {
+  box-shadow: 0 18px 55px rgba(0,0,0,.28), inset 0 1px 0 rgba(255,255,255,.028);
+}
+
+.surface-card,
+.surface-elevated {
+  border-color: rgba(137,112,255,.25);
+  background: linear-gradient(145deg, rgba(13,21,48,.92), rgba(6,11,28,.90));
+}
+
+.surface-quiet {
+  border-color: rgba(76,111,190,.22);
+  background: linear-gradient(145deg, rgba(10,16,38,.90), rgba(6,11,27,.84));
+}
+
+.surface-card-interactive:hover {
+  transform: translateY(-2px);
+  border-color: rgba(154,108,255,.54);
+  box-shadow: 0 24px 70px rgba(0,0,0,.34), 0 0 42px rgba(111,60,255,.10);
+}
+
+.page-title,
+.section-heading,
+.display-heading,
+.display-hero {
+  font-family: var(--font-display);
+}
+
+.page-kicker,
+.section-label,
+.metric-label,
+.action-primary,
+.action-secondary,
+.action-ghost {
+  font-family: var(--font-mono);
+}
+
+.action-primary {
+  background: linear-gradient(135deg,#9a6cff,#6f3cff);
+  box-shadow: 0 10px 34px rgba(111,60,255,.20);
+}
+
+.action-primary:hover {
+  box-shadow: 0 14px 42px rgba(111,60,255,.34);
+}
+
+.status-live {
+  border-color: rgba(32,217,255,.34);
+  background: rgba(32,217,255,.08);
+  color: #20d9ff;
+}
+
+.status-neutral {
+  border-color: rgba(120,139,194,.18);
+  background: rgba(255,255,255,.035);
+}
+
+.live-dot {
+  background: #20d9ff;
+  box-shadow: 0 0 12px rgba(32,217,255,.85);
+}
+
+.fgc-gradient-text {
+  background: linear-gradient(90deg,#fff,#9a6cff,#20d9ff);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+@media (max-width: 767px) {
+  :root { --fgc-v33-header: 64px; }
+  header.sticky > div { gap: 8px; }
+  .fgc-logo-mark { font-size: 32px; }
+  .page-shell { padding-top: 12px; }
+  .display-hero { font-size: clamp(4rem, 19vw, 6.4rem); }
+  .surface-card,
+  .surface-elevated,
+  .surface-console { border-radius: 14px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .surface-card-interactive:hover { transform: none; }
+}
