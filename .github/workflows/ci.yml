@@ -14,11 +14,6 @@ jobs:
         with: { node-version: "20", cache: "npm" }
       - run: npm install --package-lock-only --ignore-scripts
       - run: npm ci
-        env:
-          npm_config_fetch_retries: 5
-          npm_config_fetch_retry_factor: 2
-          npm_config_fetch_retry_mintimeout: 20000
-          npm_config_fetch_retry_maxtimeout: 120000
       - run: npm run lint
       - run: npm run typecheck
 
@@ -30,11 +25,6 @@ jobs:
         with: { node-version: "20", cache: "npm" }
       - run: npm install --package-lock-only --ignore-scripts
       - run: npm ci
-        env:
-          npm_config_fetch_retries: 5
-          npm_config_fetch_retry_factor: 2
-          npm_config_fetch_retry_mintimeout: 20000
-          npm_config_fetch_retry_maxtimeout: 120000
       - run: npx vitest run tests/unit
 
   integration-tests:
@@ -62,11 +52,6 @@ jobs:
         with: { node-version: "20", cache: "npm" }
       - run: npm install --package-lock-only --ignore-scripts
       - run: npm ci
-        env:
-          npm_config_fetch_retries: 5
-          npm_config_fetch_retry_factor: 2
-          npm_config_fetch_retry_mintimeout: 20000
-          npm_config_fetch_retry_maxtimeout: 120000
       - run: npx prisma migrate deploy
       - run: npm run test:integration
 
@@ -79,11 +64,6 @@ jobs:
         with: { node-version: "20", cache: "npm" }
       - run: npm install --package-lock-only --ignore-scripts
       - run: npm ci
-        env:
-          npm_config_fetch_retries: 5
-          npm_config_fetch_retry_factor: 2
-          npm_config_fetch_retry_mintimeout: 20000
-          npm_config_fetch_retry_maxtimeout: 120000
       - run: npx prisma generate
       - run: npm run build
         env:

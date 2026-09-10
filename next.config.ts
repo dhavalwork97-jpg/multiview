@@ -47,10 +47,17 @@ const securityHeaders = [
 const nextConfig: NextConfig = {
   // Keep production builds from being blocked by the repository's existing ESLint debt. TypeScript remains enforced by the build.
   eslint: { ignoreDuringBuilds: true },
-  // Server Actions / route handlers stream player avatars, station
-  // thumbnails, etc. from S3 in later phases — remotePatterns gets
-  // filled in when that lands (Phase 3). Left empty and explicit here
-  // rather than allowing all hosts.
+  // BullMQ 5.81 exposes an optional Valkey Glide adapter. FGC deliberately
+  // uses its ioredis connection path, so do not ask the Next.js server
+  // bundle to resolve the unused native Glide client. This removes the
+  // optional-dependency build warning without changing queue behavior.
+  webpack(config) {
+    config.resolve.alias = {
+      ...(config.resolve.alias ?? {}),
+      "@valkey/valkey-glide": false,
+    };
+    return config;
+  },
   images: {
     remotePatterns: [],
   },

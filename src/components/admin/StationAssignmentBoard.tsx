@@ -3,17 +3,12 @@
 import { useEffect, useState } from "react";
 import { useSocket } from "@/hooks/useSocket";
 
-type PlayerRef = { gamertag: string } | null;
-type MatchParticipant = { player: PlayerRef; team: { name: string } | null };
-type MatchSide = { key: "A" | "B"; participants: MatchParticipant[] };
-
 type QueuedMatch = {
   id: string;
   round: string | null;
-  playerOne: PlayerRef;
-  playerTwo: PlayerRef;
+  playerOne: { gamertag: string };
+  playerTwo: { gamertag: string };
   stationId: string | null;
-  sides?: MatchSide[];
 };
 
 type StationHealth = {
@@ -25,11 +20,7 @@ type StationHealth = {
   droppedFrames: number | null;
   isStale: boolean;
   youtubeVideoId: string | null;
-  matches: {
-    id: string;
-    playerOne: PlayerRef;
-    playerTwo: PlayerRef;
-  }[];
+  matches: { id: string; playerOne: { gamertag: string }; playerTwo: { gamertag: string } }[];
 };
 
 type StreamCredentials = { ingestUrl: string; streamKey: string };
@@ -39,31 +30,15 @@ type CredentialsState =
   | { status: "ready"; credentials: StreamCredentials }
   | { status: "error"; message: string };
 
-function participantLabel(participant: MatchParticipant | undefined) {
-  return participant?.player?.gamertag ?? participant?.team?.name ?? "TBD";
-}
-
-function sideLabels(match: QueuedMatch) {
-  if (match.playerOne || match.playerTwo) {
-    return [match.playerOne?.gamertag ?? "TBD", match.playerTwo?.gamertag ?? "TBD"] as const;
-  }
-
-  const sides = [...(match.sides ?? [])].sort((a, b) => a.key.localeCompare(b.key));
-  return [
-    participantLabel(sides[0]?.participants[0]),
-    participantLabel(sides[1]?.participants[0]),
-  ] as const;
-}
-
-function stationMatchLabel(match: StationHealth["matches"][number]) {
-  return `${match.playerOne?.gamertag ?? "TBD"} vs ${match.playerTwo?.gamertag ?? "TBD"}`;
-}
-
 export function StationAssignmentBoard({ tournamentId }: { tournamentId: string }) {
   const [queued, setQueued] = useState<QueuedMatch[]>([]);
   const [stations, setStations] = useState<StationHealth[]>([]);
   const [assigning, setAssigning] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // Keyed by stationId. Credentials only ever live in component state —
+  // never written to the URL, localStorage, or anywhere else a stream
+  // key (which is bearer-token-equivalent, per src/lib/livekit.ts) could
+  // leak beyond this session.
   const [credentials, setCredentials] = useState<Record<string, CredentialsState>>({});
   const socket = useSocket({ tournamentId });
 
@@ -83,10 +58,12 @@ export function StationAssignmentBoard({ tournamentId }: { tournamentId: string 
   }
 
   useEffect(() => {
-    void refresh();
+    refresh();
+    // YouTube has no per-station webhook in this app, so the socket server
+    // heartbeat and this dashboard refresh provide the near-real-time UI.
     socket.on("station:status", refresh);
     socket.on("match:assigned", refresh);
-    const timer = setInterval(() => void refresh(), 30000);
+    const timer = setInterval(refresh, 30000);
     return () => {
       clearInterval(timer);
       socket.off("station:status", refresh);
@@ -116,6 +93,9 @@ export function StationAssignmentBoard({ tournamentId }: { tournamentId: string 
     }
   }
 
+  // The station's YouTube RTMP stream is persistent. Re-calling this endpoint
+  // returns the stored credentials and does not create another stream or
+  // consume additional YouTube quota.
   async function getStreamingCredentials(stationId: string) {
     setCredentials((prev) => ({ ...prev, [stationId]: { status: "loading" } }));
     try {
@@ -137,64 +117,83 @@ export function StationAssignmentBoard({ tournamentId }: { tournamentId: string 
     }
   }
 
+
+
   return (
     <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
       <div>
-        <h3 className="mb-2 font-display text-lg uppercase tracking-wide text-ink-muted">Queued matches</h3>
+        <h3 className="mb-2 font-display text-lg uppercase tracking-wide text-ink-muted">
+          Queued matches
+        </h3>
         {error && <p className="mb-2 text-sm text-signal-error">{error}</p>}
         {queued.length === 0 ? (
           <p className="text-sm text-ink-faint">Nothing waiting on a station.</p>
         ) : (
           <ul className="space-y-2">
-            {queued.map((m) => {
-              const [sideA, sideB] = sideLabels(m);
-              return (
-                <li key={m.id} className="flex items-center justify-between rounded-card border border-arena-600 bg-arena-800 px-3 py-2 text-sm">
-                  <span>
-                    <span className="text-corner-p1">{sideA}</span>
-                    {" vs "}
-                    <span className="text-corner-p2">{sideB}</span>
-                    {m.round && <span className="ml-2 text-ink-faint">{m.round}</span>}
-                  </span>
-                  <select
-                    disabled={assigning === m.id}
-                    defaultValue=""
-                    onChange={(e) => e.target.value && void assign(m.id, e.target.value)}
-                    className="rounded border border-arena-600 bg-arena-900 px-2 py-1 text-xs"
-                  >
-                    <option value="" disabled>Assign to…</option>
-                    {stations.filter((s) => s.status !== "LIVE").map((s) => (
-                      <option key={s.id} value={s.id}>{s.label}</option>
+            {queued.map((m) => (
+              <li
+                key={m.id}
+                className="flex items-center justify-between rounded-card border border-arena-600 bg-arena-800 px-3 py-2 text-sm"
+              >
+                <span>
+                  <span className="text-corner-p1">{m.playerOne.gamertag}</span>
+                  {" vs "}
+                  <span className="text-corner-p2">{m.playerTwo.gamertag}</span>
+                  {m.round && <span className="ml-2 text-ink-faint">{m.round}</span>}
+                </span>
+                <select
+                  disabled={assigning === m.id}
+                  defaultValue=""
+                  onChange={(e) => e.target.value && assign(m.id, e.target.value)}
+                  className="rounded border border-arena-600 bg-arena-900 px-2 py-1 text-xs"
+                >
+                  <option value="" disabled>
+                    Assign to…
+                  </option>
+                  {stations
+                    .filter((s) => s.status !== "LIVE")
+                    .map((s) => (
+                      <option key={s.id} value={s.id}>
+                        {s.label}
+                      </option>
                     ))}
-                  </select>
-                </li>
-              );
-            })}
+                </select>
+              </li>
+            ))}
           </ul>
         )}
       </div>
 
       <div>
-        <h3 className="mb-2 font-display text-lg uppercase tracking-wide text-ink-muted">Stations</h3>
+        <h3 className="mb-2 font-display text-lg uppercase tracking-wide text-ink-muted">
+          Stations
+        </h3>
         <ul className="space-y-2">
           {stations.map((s) => (
-            <li key={s.id} className="rounded-card border border-arena-600 bg-arena-800 px-3 py-2 text-sm">
+            <li
+              key={s.id}
+              className="rounded-card border border-arena-600 bg-arena-800 px-3 py-2 text-sm"
+            >
               <div className="flex items-center justify-between">
                 <span className="font-medium">{s.label}</span>
                 <StatusPill status={s.isStale ? "ERROR" : s.status} />
               </div>
               {s.matches[0] && (
-                <p className="mt-1 text-xs text-ink-faint">{stationMatchLabel(s.matches[0])}</p>
+                <p className="mt-1 text-xs text-ink-faint">
+                  {s.matches[0].playerOne.gamertag} vs {s.matches[0].playerTwo.gamertag}
+                </p>
               )}
               {s.status === "LIVE" && (
                 <p className="mt-1 font-mono text-[11px] text-ink-faint">
                   {s.currentBitrateKbps ?? "—"} kbps · {s.droppedFrames ?? 0} dropped frames
                 </p>
               )}
+
               <StreamingCredentialsPanel
                 state={credentials[s.id] ?? { status: "idle" }}
-                onFetch={() => void getStreamingCredentials(s.id)}
+                onFetch={() => getStreamingCredentials(s.id)}
               />
+
             </li>
           ))}
         </ul>
@@ -210,10 +209,20 @@ function StatusPill({ status }: { status: StationHealth["status"] }) {
     OFFLINE: "text-ink-faint",
     ERROR: "text-signal-error",
   };
-  return <span className={`font-mono text-[10px] uppercase tracking-widest ${styles[status]}`}>{status}</span>;
+  return (
+    <span className={`font-mono text-[10px] uppercase tracking-widest ${styles[status]}`}>
+      {status}
+    </span>
+  );
 }
 
-function StreamingCredentialsPanel({ state, onFetch }: { state: CredentialsState; onFetch: () => void }) {
+function StreamingCredentialsPanel({
+  state,
+  onFetch,
+}: {
+  state: CredentialsState;
+  onFetch: () => void;
+}) {
   const [revealed, setRevealed] = useState(false);
   const [justCopied, setJustCopied] = useState<"url" | "key" | null>(null);
 
@@ -226,23 +235,56 @@ function StreamingCredentialsPanel({ state, onFetch }: { state: CredentialsState
   if (state.status === "idle" || state.status === "error") {
     return (
       <div className="mt-2">
-        <button type="button" onClick={onFetch} className="rounded border border-arena-600 px-2 py-1 font-mono text-[11px] uppercase tracking-wide text-ink-muted hover:border-signal-live hover:text-signal-live">
+        <button
+          type="button"
+          onClick={onFetch}
+          className="rounded border border-arena-600 px-2 py-1 font-mono text-[11px] uppercase tracking-wide text-ink-muted hover:border-signal-live hover:text-signal-live"
+        >
           Get streaming credentials
         </button>
-        {state.status === "error" && <p className="mt-1 text-xs text-signal-error">{state.message}</p>}
+        {state.status === "error" && (
+          <p className="mt-1 text-xs text-signal-error">{state.message}</p>
+        )}
       </div>
     );
   }
 
-  if (state.status === "loading") return <p className="mt-2 text-xs text-ink-faint">Requesting credentials…</p>;
+  if (state.status === "loading") {
+    return <p className="mt-2 text-xs text-ink-faint">Requesting credentials…</p>;
+  }
 
   const { ingestUrl, streamKey } = state.credentials;
+
   return (
     <div className="mt-2 space-y-1.5 rounded border border-arena-600 bg-arena-900 p-2">
-      <p className="text-[10px] uppercase tracking-wide text-ink-faint">Paste these into OBS (Settings → Stream → Custom). This is the YouTube RTMP input for this station; treat the stream key like a password.</p>
-      <CredentialRow label="Server (YouTube RTMP URL)" value={ingestUrl} masked={false} copied={justCopied === "url"} onCopy={() => void copy(ingestUrl, "url")} />
-      <CredentialRow label="Stream key" value={streamKey} masked={!revealed} copied={justCopied === "key"} onCopy={() => void copy(streamKey, "key")} onToggleReveal={() => setRevealed((r) => !r)} revealed={revealed} />
-      <button type="button" onClick={onFetch} className="pt-1 font-mono text-[10px] uppercase tracking-wide text-ink-faint underline hover:text-ink">Get / reuse station key</button>
+      <p className="text-[10px] uppercase tracking-wide text-ink-faint">
+        Paste these into OBS (Settings → Stream → Custom). This is the YouTube RTMP input for this station; treat the stream key like a password.
+      </p>
+
+      <CredentialRow
+        label="Server (YouTube RTMP URL)"
+        value={ingestUrl}
+        masked={false}
+        copied={justCopied === "url"}
+        onCopy={() => copy(ingestUrl, "url")}
+      />
+      <CredentialRow
+        label="Stream key"
+        value={streamKey}
+        masked={!revealed}
+        copied={justCopied === "key"}
+        onCopy={() => copy(streamKey, "key")}
+        onToggleReveal={() => setRevealed((r) => !r)}
+        revealed={revealed}
+      />
+
+      <button
+        type="button"
+        onClick={onFetch}
+        className="pt-1 font-mono text-[10px] uppercase tracking-wide text-ink-faint underline hover:text-ink"
+      >
+        Get / reuse station key
+      </button>
     </div>
   );
 }
@@ -265,17 +307,28 @@ function CredentialRow({
   revealed?: boolean;
 }) {
   const displayValue = masked ? "•".repeat(Math.min(value.length, 28)) : value;
+
   return (
     <div>
       <p className="text-[10px] uppercase tracking-wide text-ink-faint">{label}</p>
       <div className="flex items-center gap-1.5">
-        <code className="flex-1 truncate rounded bg-arena-950 px-2 py-1 font-mono text-xs text-ink">{displayValue}</code>
+        <code className="flex-1 truncate rounded bg-arena-950 px-2 py-1 font-mono text-xs text-ink">
+          {displayValue}
+        </code>
         {onToggleReveal && (
-          <button type="button" onClick={onToggleReveal} className="shrink-0 rounded border border-arena-600 px-1.5 py-1 text-[10px] uppercase text-ink-faint hover:text-ink">
+          <button
+            type="button"
+            onClick={onToggleReveal}
+            className="shrink-0 rounded border border-arena-600 px-1.5 py-1 text-[10px] uppercase text-ink-faint hover:text-ink"
+          >
             {revealed ? "Hide" : "Show"}
           </button>
         )}
-        <button type="button" onClick={onCopy} className="shrink-0 rounded border border-arena-600 px-1.5 py-1 text-[10px] uppercase text-ink-faint hover:border-signal-live hover:text-signal-live">
+        <button
+          type="button"
+          onClick={onCopy}
+          className="shrink-0 rounded border border-arena-600 px-1.5 py-1 text-[10px] uppercase text-ink-faint hover:border-signal-live hover:text-signal-live"
+        >
           {copied ? "Copied" : "Copy"}
         </button>
       </div>
