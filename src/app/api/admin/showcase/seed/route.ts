@@ -50,7 +50,7 @@ export async function POST() {
       const existingStages = await tx.competitionStage.count({ where: { tournamentId: tournament.id } });
       if (existingStages === 0) {
         const teams = await Promise.all(
-          ["NOVA", "VOLT", "APEX", "TITAN", "ORBIT", "RIVAL"].map((name, i) =>
+          ["NOVA", "VOLT", "APEX", "TITAN", "ORBIT", "RIVAL"].map((name) =>
             tx.team.create({ data: { name: `${name} Esports`, slug: `fgc-showcase-${name.toLowerCase()}` } }),
           ),
         );
@@ -68,10 +68,10 @@ export async function POST() {
         }
 
         const specs = [
-          { name: "VALORANT — Arena Stage", kind: "KNOCKOUT" as const, sport: "valorant", adapter: "rounds", rules: { bestOf: 1, winCondition: "highest_score", allowedMetrics: ["rounds"] } },
-          { name: "Street Fighter 6 — Finals", kind: "KNOCKOUT" as const, sport: "fighting", adapter: "rounds", rules: { bestOf: 3, winCondition: "highest_score", allowedMetrics: ["rounds"] } },
-          { name: "BGMI — Battle Royale Lobby", kind: "GROUP" as const, sport: "bgmi", adapter: "battle_royale", rules: { bestOf: 1, winCondition: "highest_score", allowedMetrics: ["placement", "kills", "points"], finishPoints: 1, placementPoints: { 1: 10, 2: 6, 3: 5, 4: 4, 5: 3, 6: 2, 7: 1, 8: 1 }, tiebreakers: ["first_place_finishes", "placement_points", "kills", "most_recent_match"] } },
-          { name: "Football — League Table", kind: "LEAGUE" as const, sport: "football", adapter: "goals", rules: { bestOf: 1, winCondition: "highest_score", allowedMetrics: ["goals"], winPoints: 3, drawPoints: 1, lossPoints: 0 } },
+          { name: "VALORANT — Arena Stage", kind: "KNOCKOUT" as const, sport: "valorant", adapter: "rounds", rules: { bestOf: 1, winCondition: "highest_score" as const, allowedMetrics: ["rounds"] } },
+          { name: "Street Fighter 6 — Finals", kind: "KNOCKOUT" as const, sport: "fighting", adapter: "rounds", rules: { bestOf: 3, winCondition: "highest_score" as const, allowedMetrics: ["rounds"] } },
+          { name: "BGMI — Battle Royale Lobby", kind: "GROUP" as const, sport: "bgmi", adapter: "battle_royale", rules: { bestOf: 1, winCondition: "highest_score" as const, allowedMetrics: ["placement", "kills", "points"], finishPoints: 1, placementPoints: { 1: 10, 2: 6, 3: 5, 4: 4, 5: 3, 6: 2, 7: 1, 8: 1 }, tiebreakers: ["first_place_finishes", "placement_points", "kills", "most_recent_match"] } },
+          { name: "Football — League Table", kind: "LEAGUE" as const, sport: "football", adapter: "goals", rules: { bestOf: 1, winCondition: "highest_score" as const, allowedMetrics: ["goals"], winPoints: 3, drawPoints: 1, lossPoints: 0 } },
         ];
         for (let i = 0; i < specs.length; i++) {
           const spec = specs[i];
