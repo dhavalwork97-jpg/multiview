@@ -16,10 +16,12 @@ export function TournamentAdminNav({ tournamentId, slug }: { tournamentId: strin
     ["/data", "Import / Export"],
   ] as const;
   const secondary = [
+    ["/overlay", "Live Overlay"],
+    ["/overlay/standings", "OBS Standings"],
+    ["/multiview", "Multi-View"],
     ...(slug ? [[`/e/${slug}`, "Public Event"] as const] : []),
     ["/teams", "Global Teams"] as const,
     ["/players", "Global Players"],
-    ["/multiview", "Multi-View"],
   ] as const;
 
   return (
@@ -31,12 +33,12 @@ export function TournamentAdminNav({ tournamentId, slug }: { tournamentId: strin
           </Link>
         ))}
       </nav>
-      <nav aria-label="Tournament external resources" className="flex gap-2 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-        {secondary.map(([href, label]) => (
-          <Link key={label} href={href} className="inline-flex min-h-9 shrink-0 items-center rounded-card border border-arena-700 px-3 font-mono text-[10px] font-semibold uppercase tracking-wide text-ink-faint hover:border-signal-live hover:text-signal-live">
-            {label}
-          </Link>
-        ))}
+      <nav aria-label="Tournament broadcast and external resources" className="flex gap-2 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+        {secondary.map(([href, label]) => {
+          const target = href.startsWith("/overlay") ? "_blank" : undefined;
+          const resolved = href === "/overlay" ? `/overlay/${tournamentId}` : href === "/overlay/standings" ? `/overlay/standings?tournamentId=${tournamentId}` : `${href}`;
+          return <Link key={label} href={resolved} target={target} className="inline-flex min-h-9 shrink-0 items-center rounded-card border border-arena-700 px-3 font-mono text-[10px] font-semibold uppercase tracking-wide text-ink-faint hover:border-signal-live hover:text-signal-live">{label}</Link>;
+        })}
       </nav>
     </div>
   );
