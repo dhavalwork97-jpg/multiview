@@ -177,21 +177,12 @@ export function CreateTournamentForm() {
       ? {
           version: 1,
           family: "BATTLE_ROYALE",
-          stages: normalizeStages(stages.map((stage) => ({
-            ...stage,
-            format: "BATTLE_ROYALE_SESSION",
-          }))),
+          stages: normalizeStages(stages.map((stage) => ({ ...stage, format: "BATTLE_ROYALE_SESSION" }))),
         }
       : {
           version: 1,
           family: "STANDARD",
-          stages: normalizeStages((multiStage ? stages : [
-            {
-              ...stages[0],
-              name: format === "SINGLE_ELIMINATION" ? "Playoffs" : format.replaceAll("_", " "),
-              format: format as CompetitionStageConfig["format"],
-            },
-          ])),
+          stages: normalizeStages((multiStage ? stages : [{ ...stages[0], name: format === "SINGLE_ELIMINATION" ? "Playoffs" : format.replaceAll("_", " "), format: format as CompetitionStageConfig["format"] }])),
         };
 
     try {
@@ -233,6 +224,17 @@ export function CreateTournamentForm() {
       });
       const data = await response.json();
       if (!response.ok) throw new Error(typeof data.error === "string" ? data.error : "Could not create tournament.");
+
+      if (multiStage || isBattleRoyale) {
+        const stageResponse = await fetch(`/api/tournaments/${data.tournament.id}/competition`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ config: dynamicConfig }),
+        });
+        const stageData = await stageResponse.json().catch(() => null);
+        if (!stageResponse.ok) throw new Error(typeof stageData?.error === "string" ? stageData.error : "Tournament was created, but its competition stages could not be configured.");
+      }
+
       router.push(`/admin/tournaments/${data.tournament.id}/control-room`);
       router.refresh();
     } catch (err) {
@@ -257,46 +259,26 @@ export function CreateTournamentForm() {
       </div>
 
       <section className="mt-6 rounded-card border border-arena-700 bg-arena-950 p-4">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div><p className="section-label">Competition structure</p><h2 className="mt-1 font-display text-3xl uppercase">{isBattleRoyale ? "Battle Royale" : "Match / stage format"}</h2></div>
-          {!isBattleRoyale && <button type="button" onClick={enableBattleRoyale} className="action-secondary">Use Battle Royale rules</button>}
-        </div>
-
+        <div className="flex flex-wrap items-center justify-between gap-3"><div><p className="section-label">Competition structure</p><h2 className="mt-1 font-display text-3xl uppercase">{isBattleRoyale ? "Battle Royale" : "Match / stage format"}</h2></div>{!isBattleRoyale && <button type="button" onClick={enableBattleRoyale} className="action-secondary">Use Battle Royale rules</button>}</div>
         {isBattleRoyale ? (
-          <div className="mt-4 rounded-card border border-signal-live/25 bg-signal-live/5 p-4">
-            <div className="grid gap-3 sm:grid-cols-3">
-              <div><p className="metric-label">Format</p><p className="mt-1 font-display text-xl uppercase">Session based</p></div>
-              <div><p className="metric-label">Scoring</p><p className="mt-1 font-display text-xl uppercase">Placement + eliminations</p></div>
-              <div><p className="metric-label">Series</p><p className="mt-1 font-display text-xl uppercase">Not applicable</p></div>
-            </div>
-            <p className="mt-3 text-xs leading-5 text-ink-faint">Round Robin, Swiss and Best-of controls are intentionally unavailable for Battle Royale competitions.</p>
-          </div>
+          <div className="mt-4 rounded-card border border-signal-live/25 bg-signal-live/5 p-4"><div className="grid gap-3 sm:grid-cols-3"><div><p className="metric-label">Format</p><p className="mt-1 font-display text-xl uppercase">Session based</p></div><div><p className="metric-label">Scoring</p><p className="mt-1 font-display text-xl uppercase">Placement + eliminations</p></div><div><p className="metric-label">Series</p><p className="mt-1 font-display text-xl uppercase">Not applicable</p></div></div><p className="mt-3 text-xs leading-5 text-ink-faint">Round Robin, Swiss and Best-of controls are intentionally unavailable for Battle Royale competitions.</p></div>
         ) : (
-          <div className="mt-4 grid gap-5 md:grid-cols-2">
-            <label><span className="field-label">Format</span><select value={format} onChange={(e) => { setFormat(e.target.value); setStages([makeStandardStage(e.target.value as CompetitionStageConfig["format"])]); }} className="field-input">{STANDARD_FORMATS.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>
-            <label><span className="field-label">Best of / series</span><select value={bestOf} onChange={(e) => setBestOf(Number(e.target.value))} className="field-input">{BEST_OF_VALUES.map((value) => <option key={value} value={value}>Best of {value}</option>)}</select></label>
-          </div>
+          <div className="mt-4 grid gap-5 md:grid-cols-2"><label><span className="field-label">Format</span><select value={format} onChange={(e) => { setFormat(e.target.value); setStages([makeStandardStage(e.target.value as CompetitionStageConfig["format"])]); }} className="field-input">{STANDARD_FORMATS.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label><label><span className="field-label">Best of / series</span><select value={bestOf} onChange={(e) => setBestOf(Number(e.target.value))} className="field-input">{BEST_OF_VALUES.map((value) => <option key={value} value={value}>Best of {value}</option>)}</select></label></div>
         )}
-
-        <div className="mt-5 space-y-3">
-          {stages.map((stage, index) => (
-            <article key={stage.id} className="rounded-card border border-arena-700 bg-arena-900 p-4">
-              <div className="flex flex-wrap items-start justify-between gap-3">
-                <div><p className="ds-index">0{index + 1} / stage</p><input value={stage.name} onChange={(e) => updateStage(index, { name: e.target.value })} className="mt-1 w-full bg-transparent font-display text-2xl uppercase tracking-wide text-ink outline-none" /></div>
-                {stages.length > 1 && <button type="button" onClick={() => removeStage(index)} className="action-ghost text-signal-accent">Remove</button>}
-              </div>
-              <div className="mt-4 grid gap-4 md:grid-cols-3">
-                <label><span className="field-label">Stage format</span><select disabled={isBattleRoyale} value={stage.format} onChange={(e) => updateStage(index, { format: e.target.value as CompetitionStageConfig["format"] })} className="field-input disabled:opacity-60"><option value="BATTLE_ROYALE_SESSION">Battle Royale session</option><option value="SINGLE_ELIMINATION">Single elimination</option><option value="DOUBLE_ELIMINATION">Double elimination</option><option value="ROUND_ROBIN">Round robin</option><option value="SWISS">Swiss</option><option value="LEAGUE">League</option><option value="CUSTOM">Custom</option></select></label>
-                <label><span className="field-label">Session</span><select value={stage.session.mode} onChange={(e) => updateStageSession(index, { mode: e.target.value as CompetitionStageConfig["session"]["mode"] })} className="field-input"><option value="MATCH">Match / series</option><option value="FIXED_GAMES">Fixed games</option><option value="FIXED_TIME">Fixed time</option><option value="UNTIL_THRESHOLD">Until threshold</option></select></label>
-                {stage.session.mode === "FIXED_GAMES" && <label><span className="field-label">Games</span><input type="number" min={1} value={stage.session.games ?? 1} onChange={(e) => updateStageSession(index, { games: Number(e.target.value) })} className="field-input" /></label>}
-                {stage.session.mode === "FIXED_TIME" && <label><span className="field-label">Duration (minutes)</span><input type="number" min={1} value={stage.session.durationMinutes ?? 30} onChange={(e) => updateStageSession(index, { durationMinutes: Number(e.target.value) })} className="field-input" /></label>}
-                <label><span className="field-label">Advancement</span><select value={stage.advancement.method} onChange={(e) => updateStage(index, { advancement: { ...stage.advancement, method: e.target.value as CompetitionStageConfig["advancement"]["method"] } })} className="field-input"><option value="TOP_N">Top N</option><option value="TOP_PERCENT">Top %</option><option value="POINTS_THRESHOLD">Points threshold</option><option value="WINS">Wins</option><option value="MANUAL">Manual</option><option value="ALL">All</option></select></label>
-                {(stage.advancement.method === "TOP_N" || stage.advancement.method === "TOP_PERCENT" || stage.advancement.method === "POINTS_THRESHOLD") && <label><span className="field-label">Value</span><input type="number" min={0} value={stage.advancement.value ?? 1} onChange={(e) => updateStage(index, { advancement: { ...stage.advancement, value: Number(e.target.value) } })} className="field-input" /></label>}
-                {isBattleRoyale && <label><span className="field-label">Elimination points</span><input type="number" value={stage.scoring.eliminationPoints} onChange={(e) => updateStage(index, { scoring: { ...stage.scoring, eliminationPoints: Number(e.target.value) } })} className="field-input" /></label>}
-              </div>
-            </article>
-          ))}
-        </div>
+        <div className="mt-5 space-y-3">{stages.map((stage, index) => (
+          <article key={stage.id} className="rounded-card border border-arena-700 bg-arena-900 p-4">
+            <div className="flex flex-wrap items-start justify-between gap-3"><div><p className="ds-index">0{index + 1} / stage</p><input value={stage.name} onChange={(e) => updateStage(index, { name: e.target.value })} className="mt-1 w-full bg-transparent font-display text-2xl uppercase tracking-wide text-ink outline-none" /></div>{stages.length > 1 && <button type="button" onClick={() => removeStage(index)} className="action-ghost text-signal-accent">Remove</button>}</div>
+            <div className="mt-4 grid gap-4 md:grid-cols-3">
+              <label><span className="field-label">Stage format</span><select disabled={isBattleRoyale} value={stage.format} onChange={(e) => updateStage(index, { format: e.target.value as CompetitionStageConfig["format"] })} className="field-input disabled:opacity-60"><option value="BATTLE_ROYALE_SESSION">Battle Royale session</option><option value="SINGLE_ELIMINATION">Single elimination</option><option value="DOUBLE_ELIMINATION">Double elimination</option><option value="ROUND_ROBIN">Round robin</option><option value="SWISS">Swiss</option><option value="LEAGUE">League</option><option value="CUSTOM">Custom</option></select></label>
+              <label><span className="field-label">Session</span><select value={stage.session.mode} onChange={(e) => updateStageSession(index, { mode: e.target.value as CompetitionStageConfig["session"]["mode"] })} className="field-input"><option value="MATCH">Match / series</option><option value="FIXED_GAMES">Fixed games</option><option value="FIXED_TIME">Fixed time</option><option value="UNTIL_THRESHOLD">Until threshold</option></select></label>
+              {stage.session.mode === "FIXED_GAMES" && <label><span className="field-label">Games</span><input type="number" min={1} value={stage.session.games ?? 1} onChange={(e) => updateStageSession(index, { games: Number(e.target.value) })} className="field-input" /></label>}
+              {stage.session.mode === "FIXED_TIME" && <label><span className="field-label">Duration (minutes)</span><input type="number" min={1} value={stage.session.durationMinutes ?? 30} onChange={(e) => updateStageSession(index, { durationMinutes: Number(e.target.value) })} className="field-input" /></label>}
+              <label><span className="field-label">Advancement</span><select value={stage.advancement.method} onChange={(e) => updateStage(index, { advancement: { ...stage.advancement, method: e.target.value as CompetitionStageConfig["advancement"]["method"] } })} className="field-input"><option value="TOP_N">Top N</option><option value="TOP_PERCENT">Top %</option><option value="POINTS_THRESHOLD">Points threshold</option><option value="WINS">Wins</option><option value="MANUAL">Manual</option><option value="ALL">All</option></select></label>
+              {(stage.advancement.method === "TOP_N" || stage.advancement.method === "TOP_PERCENT" || stage.advancement.method === "POINTS_THRESHOLD") && <label><span className="field-label">Value</span><input type="number" min={0} value={stage.advancement.value ?? 1} onChange={(e) => updateStage(index, { advancement: { ...stage.advancement, value: Number(e.target.value) } })} className="field-input" /></label>}
+              {isBattleRoyale && <label><span className="field-label">Elimination points</span><input type="number" value={stage.scoring.eliminationPoints} onChange={(e) => updateStage(index, { scoring: { ...stage.scoring, eliminationPoints: Number(e.target.value) } })} className="field-input" /></label>}
+            </div>
+          </article>
+        ))}</div>
         <button type="button" onClick={addStage} className="action-secondary mt-4">+ Add stage</button>
       </section>
 
@@ -309,17 +291,10 @@ export function CreateTournamentForm() {
         <label className="md:col-span-2"><span className="field-label">Custom rules JSON <span className="normal-case text-ink-faint">(optional)</span></span><textarea rows={4} value={rulesText} onChange={(e) => setRulesText(e.target.value)} placeholder='{"winPoints":3,"drawPoints":1}' className="field-input font-mono text-xs" /></label>
       </div>
 
-      <section className="mt-6 rounded-card border border-arena-700 bg-arena-950 p-4">
-        <div className="flex items-start justify-between gap-4"><div><p className="section-label">Rules preview</p><h2 className="mt-1 font-display text-2xl uppercase">{preset.label}</h2></div><span className="status-neutral">{isBattleRoyale ? "BATTLE ROYALE" : "STANDARD"}</span></div>
-        <pre className="mt-4 max-h-56 overflow-auto rounded-card border border-arena-800 bg-black/20 p-3 font-mono text-[10px] leading-5 text-ink-faint">{JSON.stringify(previewRules, null, 2)}</pre>
-      </section>
+      <section className="mt-6 rounded-card border border-arena-700 bg-arena-950 p-4"><div className="flex items-start justify-between gap-4"><div><p className="section-label">Rules preview</p><h2 className="mt-1 font-display text-2xl uppercase">{preset.label}</h2></div><span className="status-neutral">{isBattleRoyale ? "BATTLE ROYALE" : "STANDARD"}</span></div><pre className="mt-4 max-h-56 overflow-auto rounded-card border border-arena-800 bg-black/20 p-3 font-mono text-[10px] leading-5 text-ink-faint">{JSON.stringify(previewRules, null, 2)}</pre></section>
 
       {error && <div role="alert" className="mt-5 rounded-card border border-signal-accent/30 bg-signal-accent/10 p-4 text-sm text-signal-accent">{error}</div>}
-
-      <div className="mt-6 flex flex-wrap items-center justify-between gap-3 border-t border-arena-700 pt-5">
-        <p className="text-xs text-ink-faint">Battle Royale stages are session/scoring based; they do not use round-robin, Swiss or Best-of controls.</p>
-        <button type="submit" disabled={submitting || !validCount} className="action-primary disabled:cursor-not-allowed disabled:opacity-50">{submitting ? "Creating…" : "Create tournament"}</button>
-      </div>
+      <div className="mt-6 flex flex-wrap items-center justify-between gap-3 border-t border-arena-700 pt-5"><p className="text-xs text-ink-faint">Battle Royale stages are session/scoring based; they do not use round-robin, Swiss or Best-of controls.</p><button type="submit" disabled={submitting || !validCount} className="action-primary disabled:cursor-not-allowed disabled:opacity-50">{submitting ? "Creating…" : "Create tournament"}</button></div>
     </form>
   );
 }
