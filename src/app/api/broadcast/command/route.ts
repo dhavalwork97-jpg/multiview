@@ -28,7 +28,7 @@ export async function POST(request: Request) {
     scene: command.scene,
     stationId: command.stationId ?? null,
     matchId: command.matchId ?? null,
-    overlay: command.overlay,
+    overlay: command.overlay ?? null,
     commandType: command.type,
   });
 
