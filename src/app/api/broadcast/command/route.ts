@@ -66,13 +66,13 @@ export async function POST(request: Request) {
       tournamentId: command.tournamentId,
       actorUserId: authorization.userId,
       type: command.type,
-      payload: {
+      payload: JSON.parse(JSON.stringify({
         scene: command.scene,
         matchId: command.matchId,
         stationId: command.stationId,
         overlay: command.overlay,
         issuedAt: command.issuedAt,
-      },
+      })),
     },
   });
 
