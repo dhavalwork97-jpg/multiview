@@ -28,7 +28,7 @@ export async function POST(request: Request) {
       tournamentId: body.tournamentId,
       actorUserId: authorization.userId,
       type: "REPLAY_PLAY",
-      payload: { clip },
+      payload: JSON.parse(JSON.stringify({ clip })),
     },
   });
 
