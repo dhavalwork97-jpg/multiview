@@ -15,27 +15,37 @@ In OBS:
 
 ## 2. Configure the bridge
 
-From the FGC repository, create a local environment for the bridge:
+The bridge can operate in **dynamic tournament mode**, so you do not need to enter a tournament ID every time a new tournament is created.
 
-```bash
-export FGC_SOCKET_URL="https://<your-fgc-socket-host>"
-export FGC_TOURNAMENT_ID="<tournament-id>"
-export OBS_WEBSOCKET_URL="ws://127.0.0.1:4455"
-export OBS_WEBSOCKET_PASSWORD="<obs-password>"
+Set:
+
+```powershell
+$env:FGC_SOCKET_URL="https://<your-fgc-socket-host>"
+$env:FGC_OBS_BRIDGE_TOKEN="<shared-bridge-token>"
+$env:OBS_WEBSOCKET_URL="ws://127.0.0.1:4455"
+$env:OBS_WEBSOCKET_PASSWORD="<obs-password>"
 ```
 
-`FGC_TOURNAMENT_IDS` can be used instead of `FGC_TOURNAMENT_ID` for multiple tournaments, separated by commas.
+Leave `FGC_TOURNAMENT_ID` and `FGC_TOURNAMENT_IDS` unset for dynamic mode.
+
+For a temporary filtered setup, either variable can still be supplied:
+
+```powershell
+$env:FGC_TOURNAMENT_IDS="tournament-a,tournament-b"
+```
+
+The socket server must have the same `FGC_OBS_BRIDGE_TOKEN` configured. The token authorizes the local bridge to join the protected `obs-bridge` event room.
 
 ## 3. Start the bridge
 
-```bash
-npm install
-npm run obs:bridge
+```powershell
+npm.cmd install
+npm.cmd run obs:bridge
 ```
 
-The bridge joins the configured tournament room on FGC's Socket.IO server. When an operator clicks a scene in the FGC Control Room, the server publishes `broadcast:updated`; the bridge reads the mapped `obsScene` and calls OBS `SetCurrentProgramScene`.
+In dynamic mode, the bridge joins the protected OBS bridge room once and receives broadcast events for newly created tournaments automatically. You do **not** restart it or change environment variables when creating another tournament.
 
-Example:
+When an operator clicks a scene in the FGC Control Room, the server publishes `broadcast:updated`; the bridge reads the tournament's mapped `obsScene` and calls OBS `SetCurrentProgramScene`.
 
 ```text
 FGC Control Room
@@ -43,6 +53,8 @@ FGC Control Room
 POST /api/broadcast/command
   ↓
 FGC broadcast state + Socket.IO event
+  ↓
+Protected OBS bridge room
   ↓
 Local obs-bridge.ts
   ↓
@@ -72,3 +84,5 @@ The mapping is sent with each broadcast command, so the local bridge does not ne
 ## Security
 
 The OBS password stays on the local production machine. It is never sent to FGC or stored in the FGC database.
+
+The bridge room is protected by `FGC_OBS_BRIDGE_TOKEN`. Use a long random value and configure the same value on the FGC Socket service and the OBS computer. Do not commit the token to Git.
