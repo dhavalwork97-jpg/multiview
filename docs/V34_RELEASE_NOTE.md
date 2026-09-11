@@ -1,0 +1,1 @@
+V34 hotfix: resilient OBS broadcast event delivery and restored station Start Stream/Stop Stream controls. Scene selection remains manual.

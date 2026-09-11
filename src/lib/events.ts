@@ -3,9 +3,6 @@ import { serverLogger } from "@/lib/server-logger";
 
 export { EVENTS_CHANNEL };
 
-// The full set of real-time events the platform pushes. Keeping this as a
-// discriminated union means the socket server and any future consumer get
-// autocomplete and type safety on payload shape.
 export type AppEvent =
   | { type: "competition:updated"; tournamentId: string; reason: "MATCH_UPDATED" | "RESULT_UPDATED" | "STANDINGS_UPDATED" | "BRACKET_UPDATED" | "LIVE_STATE_UPDATED" }
   | { type: "match:updated"; tournamentId: string; matchId: string; status: string; playerOneScore: number; playerTwoScore: number; winnerId: string | null; winnerSideId?: string | null; sideScores?: { A: number; B: number }; stationId: string | null }
@@ -41,11 +38,34 @@ if (redisPub) {
   });
 }
 
-export async function publishEvent(event: AppEvent) {
-  if (!(await ensureConnected()) || !redisPub) return;
-  try { await redisPub.publish(EVENTS_CHANNEL, JSON.stringify(event)); }
-  catch (error) {
-    connected = false;
-    serverLogger.error("failed to publish realtime event", { eventType: event.type, tournamentId: "tournamentId" in event ? event.tournamentId : undefined, error: error instanceof Error ? error.message : "unknown_error" });
+async function relayBroadcastToSocketServer(event: AppEvent) {
+  if (event.type !== "broadcast:updated") return;
+  const socketUrl = (process.env.FGC_SOCKET_INTERNAL_URL ?? process.env.NEXT_PUBLIC_SOCKET_URL)?.trim().replace(/\/$/, "");
+  const token = process.env.FGC_SOCKET_INTERNAL_TOKEN?.trim() || process.env.FGC_OBS_BRIDGE_TOKEN?.trim();
+  if (!socketUrl || !token) return;
+  try {
+    const response = await fetch(`${socketUrl}/internal/events`, {
+      method: "POST",
+      headers: { "content-type": "application/json", "x-fgc-internal-token": token },
+      body: JSON.stringify(event),
+      cache: "no-store",
+    });
+    if (!response.ok) serverLogger.warn("socket broadcast relay rejected", { status: response.status });
+  } catch (error) {
+    serverLogger.warn("socket broadcast relay failed", { error: error instanceof Error ? error.message : "unknown_error" });
   }
+}
+
+export async function publishEvent(event: AppEvent) {
+  const redisAvailable = await ensureConnected();
+  if (redisAvailable && redisPub) {
+    try { await redisPub.publish(EVENTS_CHANNEL, JSON.stringify(event)); }
+    catch (error) {
+      connected = false;
+      serverLogger.error("failed to publish realtime event", { eventType: event.type, tournamentId: "tournamentId" in event ? event.tournamentId : undefined, error: error instanceof Error ? error.message : "unknown_error" });
+      await relayBroadcastToSocketServer(event);
+    }
+    return;
+  }
+  await relayBroadcastToSocketServer(event);
 }

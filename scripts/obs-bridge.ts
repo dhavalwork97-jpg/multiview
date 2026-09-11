@@ -34,7 +34,10 @@ socket.on("connect", async () => {
     for (const tournamentId of configuredTournamentIds) socket.emit("join:tournament", tournamentId);
     console.log(`[FGC→OBS] filtered tournaments: ${configuredTournamentIds.join(", ")}`);
   } else {
-    socket.emit("join:obs-bridge");
+    socket.emit("join:obs-bridge", (result: { ok: boolean; error?: string }) => {
+      if (result.ok) console.log("[FGC→OBS] authenticated dynamic OBS bridge room");
+      else console.error(`[FGC→OBS] bridge room authentication failed: ${result.error ?? "unknown error"}`);
+    });
     console.log("[FGC→OBS] dynamic tournament mode enabled");
   }
 
