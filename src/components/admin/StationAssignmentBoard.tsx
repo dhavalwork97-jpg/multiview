@@ -3,11 +3,12 @@
 import { useEffect, useState } from "react";
 import { useSocket } from "@/hooks/useSocket";
 
+type PlayerRef = { gamertag: string } | null;
 type QueuedMatch = {
   id: string;
   round: string | null;
-  playerOne: { gamertag: string };
-  playerTwo: { gamertag: string };
+  playerOne: PlayerRef;
+  playerTwo: PlayerRef;
   stationId: string | null;
 };
 
@@ -20,7 +21,7 @@ type StationHealth = {
   droppedFrames: number | null;
   isStale: boolean;
   youtubeVideoId: string | null;
-  matches: { id: string; playerOne: { gamertag: string }; playerTwo: { gamertag: string } }[];
+  matches: { id: string; playerOne: PlayerRef; playerTwo: PlayerRef }[];
 };
 
 type StreamCredentials = { ingestUrl: string; streamKey: string };
@@ -29,6 +30,10 @@ type CredentialsState =
   | { status: "loading" }
   | { status: "ready"; credentials: StreamCredentials }
   | { status: "error"; message: string };
+
+function playerName(player: PlayerRef) {
+  return player?.gamertag ?? "TBD";
+}
 
 export function StationAssignmentBoard({ tournamentId }: { tournamentId: string }) {
   const [queued, setQueued] = useState<QueuedMatch[]>([]);
@@ -54,10 +59,10 @@ export function StationAssignmentBoard({ tournamentId }: { tournamentId: string 
   }
 
   useEffect(() => {
-    refresh();
+    void refresh();
     socket.on("station:status", refresh);
     socket.on("match:assigned", refresh);
-    const timer = setInterval(refresh, 30000);
+    const timer = setInterval(() => void refresh(), 30000);
     return () => {
       clearInterval(timer);
       socket.off("station:status", refresh);
@@ -123,15 +128,15 @@ export function StationAssignmentBoard({ tournamentId }: { tournamentId: string 
             {queued.map((m) => (
               <li key={m.id} className="flex items-center justify-between rounded-card border border-arena-600 bg-arena-800 px-3 py-2 text-sm">
                 <span>
-                  <span className="text-corner-p1">{m.playerOne.gamertag}</span>
+                  <span className="text-corner-p1">{playerName(m.playerOne)}</span>
                   {" vs "}
-                  <span className="text-corner-p2">{m.playerTwo.gamertag}</span>
+                  <span className="text-corner-p2">{playerName(m.playerTwo)}</span>
                   {m.round && <span className="ml-2 text-ink-faint">{m.round}</span>}
                 </span>
                 <select
                   disabled={assigning === m.id}
                   defaultValue=""
-                  onChange={(e) => e.target.value && assign(m.id, e.target.value)}
+                  onChange={(e) => e.target.value && void assign(m.id, e.target.value)}
                   className="rounded border border-arena-600 bg-arena-900 px-2 py-1 text-xs"
                 >
                   <option value="" disabled>Assign to…</option>
@@ -162,9 +167,9 @@ export function StationAssignmentBoard({ tournamentId }: { tournamentId: string 
                   <div className="mt-2 rounded border border-arena-600 bg-arena-900 p-2">
                     <p className="text-xs text-ink-faint">Assigned queued match</p>
                     <p className="mt-1 text-xs">
-                      <span className="text-corner-p1">{assignedMatch.playerOne.gamertag}</span>
+                      <span className="text-corner-p1">{playerName(assignedMatch.playerOne)}</span>
                       {" vs "}
-                      <span className="text-corner-p2">{assignedMatch.playerTwo.gamertag}</span>
+                      <span className="text-corner-p2">{playerName(assignedMatch.playerTwo)}</span>
                     </p>
                     {s.status !== "LIVE" && (
                       <div className="mt-2 flex items-center gap-2">
@@ -172,7 +177,7 @@ export function StationAssignmentBoard({ tournamentId }: { tournamentId: string 
                           disabled={assigning === assignedMatch.id || !canEditAssignment}
                           defaultValue=""
                           onChange={(e) => {
-                            if (e.target.value) assign(assignedMatch.id, e.target.value);
+                            if (e.target.value) void assign(assignedMatch.id, e.target.value);
                           }}
                           className="min-w-0 flex-1 rounded border border-arena-600 bg-arena-950 px-2 py-1 text-[11px]"
                         >
@@ -184,7 +189,7 @@ export function StationAssignmentBoard({ tournamentId }: { tournamentId: string 
                         <button
                           type="button"
                           disabled={assigning === assignedMatch.id || !canEditAssignment}
-                          onClick={() => assign(assignedMatch.id, null)}
+                          onClick={() => void assign(assignedMatch.id, null)}
                           className="shrink-0 rounded border border-arena-600 px-2 py-1 text-[11px] uppercase tracking-wide text-ink-faint hover:border-signal-error hover:text-signal-error disabled:opacity-50"
                         >
                           Unassign
@@ -204,7 +209,7 @@ export function StationAssignmentBoard({ tournamentId }: { tournamentId: string 
 
                 <StreamingCredentialsPanel
                   state={credentials[s.id] ?? { status: "idle" }}
-                  onFetch={() => getStreamingCredentials(s.id)}
+                  onFetch={() => void getStreamingCredentials(s.id)}
                 />
               </li>
             );
@@ -252,8 +257,8 @@ function StreamingCredentialsPanel({ state, onFetch }: { state: CredentialsState
   return (
     <div className="mt-2 space-y-1.5 rounded border border-arena-600 bg-arena-900 p-2">
       <p className="text-[10px] uppercase tracking-wide text-ink-faint">Paste these into OBS (Settings → Stream → Custom). This is the YouTube RTMP input for this station; treat the stream key like a password.</p>
-      <CredentialRow label="Server (YouTube RTMP URL)" value={ingestUrl} masked={false} copied={justCopied === "url"} onCopy={() => copy(ingestUrl, "url")} />
-      <CredentialRow label="Stream key" value={streamKey} masked={!revealed} copied={justCopied === "key"} onCopy={() => copy(streamKey, "key")} onToggleReveal={() => setRevealed((r) => !r)} revealed={revealed} />
+      <CredentialRow label="Server (YouTube RTMP URL)" value={ingestUrl} masked={false} copied={justCopied === "url"} onCopy={() => void copy(ingestUrl, "url")} />
+      <CredentialRow label="Stream key" value={streamKey} masked={!revealed} copied={justCopied === "key"} onCopy={() => void copy(streamKey, "key")} onToggleReveal={() => setRevealed((r) => !r)} revealed={revealed} />
       <button type="button" onClick={onFetch} className="pt-1 font-mono text-[10px] uppercase tracking-wide text-ink-faint underline hover:text-ink">Get / reuse station key</button>
     </div>
   );
