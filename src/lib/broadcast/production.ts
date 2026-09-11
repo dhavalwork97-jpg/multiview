@@ -41,6 +41,16 @@ export type BroadcastTimeline = {
   cues: TimelineCue[];
 };
 
+export type ProductionMode = "manual" | "timeline";
+
+export type ProductionState = {
+  mode: ProductionMode;
+  running: boolean;
+  elapsedMs: number;
+  cueIndex: number;
+  lastIssuedCueId: string | null;
+};
+
 export const DEFAULT_MATCH_TIMELINE: BroadcastTimeline = {
   id: "match-standard",
   name: "Standard Match",
@@ -52,8 +62,27 @@ export const DEFAULT_MATCH_TIMELINE: BroadcastTimeline = {
   ],
 };
 
+export function createProductionState(): ProductionState {
+  return { mode: "manual", running: false, elapsedMs: 0, cueIndex: -1, lastIssuedCueId: null };
+}
+
 export function getTimelineCue(timeline: BroadcastTimeline, elapsedMs: number) {
   return [...timeline.cues].reverse().find((cue) => elapsedMs >= cue.atMs) ?? null;
+}
+
+export function getTimelineCueIndex(timeline: BroadcastTimeline, elapsedMs: number) {
+  return timeline.cues.reduce((index, cue, candidate) => (elapsedMs >= cue.atMs ? candidate : index), -1);
+}
+
+export function getNextTimelineCue(timeline: BroadcastTimeline, cueIndex: number) {
+  return timeline.cues[cueIndex + 1] ?? null;
+}
+
+export function advanceProductionCue(state: ProductionState, timeline: BroadcastTimeline): ProductionState {
+  const nextIndex = Math.min(state.cueIndex + 1, timeline.cues.length - 1);
+  const cue = timeline.cues[nextIndex];
+  if (!cue) return state;
+  return { ...state, cueIndex: nextIndex, elapsedMs: cue.atMs, lastIssuedCueId: null };
 }
 
 export function createBroadcastCommand(
