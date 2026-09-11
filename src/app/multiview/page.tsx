@@ -4,8 +4,9 @@ import { isPremium, maxMultiViewTiles } from "@/lib/billing";
 import { db } from "@/lib/db";
 import { MultiView } from "@/components/watch/MultiView";
 import { BillingButton } from "@/components/billing/BillingButton";
+import { GameVisual } from "@/components/competition/GameVisual";
 
-// Phase 3 streaming surface with the shared Phase 4 navigation and visual system.
+// Phase 3 streaming surface with shared game identity and visual system.
 export default async function MultiViewPage({
   searchParams,
 }: {
@@ -54,9 +55,17 @@ export default async function MultiViewPage({
         </header>
 
         {tournament && (
-          <section className="surface-card mb-4 flex flex-col gap-2 p-4 sm:flex-row sm:items-center sm:justify-between">
-            <div className="min-w-0"><p className="page-kicker text-signal-live">{tournament.game}</p><h2 className="mt-1 truncate font-display text-2xl uppercase tracking-wide">{tournament.name}</h2></div>
-            <span className={tournament.status === "LIVE" ? "status-live" : "status-neutral"}>{tournament.status === "LIVE" && <span className="h-1.5 w-1.5 rounded-full bg-signal-live animate-live-pulse" />}{tournament.status}</span>
+          <section className="surface-card mb-4 overflow-hidden p-2 sm:p-3">
+            <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center">
+              <GameVisual game={tournament.game} size="sm" className="w-full sm:h-20 sm:w-64" />
+              <div className="flex min-w-0 items-center justify-between gap-4 px-2 pb-2 sm:px-3 sm:pb-0 lg:min-w-[280px]">
+                <div className="min-w-0">
+                  <p className="page-kicker text-signal-live">{tournament.game}</p>
+                  <h2 className="mt-1 truncate font-display text-2xl uppercase tracking-wide">{tournament.name}</h2>
+                </div>
+                <span className={tournament.status === "LIVE" ? "status-live" : "status-neutral"}>{tournament.status === "LIVE" && <span className="h-1.5 w-1.5 rounded-full bg-signal-live animate-live-pulse" />}{tournament.status}</span>
+              </div>
+            </div>
           </section>
         )}
 
