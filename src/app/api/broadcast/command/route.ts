@@ -13,10 +13,7 @@ export async function POST(request: Request) {
   const { userId } = await auth();
   if (!userId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const body = (await request.json()) as Partial<BroadcastCommand> & {
-    obsMapping?: Partial<ObsSceneMapping> | null;
-    previewScene?: BroadcastScene | null;
-  };
+  const body = (await request.json()) as Partial<BroadcastCommand> & { obsMapping?: Partial<ObsSceneMapping> | null; previewScene?: BroadcastScene | null };
   if (!body.tournamentId || !body.type || !body.scene) return NextResponse.json({ error: "tournamentId, type and scene are required" }, { status: 400 });
   if (!commandTypes.includes(body.type as BroadcastCommandType)) return NextResponse.json({ error: "Invalid broadcast command type" }, { status: 400 });
   if (!scenes.includes(body.scene as BroadcastScene)) return NextResponse.json({ error: "Invalid broadcast scene" }, { status: 400 });
@@ -35,9 +32,9 @@ export async function POST(request: Request) {
     issuedAt: new Date().toISOString(),
   };
   const obsScene = resolveObsScene(command.scene, normalizeObsSceneMapping(body.obsMapping));
-  const existingState = await db.broadcastState.findUnique({ where: { tournamentId: command.tournamentId }, select: { overlay: true } });
+  const existingState = await db.broadcastState.findUnique({ where: { tournamentId: command.tournamentId }, select: { scene: true, overlay: true } });
   const previousOverlay = existingState?.overlay && typeof existingState.overlay === "object" && !Array.isArray(existingState.overlay) ? existingState.overlay as Record<string, unknown> : {};
-  const overlay = { ...previousOverlay, ...(command.overlay ?? {}), obsScene, commandType: command.type, ...(body.previewScene ? { previewScene: body.previewScene } : {}) };
+  const overlay = { ...previousOverlay, ...(command.overlay ?? {}), runtimeScene: command.scene, obsScene, commandType: command.type, ...(body.previewScene ? { previewScene: body.previewScene } : {}) };
 
   await db.$transaction([
     db.broadcastCommand.create({
@@ -50,20 +47,11 @@ export async function POST(request: Request) {
     }),
     db.broadcastState.upsert({
       where: { tournamentId: command.tournamentId },
-      create: { tournamentId: command.tournamentId, scene: command.scene, matchId: command.matchId, stationId: command.stationId, overlay: JSON.parse(JSON.stringify(overlay)) },
-      update: { scene: command.scene, matchId: command.matchId, stationId: command.stationId, overlay: JSON.parse(JSON.stringify(overlay)) },
+      create: { tournamentId: command.tournamentId, scene: "OFFLINE", matchId: command.matchId, stationId: command.stationId, overlay: JSON.parse(JSON.stringify(overlay)) },
+      update: { matchId: command.matchId, stationId: command.stationId, overlay: JSON.parse(JSON.stringify(overlay)) },
     }),
   ]);
 
-  await publishEvent({
-    type: "broadcast:updated",
-    tournamentId: command.tournamentId,
-    scene: command.scene,
-    stationId: command.stationId ?? null,
-    matchId: command.matchId ?? null,
-    overlay,
-    commandType: command.type,
-  });
-
+  await publishEvent({ type: "broadcast:updated", tournamentId: command.tournamentId, scene: command.scene, stationId: command.stationId ?? null, matchId: command.matchId ?? null, overlay, commandType: command.type });
   return NextResponse.json({ ok: true, command: { ...command, overlay }, obsScene });
 }
