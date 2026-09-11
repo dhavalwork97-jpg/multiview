@@ -16,7 +16,7 @@ export const GAME_VISUALS: Record<string, GameVisualDefinition> = {
   cs2: { domain: "counter-strike.net", art: STEAM_ART(730), accent: "from-orange-500/25 via-slate-500/10 to-transparent" },
   "dota 2": { domain: "dota2.com", art: STEAM_ART(570), accent: "from-red-500/35 via-orange-500/10 to-transparent" },
   dota: { domain: "dota2.com", art: STEAM_ART(570), accent: "from-red-500/35 via-orange-500/10 to-transparent" },
-  fortnite: { domain: "fortnite.com", art: STEAM_ART(1172470), accent: "from-violet-500/35 via-fuchsia-500/10 to-transparent" },
+  fortnite: { domain: "fortnite.com", accent: "from-violet-500/35 via-fuchsia-500/10 to-transparent" },
   "league of legends": { domain: "leagueoflegends.com", accent: "from-blue-500/35 via-cyan-500/10 to-transparent" },
   league: { domain: "leagueoflegends.com", accent: "from-blue-500/35 via-cyan-500/10 to-transparent" },
   "mortal kombat": { domain: "mortalkombat.com", art: STEAM_ART(1971870), accent: "from-red-500/35 via-amber-500/10 to-transparent" },
