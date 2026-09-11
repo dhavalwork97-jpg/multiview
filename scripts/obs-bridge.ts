@@ -17,6 +17,19 @@ const configuredTournamentIds = (process.env.FGC_TOURNAMENT_IDS ?? process.env.F
   .filter(Boolean);
 const obsUrl = process.env.OBS_WEBSOCKET_URL?.trim() || "ws://127.0.0.1:4455";
 const obsPassword = process.env.OBS_WEBSOCKET_PASSWORD ?? "";
+const webUrl = (process.env.FGC_WEB_URL?.trim() || "https://multiview-fjtd.vercel.app").replace(/\/$/, "");
+
+const overlayKinds: Record<string, string> = {
+  "starting-soon": "countdown",
+  intro: "intro",
+  versus: "versus",
+  gameplay: "scoreboard",
+  timeout: "program",
+  replay: "replay",
+  winner: "winner",
+  champion: "winner",
+  brb: "program",
+};
 
 if (!socketUrl) throw new Error("FGC_SOCKET_URL is required");
 
@@ -26,6 +39,14 @@ const socket = io(socketUrl, {
   transports: ["websocket", "polling"],
   reconnection: true,
 });
+
+async function ensureFgcScene(tournamentId: string, sceneName: string) {
+  const kind = overlayKinds[sceneName] ?? "program";
+  const overlayUrl = `${webUrl}/broadcast/${encodeURIComponent(tournamentId)}/overlay?kind=${encodeURIComponent(kind)}`;
+  const sourceName = `FGC Overlay — ${sceneName}`;
+  await obs.ensureSceneWithBrowserSource(sceneName, sourceName, overlayUrl);
+  return { sceneName, overlayUrl, sourceName };
+}
 
 socket.on("connect", async () => {
   console.log(`[FGC→OBS] connected to ${socketUrl}`);
@@ -57,17 +78,19 @@ socket.on("broadcast:updated", async (event: BroadcastUpdated) => {
   if (!event.tournamentId) return;
   if (configuredTournamentIds.length && !configuredTournamentIds.includes(event.tournamentId)) return;
 
-  const sceneName = typeof event.overlay?.obsScene === "string" ? event.overlay.obsScene.trim() : "";
+  const requestedScene = typeof event.overlay?.obsScene === "string" ? event.overlay.obsScene.trim() : "";
+  const sceneName = requestedScene || event.scene?.trim() || "";
   if (!sceneName) {
     console.warn(`[FGC→OBS] no OBS scene mapping for ${event.scene ?? "unknown"} (${event.tournamentId})`);
     return;
   }
 
   try {
+    await ensureFgcScene(event.tournamentId, sceneName);
     await obs.setCurrentProgramScene(sceneName);
     console.log(`[FGC→OBS] ${event.tournamentId}: ${event.scene ?? "unknown"} → ${sceneName}`);
   } catch (error) {
-    console.error(`[FGC→OBS] failed to switch to ${sceneName}: ${error instanceof Error ? error.message : String(error)}`);
+    console.error(`[FGC→OBS] failed to provision/switch ${sceneName}: ${error instanceof Error ? error.message : String(error)}`);
   }
 });
 
