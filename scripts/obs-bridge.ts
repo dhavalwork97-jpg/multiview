@@ -1,4 +1,5 @@
 import { io } from "socket.io-client";
+import { randomUUID } from "node:crypto";
 import { ObsWebSocketClient } from "../src/lib/broadcast/obs-websocket";
 
 type BroadcastUpdated = {
@@ -18,6 +19,11 @@ const configuredTournamentIds = (process.env.FGC_TOURNAMENT_IDS ?? process.env.F
 const obsUrl = process.env.OBS_WEBSOCKET_URL?.trim() || "ws://127.0.0.1:4455";
 const obsPassword = process.env.OBS_WEBSOCKET_PASSWORD ?? "";
 const webUrl = (process.env.FGC_WEB_URL?.trim() || "https://multiview-fjtd.vercel.app").replace(/\/$/, "");
+// OBS browser sources can retain an old document even after SetInputSettings is
+// called with the same URL. A bridge-session cache key guarantees a fresh page
+// whenever the local bridge is restarted, which is important after auth/routing
+// fixes so OBS cannot keep showing an old Clerk sign-in document.
+const bridgeSessionId = randomUUID();
 
 const overlayKinds: Record<string, string> = {
   "starting-soon": "countdown",
@@ -42,7 +48,7 @@ const socket = io(socketUrl, {
 
 async function ensureFgcScene(tournamentId: string, sceneName: string) {
   const kind = overlayKinds[sceneName] ?? "program";
-  const overlayUrl = `${webUrl}/broadcast/${encodeURIComponent(tournamentId)}/overlay?kind=${encodeURIComponent(kind)}`;
+  const overlayUrl = `${webUrl}/broadcast/${encodeURIComponent(tournamentId)}/overlay?kind=${encodeURIComponent(kind)}&obsSession=${bridgeSessionId}`;
   const sourceName = `FGC Overlay — ${sceneName}`;
   await obs.ensureSceneWithBrowserSource(sceneName, sourceName, overlayUrl);
   return { sceneName, overlayUrl, sourceName };
