@@ -15,15 +15,22 @@ const SCENES: Array<{ scene: BroadcastScene; label: string; type: BroadcastComma
   { scene: "brb", label: "BRB", type: "BRB_SHOW" },
 ];
 
-export default function BroadcastProductionConsole({ params }: { params: { tournamentId: string } }) {
+type BroadcastPageProps = { params: Promise<{ tournamentId: string }> };
+
+export default function BroadcastProductionConsole({ params }: BroadcastPageProps) {
   const [active, setActive] = useState<BroadcastScene>("gameplay");
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("Ready");
-  const tournamentId = params.tournamentId;
+  const [tournamentId, setTournamentId] = useState<string | null>(null);
+
+  useMemo(() => {
+    void params.then(({ tournamentId: id }) => setTournamentId(id));
+  }, [params]);
 
   const groups = useMemo(() => [SCENES.slice(0, 4), SCENES.slice(4)], []);
 
   async function send(scene: BroadcastScene, type: BroadcastCommandType) {
+    if (!tournamentId) return;
     setBusy(true);
     setMessage(`Sending ${scene}…`);
     try {
@@ -74,7 +81,7 @@ export default function BroadcastProductionConsole({ params }: { params: { tourn
             {groups.map((group, index) => (
               <div key={index} style={{ border: "1px solid #222631", borderRadius: 20, background: "#0c0e14", padding: 14, display: "grid", gap: 10 }}>
                 {group.map((item) => (
-                  <button key={item.scene} disabled={busy} onClick={() => send(item.scene, item.type)} style={{ textAlign: "left", border: active === item.scene ? "1px solid #8b5cf6" : "1px solid #242936", borderRadius: 12, padding: "13px 14px", background: active === item.scene ? "#171127" : "#101219", color: "#fff", cursor: busy ? "wait" : "pointer" }}>
+                  <button key={item.scene} disabled={busy || !tournamentId} onClick={() => send(item.scene, item.type)} style={{ textAlign: "left", border: active === item.scene ? "1px solid #8b5cf6" : "1px solid #242936", borderRadius: 12, padding: "13px 14px", background: active === item.scene ? "#171127" : "#101219", color: "#fff", cursor: busy ? "wait" : "pointer" }}>
                     <div style={{ fontWeight: 700 }}>{item.label}</div>
                     <div style={{ fontSize: 11, opacity: .45, marginTop: 3 }}>{item.type}</div>
                   </button>
