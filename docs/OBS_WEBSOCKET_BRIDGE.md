@@ -2,6 +2,24 @@
 
 The FGC web app runs in the cloud, while OBS normally runs on the operator's local production machine. The bridge therefore runs **locally beside OBS** and forwards FGC broadcast commands to OBS over OBS WebSocket.
 
+## One-time Windows setup
+
+For a Windows production PC, use the included installer:
+
+1. Open the FGC repository folder.
+2. Double-click `scripts/install-obs-bridge.cmd`.
+3. Enter the FGC Socket URL, bridge token, OBS WebSocket URL, and OBS WebSocket password when prompted.
+4. The installer installs dependencies and registers **FGC OBS Bridge** as a Windows logon task.
+
+After this one-time setup:
+
+- The bridge starts automatically whenever the operator signs in to Windows.
+- It reconnects automatically if FGC or OBS temporarily disconnects.
+- New tournaments are discovered automatically in dynamic mode.
+- You do not enter a tournament ID or restart the bridge for each tournament.
+
+The installer stores the connection settings as Windows user environment variables. Do not commit those values to Git or share them publicly.
+
 ## 1. Enable OBS WebSocket
 
 OBS Studio 28+ includes obs-websocket 5.x.
@@ -13,9 +31,9 @@ In OBS:
 3. Keep the default port `4455` unless you have a reason to change it.
 4. Enable authentication and set a strong password.
 
-## 2. Configure the bridge
+## 2. Configure the bridge manually
 
-The bridge can operate in **dynamic tournament mode**, so you do not need to enter a tournament ID every time a new tournament is created.
+If you are not using the Windows installer, the bridge can operate in **dynamic tournament mode**, so you do not need to enter a tournament ID every time a new tournament is created.
 
 Set:
 
@@ -36,7 +54,7 @@ $env:FGC_TOURNAMENT_IDS="tournament-a,tournament-b"
 
 The socket server must have the same `FGC_OBS_BRIDGE_TOKEN` configured. The token authorizes the local bridge to join the protected `obs-bridge` event room.
 
-## 3. Start the bridge
+## 3. Start the bridge manually
 
 ```powershell
 npm.cmd install
