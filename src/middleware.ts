@@ -29,6 +29,14 @@ const isPublicRoute = createRouteMatcher([
   "/api/ready",
 ]);
 
+// OBS browser sources must be able to render the broadcast overlay without a
+// Clerk session. Keep this explicit pathname guard in addition to the matcher
+// above so a matcher-parser change can never turn a live overlay into a login
+// page inside OBS.
+function isPublicObsOverlayPath(pathname: string) {
+  return /^\/broadcast\/[^/]+\/overlay(?:\/.*)?$/.test(pathname);
+}
+
 // Temporary product-video mode. Set FGC_PUBLIC_DEMO_ENABLED=false to disable.
 const demoEnabled = process.env.FGC_PUBLIC_DEMO_ENABLED !== "false";
 const demoCookie = "fgc-demo";
@@ -70,7 +78,11 @@ export default clerkMiddleware(async (auth, req) => {
     return setDemoCookie(NextResponse.rewrite(target));
   }
 
-  if (!isPublicRoute(req) && !demoRequested) await auth.protect();
+  // OBS browser-source pages are machine-facing broadcast output, not operator UI.
+  // They must never invoke Clerk, even when the dynamic route matcher is unable to
+  // recognize the parameterized path for any reason.
+  const publicObsOverlay = isPublicObsOverlayPath(pathname);
+  if (!isPublicRoute(req) && !demoRequested && !publicObsOverlay) await auth.protect();
 
   return NextResponse.next();
 });
