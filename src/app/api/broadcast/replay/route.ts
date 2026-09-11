@@ -27,8 +27,8 @@ export async function POST(request: Request) {
     data: {
       tournamentId: body.tournamentId,
       actorUserId: authorization.userId,
-      type: "REPLAY_PLAY",
-      payload: JSON.parse(JSON.stringify({ clip })),
+      type: "SET_SCENE",
+      payload: JSON.parse(JSON.stringify({ runtimeCommandType: "REPLAY_PLAY", clip })),
     },
   });
 
