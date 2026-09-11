@@ -1,12 +1,15 @@
 -- A station can only host one active match at a time.
--- Keep the oldest assignment when legacy duplicate queued assignments exist,
--- then enforce the invariant at the database level for future concurrent writes.
+-- Keep a live assignment ahead of queued assignments, then the oldest
+-- remaining assignment, before enforcing the invariant for future writes.
 WITH ranked AS (
   SELECT
     id,
     ROW_NUMBER() OVER (
       PARTITION BY station_id
-      ORDER BY created_at ASC, id ASC
+      ORDER BY
+        CASE WHEN status = 'LIVE' THEN 0 ELSE 1 END,
+        created_at ASC,
+        id ASC
     ) AS rn
   FROM matches
   WHERE station_id IS NOT NULL
