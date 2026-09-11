@@ -20,6 +20,7 @@ const isPublicRoute = createRouteMatcher([
   "/watch(.*)",
   "/multiview(.*)",
   "/overlay(.*)",
+  "/broadcast/(.*)/overlay(.*)",
   "/demo(.*)",
   "/api/matches",
   "/api/webhooks/clerk(.*)",
