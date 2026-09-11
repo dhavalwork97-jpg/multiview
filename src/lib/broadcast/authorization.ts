@@ -25,16 +25,8 @@ export async function authorizeBroadcastOperator(
     select: {
       id: true,
       organizerId: true,
-      organization: {
-        select: {
-          ownerId: true,
-          members: {
-            where: { userId: user.id },
-            select: { role: true },
-            take: 1,
-          },
-        },
-      },
+      organizationId: true,
+      organization: { select: { ownerId: true } },
     },
   });
 
@@ -42,7 +34,18 @@ export async function authorizeBroadcastOperator(
 
   const isOrganizer = tournament.organizerId === user.id;
   const isOrganizationOwner = tournament.organization.ownerId === user.id;
-  const memberRole = String(tournament.organization.members[0]?.role ?? "").toUpperCase();
+
+  const membership = await db.organizationMember.findUnique({
+    where: {
+      organizationId_userId: {
+        organizationId: tournament.organizationId,
+        userId: user.id,
+      },
+    },
+    select: { role: true },
+  });
+
+  const memberRole = String(membership?.role ?? "").toUpperCase();
   const isOperator = memberRole === "OWNER" || memberRole === "ADMIN" || memberRole === "OPERATOR";
 
   if (!isOrganizer && !isOrganizationOwner && !isOperator) {
