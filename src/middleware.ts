@@ -31,8 +31,7 @@ const isPublicRoute = createRouteMatcher([
 const demoEnabled = process.env.FGC_PUBLIC_DEMO_ENABLED !== "false";
 const demoCookie = "fgc-demo";
 
-function demoResponse(req: Request, pathname: string) {
-  const response = NextResponse.next();
+function setDemoCookie(response: NextResponse) {
   response.cookies.set(demoCookie, "1", {
     httpOnly: true,
     sameSite: "lax",
@@ -58,21 +57,15 @@ export default clerkMiddleware(async (auth, req) => {
     return new NextResponse("Demo mode is read-only", { status: 403 });
   }
 
-  // /demo/** is a public mirror of the real application. Strip only the /demo prefix
-  // for Next.js routing while keeping the browser URL in the public demo namespace.
+  // /demo is the launcher itself. /demo/** mirrors the real application routes while
+  // keeping the public URL in the demo namespace.
   if (demoPath) {
-    const targetPath = pathname === "/demo" ? "/" : pathname.slice("/demo".length) || "/";
+    if (pathname === "/demo") return setDemoCookie(NextResponse.next());
+
+    const targetPath = pathname.slice("/demo".length) || "/";
     const target = new URL(targetPath, req.url);
     target.search = req.nextUrl.search;
-    const response = NextResponse.rewrite(target);
-    response.cookies.set(demoCookie, "1", {
-      httpOnly: true,
-      sameSite: "lax",
-      secure: process.env.NODE_ENV === "production",
-      path: "/",
-      maxAge: 60 * 60 * 4,
-    });
-    return response;
+    return setDemoCookie(NextResponse.rewrite(target));
   }
 
   if (!isPublicRoute(req) && !demoRequested) await auth.protect();
