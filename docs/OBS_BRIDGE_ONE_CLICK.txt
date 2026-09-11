@@ -1,0 +1,9 @@
+One-time Windows setup:
+
+Run scripts/install-obs-bridge.cmd once on the OBS computer.
+
+The installer saves the FGC Socket URL, bridge token, OBS WebSocket URL, and OBS password as Windows user environment variables, installs dependencies, and creates the FGC OBS Bridge scheduled task.
+
+The task starts at Windows sign-in and restarts after failures. Dynamic tournament mode means new tournaments require no bridge configuration or restart.
+
+Use scripts/obs-bridge-status.cmd to inspect the task and log path. Use scripts/uninstall-obs-bridge.cmd to remove automatic startup.
