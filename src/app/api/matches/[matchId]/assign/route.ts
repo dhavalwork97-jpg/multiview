@@ -6,14 +6,12 @@ import { publishEvent } from "@/lib/events";
 import { writeAuditLog } from "@/lib/audit";
 import { defaultRateLimit } from "@/lib/rate-limit";
 
-const assignSchema = z.object({ stationId: z.string() });
+const assignSchema = z.object({ stationId: z.string().nullable() });
 
-// POST /api/matches/:matchId/assign — the action behind the organizer's
-// station-assignment board (drag-a-match-onto-a-station). Deliberately
-// separate from the general PATCH route: assignment has its own
-// invariant (station must belong to the same tournament, and shouldn't
-// already have a different LIVE match on it) that doesn't belong mixed
-// into generic score/status updates.
+// POST /api/matches/:matchId/assign
+// Assign, move, or unassign a queued match from a tournament station.
+// The database partial unique index is the final concurrency guard: a station
+// can have at most one QUEUED/LIVE match at a time.
 export async function POST(req: Request, { params }: { params: Promise<{ matchId: string }> }) {
   const { matchId } = await params;
   const body = await req.json();
@@ -24,14 +22,36 @@ export async function POST(req: Request, { params }: { params: Promise<{ matchId
 
   const match = await db.match.findUnique({ where: { id: matchId } });
   if (!match) return NextResponse.json({ error: "Match not found" }, { status: 404 });
+
   let actor;
-  try { actor = (await requireTournamentManage(match.tournamentId)).user; } catch { return NextResponse.json({ error: "Forbidden" }, { status: 403 }); }
+  try {
+    actor = (await requireTournamentManage(match.tournamentId)).user;
+  } catch {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
 
   const limit = await defaultRateLimit.limit(`assign:${actor.id}`);
-  if (!limit.success) return NextResponse.json({ error: "Too many assignment operations — slow down and try again shortly" }, { status: 429 });
+  if (!limit.success) {
+    return NextResponse.json({ error: "Too many assignment operations — slow down and try again shortly" }, { status: 429 });
+  }
 
   if (match.status !== "QUEUED") {
-    return NextResponse.json({ error: "Only queued matches can be assigned or moved between stations" }, { status: 409 });
+    return NextResponse.json({ error: "Only queued matches can be assigned, moved, or unassigned" }, { status: 409 });
+  }
+
+  // Null stationId is an explicit unassign operation.
+  if (parsed.data.stationId === null) {
+    const updated = await db.match.update({ where: { id: matchId }, data: { stationId: null } });
+    await publishEvent({ type: "match:assigned", tournamentId: updated.tournamentId, matchId: updated.id, stationId: null });
+    await writeAuditLog({
+      tournamentId: updated.tournamentId,
+      actorUserId: actor.id,
+      action: "MATCH_UNASSIGNED",
+      entityType: "match",
+      entityId: updated.id,
+      metadata: { previousStationId: match.stationId },
+    });
+    return NextResponse.json({ match: updated });
   }
 
   const station = await db.station.findUnique({ where: { id: parsed.data.stationId } });
@@ -39,39 +59,40 @@ export async function POST(req: Request, { params }: { params: Promise<{ matchId
     return NextResponse.json({ error: "Station not found in this tournament" }, { status: 400 });
   }
 
-  const conflict = await db.match.findFirst({
-    where: { stationId: station.id, status: "LIVE", id: { not: matchId } },
-  });
-  if (conflict) {
-    return NextResponse.json(
-      { error: `${station.label} already has a live match on it` },
-      { status: 409 }
-    );
-  }
-
   if (station.status === "LIVE" || station.status === "ERROR") {
     return NextResponse.json({ error: `${station.label} is not available for a new match while it is ${station.status.toLowerCase()}` }, { status: 409 });
   }
 
-  const updated = await db.match.update({
-    where: { id: matchId },
-    data: { stationId: station.id },
+  const conflict = await db.match.findFirst({
+    where: {
+      stationId: station.id,
+      status: { in: ["QUEUED", "LIVE"] },
+      id: { not: matchId },
+    },
+    select: { id: true, status: true },
   });
+  if (conflict) {
+    return NextResponse.json({ error: `${station.label} already has an active match assigned to it` }, { status: 409 });
+  }
 
-  await publishEvent({
-    type: "match:assigned",
-    tournamentId: updated.tournamentId,
-    matchId: updated.id,
-    stationId: station.id,
-  });
-  await writeAuditLog({
-    tournamentId: updated.tournamentId,
-    actorUserId: actor.id,
-    action: "MATCH_ASSIGNED",
-    entityType: "match",
-    entityId: updated.id,
-    metadata: { stationId: station.id, stationLabel: station.label },
-  });
-
-  return NextResponse.json({ match: updated });
+  try {
+    const updated = await db.match.update({ where: { id: matchId }, data: { stationId: station.id } });
+    await publishEvent({ type: "match:assigned", tournamentId: updated.tournamentId, matchId: updated.id, stationId: station.id });
+    await writeAuditLog({
+      tournamentId: updated.tournamentId,
+      actorUserId: actor.id,
+      action: "MATCH_ASSIGNED",
+      entityType: "match",
+      entityId: updated.id,
+      metadata: { stationId: station.id, stationLabel: station.label, previousStationId: match.stationId },
+    });
+    return NextResponse.json({ match: updated });
+  } catch (error) {
+    // The partial unique index converts concurrent assignment races into a
+    // deterministic conflict instead of allowing duplicate station occupancy.
+    if (error && typeof error === "object" && "code" in error && error.code === "P2002") {
+      return NextResponse.json({ error: `${station.label} was assigned to another active match. Refresh and choose another station.` }, { status: 409 });
+    }
+    throw error;
+  }
 }
