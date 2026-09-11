@@ -4,15 +4,30 @@ import { requireUser, ForbiddenError } from "@/lib/auth";
 import type { OrganizationRole } from "@prisma/client";
 
 export async function getOrCreatePersonalOrganization(userId: string) {
+  const user = await db.user.findUniqueOrThrow({ where: { id: userId }, select: { displayName: true, username: true, role: true } });
   const existing = await db.organization.findFirst({ where: { ownerId: userId } });
-  if (existing) return existing;
-  const user = await db.user.findUniqueOrThrow({ where: { id: userId }, select: { displayName: true, username: true } });
+  if (existing) {
+    if (user.role === "ADMIN" && existing.plan !== "ENTERPRISE") {
+      return db.organization.update({ where: { id: existing.id }, data: { plan: "ENTERPRISE" } });
+    }
+    return existing;
+  }
   const base = (user.username || "organizer").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 40) || "organizer";
   return db.$transaction(async (tx) => {
     const again = await tx.organization.findFirst({ where: { ownerId: userId } });
-    if (again) return again;
+    if (again) {
+      if (user.role === "ADMIN" && again.plan !== "ENTERPRISE") {
+        return tx.organization.update({ where: { id: again.id }, data: { plan: "ENTERPRISE" } });
+      }
+      return again;
+    }
     const org = await tx.organization.create({
-      data: { name: `${user.displayName ?? user.username} Events`, slug: `${base}-${Date.now().toString(36)}`, ownerId: userId },
+      data: {
+        name: `${user.displayName ?? user.username} Events`,
+        slug: `${base}-${Date.now().toString(36)}`,
+        ownerId: userId,
+        plan: user.role === "ADMIN" ? "ENTERPRISE" : "FREE",
+      },
     });
     await tx.organizationMember.create({ data: { organizationId: org.id, userId, role: "OWNER" } });
     return org;
@@ -37,7 +52,6 @@ export function createInvitationToken() {
 export function hashInvitationToken(token: string) {
   return createHash("sha256").update(token).digest("hex");
 }
-
 
 export async function getPrimaryOrganizationMembership(userId: string) {
   return db.organizationMember.findFirst({ where: { userId }, orderBy: { createdAt: "asc" } });
