@@ -21,8 +21,16 @@ export default function SponsorManager({ params }: { params: Promise<{ tournamen
   useEffect(() => {
     void params.then(async ({ tournamentId: id }) => {
       setTournamentId(id);
+      try {
+        const response = await fetch(`/api/broadcast/state?tournamentId=${encodeURIComponent(id)}`, { cache: "no-store" });
+        if (response.ok) {
+          const payload = (await response.json()) as { persistent?: { sponsorIntervalMs?: number } };
+          const serverInterval = Number(payload.persistent?.sponsorIntervalMs ?? 0);
+          if (serverInterval >= 1000) setIntervalMs(serverInterval);
+        }
+      } catch { /* local fallback below */ }
       const savedInterval = Number(window.localStorage.getItem(intervalKey(id)) ?? 6000);
-      setIntervalMs(Math.max(1000, Number.isFinite(savedInterval) ? savedInterval : 6000));
+      if (savedInterval >= 1000) setIntervalMs((current) => current === 6000 ? savedInterval : current);
       try {
         const response = await fetch(`/api/broadcast/sponsors?tournamentId=${encodeURIComponent(id)}`, { cache: "no-store" });
         const payload = (await response.json()) as { sponsors?: BroadcastSponsor[]; error?: string };
@@ -39,35 +47,22 @@ export default function SponsorManager({ params }: { params: Promise<{ tournamen
   useEffect(() => {
     if (!tournamentId) return;
     window.localStorage.setItem(intervalKey(tournamentId), String(intervalMs));
+    void fetch("/api/broadcast/state", { method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify({ tournamentId, patch: { sponsorIntervalMs: intervalMs } }) });
   }, [tournamentId, intervalMs]);
 
-  useEffect(() => {
-    if (!sponsors.length) return;
-    const timer = window.setInterval(() => setPreviewElapsed((value) => value + 250), 250);
-    return () => window.clearInterval(timer);
-  }, [sponsors.length]);
-
+  useEffect(() => { if (!sponsors.length) return; const timer = window.setInterval(() => setPreviewElapsed((value) => value + 250), 250); return () => window.clearInterval(timer); }, [sponsors.length]);
   const activeSponsor = useMemo(() => getActiveSponsor({ sponsors, intervalMs }, previewElapsed), [sponsors, intervalMs, previewElapsed]);
 
   async function request(method: "POST" | "PATCH" | "DELETE", body: unknown) {
     if (!tournamentId) return null;
-    setSaving(true);
-    setError(null);
+    setSaving(true); setError(null);
     try {
-      const response = await fetch(`/api/broadcast/sponsors?tournamentId=${encodeURIComponent(tournamentId)}`, {
-        method,
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify(body),
-      });
+      const response = await fetch(`/api/broadcast/sponsors?tournamentId=${encodeURIComponent(tournamentId)}`, { method, headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
       const payload = (await response.json()) as { sponsor?: BroadcastSponsor; error?: string };
       if (!response.ok) throw new Error(payload.error || "Sponsor request failed");
       return payload.sponsor ?? null;
-    } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "Sponsor request failed");
-      return null;
-    } finally {
-      setSaving(false);
-    }
+    } catch (cause) { setError(cause instanceof Error ? cause.message : "Sponsor request failed"); return null; }
+    finally { setSaving(false); }
   }
 
   async function addSponsor() {
@@ -89,58 +84,21 @@ export default function SponsorManager({ params }: { params: Promise<{ tournamen
     if (!tournamentId) return;
     setSaving(true); setError(null);
     try {
-      const response = await fetch(`/api/broadcast/sponsors?tournamentId=${encodeURIComponent(tournamentId)}`, {
-        method: "DELETE", headers: { "content-type": "application/json" }, body: JSON.stringify({ id }),
-      });
+      const response = await fetch(`/api/broadcast/sponsors?tournamentId=${encodeURIComponent(tournamentId)}`, { method: "DELETE", headers: { "content-type": "application/json" }, body: JSON.stringify({ id }) });
       const payload = (await response.json()) as { error?: string };
       if (!response.ok) throw new Error(payload.error || "Unable to remove sponsor");
       setSponsors((items) => items.filter((item) => item.id !== id));
-    } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "Unable to remove sponsor");
-    } finally { setSaving(false); }
+    } catch (cause) { setError(cause instanceof Error ? cause.message : "Unable to remove sponsor"); }
+    finally { setSaving(false); }
   }
 
   return (
     <main style={{ minHeight: "100vh", background: "#07080d", color: "#f7f8ff", padding: 28, fontFamily: "Inter, system-ui, sans-serif" }}>
       <div style={{ maxWidth: 1180, margin: "0 auto" }}>
-        <header style={{ display: "flex", justifyContent: "space-between", alignItems: "end", gap: 20, marginBottom: 24 }}>
-          <div><div style={eyebrow}>FGC BROADCAST STUDIO</div><h1 style={title}>Sponsor Manager</h1><p style={muted}>Server-persisted sponsor lineup with native bumper preview. Rotation timing remains an operator preference.</p></div>
-          <a href={`/broadcast/${tournamentId}/control-room`} style={link}>← CONTROL ROOM</a>
-        </header>
-
+        <header style={{ display: "flex", justifyContent: "space-between", alignItems: "end", gap: 20, marginBottom: 24 }}><div><div style={eyebrow}>FGC BROADCAST STUDIO</div><h1 style={title}>Sponsor Manager</h1><p style={muted}>Server-persisted sponsor lineup and rotation settings with native bumper preview.</p></div><a href={`/broadcast/${tournamentId}/control-room`} style={link}>← CONTROL ROOM</a></header>
         {error && <div style={errorBox}>{error}</div>}
-
-        <section style={{ display: "grid", gridTemplateColumns: "1.3fr .7fr", gap: 18, alignItems: "start" }}>
-          <div style={panel}>
-            <div style={rowHeader}><div><div style={eyebrow}>ROTATION</div><h2 style={sectionTitle}>Sponsor lineup</h2></div><label style={smallLabel}>INTERVAL <input aria-label="Sponsor rotation interval" type="number" min={1000} step={500} value={intervalMs} onChange={(event) => setIntervalMs(Math.max(1000, Number(event.target.value) || 1000))} style={input} /> ms</label></div>
-            <div style={{ display: "grid", gap: 10, marginTop: 16 }}>
-              {loading ? <div style={empty}>Loading sponsor lineup…</div> : sponsors.map((sponsor) => <div key={sponsor.id} style={item}>
-                <div style={{ minWidth: 0, flex: 1 }}><strong>{sponsor.name}</strong><div style={muted}>{sponsor.logoUrl || "No logo URL"}</div></div>
-                <label style={toggle}><input type="checkbox" checked={sponsor.enabled} disabled={saving} onChange={(event) => void updateSponsor(sponsor.id, { enabled: event.target.checked })} /> ACTIVE</label>
-                <input aria-label={`${sponsor.name} duration`} type="number" min={1000} step={500} value={sponsor.durationMs} disabled={saving} onChange={(event) => void updateSponsor(sponsor.id, { durationMs: Number(event.target.value) || 1000 })} style={{ ...input, width: 96 }} />
-                <button onClick={() => void removeSponsor(sponsor.id)} disabled={saving} style={danger}>REMOVE</button>
-              </div>)}
-              {!loading && !sponsors.length && <div style={empty}>No sponsors configured. Add the first sponsor below.</div>}
-            </div>
-          </div>
-
-          <div style={panel}>
-            <div style={eyebrow}>LIVE PREVIEW</div><h2 style={sectionTitle}>Sponsor bumper</h2>
-            <div style={preview}><div style={previewLabel}>PRESENTED BY</div>{activeSponsor ? <><div style={sponsorName}>{activeSponsor.name}</div>{activeSponsor.logoUrl && <img src={activeSponsor.logoUrl} alt="" style={logo} />}</> : <div style={muted}>No active sponsor</div>}</div>
-            <button onClick={() => setPreviewElapsed(0)} style={button}>RESET PREVIEW</button>
-          </div>
-        </section>
-
-        <section style={{ ...panel, marginTop: 18 }}>
-          <div style={eyebrow}>ADD SPONSOR</div><h2 style={sectionTitle}>New sponsor</h2>
-          <div style={{ display: "grid", gridTemplateColumns: "1.1fr 1.5fr 1.5fr .8fr auto", gap: 10, marginTop: 14, alignItems: "end" }}>
-            <Field label="NAME" value={name} onChange={setName} placeholder="Sponsor name" />
-            <Field label="LOGO URL" value={logoUrl} onChange={setLogoUrl} placeholder="https://…" />
-            <Field label="WEBSITE URL" value={websiteUrl} onChange={setWebsiteUrl} placeholder="https://…" />
-            <Field label="DURATION MS" value={String(durationMs)} onChange={(value) => setDurationMs(Number(value) || 1000)} type="number" />
-            <button onClick={() => void addSponsor()} disabled={!name.trim() || saving} style={{ ...button, opacity: name.trim() && !saving ? 1 : .4 }}>ADD</button>
-          </div>
-        </section>
+        <section style={{ display: "grid", gridTemplateColumns: "1.3fr .7fr", gap: 18, alignItems: "start" }}><div style={panel}><div style={rowHeader}><div><div style={eyebrow}>ROTATION</div><h2 style={sectionTitle}>Sponsor lineup</h2></div><label style={smallLabel}>INTERVAL <input aria-label="Sponsor rotation interval" type="number" min={1000} step={500} value={intervalMs} onChange={(event) => setIntervalMs(Math.max(1000, Number(event.target.value) || 1000))} style={input} /> ms</label></div><div style={{ display: "grid", gap: 10, marginTop: 16 }}>{loading ? <div style={empty}>Loading sponsor lineup…</div> : sponsors.map((sponsor) => <div key={sponsor.id} style={item}><div style={{ minWidth: 0, flex: 1 }}><strong>{sponsor.name}</strong><div style={muted}>{sponsor.logoUrl || "No logo URL"}</div></div><label style={toggle}><input type="checkbox" checked={sponsor.enabled} disabled={saving} onChange={(event) => void updateSponsor(sponsor.id, { enabled: event.target.checked })} /> ACTIVE</label><input aria-label={`${sponsor.name} duration`} type="number" min={1000} step={500} value={sponsor.durationMs} disabled={saving} onChange={(event) => void updateSponsor(sponsor.id, { durationMs: Number(event.target.value) || 1000 })} style={{ ...input, width: 96 }} /><button onClick={() => void removeSponsor(sponsor.id)} disabled={saving} style={danger}>REMOVE</button></div>)}{!loading && !sponsors.length && <div style={empty}>No sponsors configured. Add the first sponsor below.</div>}</div></div><div style={panel}><div style={eyebrow}>LIVE PREVIEW</div><h2 style={sectionTitle}>Sponsor bumper</h2><div style={preview}><div style={previewLabel}>PRESENTED BY</div>{activeSponsor ? <><div style={sponsorName}>{activeSponsor.name}</div>{activeSponsor.logoUrl && <img src={activeSponsor.logoUrl} alt="" style={logo} />}</> : <div style={muted}>No active sponsor</div>}</div><button onClick={() => setPreviewElapsed(0)} style={button}>RESET PREVIEW</button></div></section>
+        <section style={{ ...panel, marginTop: 18 }}><div style={eyebrow}>ADD SPONSOR</div><h2 style={sectionTitle}>New sponsor</h2><div style={{ display: "grid", gridTemplateColumns: "1.1fr 1.5fr 1.5fr .8fr auto", gap: 10, marginTop: 14, alignItems: "end" }}><Field label="NAME" value={name} onChange={setName} placeholder="Sponsor name" /><Field label="LOGO URL" value={logoUrl} onChange={setLogoUrl} placeholder="https://…" /><Field label="WEBSITE URL" value={websiteUrl} onChange={setWebsiteUrl} placeholder="https://…" /><Field label="DURATION MS" value={String(durationMs)} onChange={(value) => setDurationMs(Number(value) || 1000)} type="number" /><button onClick={() => void addSponsor()} disabled={!name.trim() || saving} style={{ ...button, opacity: name.trim() && !saving ? 1 : .4 }}>ADD</button></div></section>
       </div>
     </main>
   );
