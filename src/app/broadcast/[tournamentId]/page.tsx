@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { BroadcastCommandType, BroadcastScene } from "@/lib/broadcast/production";
 
 const SCENES: Array<{ scene: BroadcastScene; label: string; type: BroadcastCommandType }> = [
@@ -23,8 +23,12 @@ export default function BroadcastProductionConsole({ params }: BroadcastPageProp
   const [message, setMessage] = useState("Ready");
   const [tournamentId, setTournamentId] = useState<string | null>(null);
 
-  useMemo(() => {
-    void params.then(({ tournamentId: id }) => setTournamentId(id));
+  useEffect(() => {
+    let mounted = true;
+    void params.then(({ tournamentId: id }) => {
+      if (mounted) setTournamentId(id);
+    });
+    return () => { mounted = false; };
   }, [params]);
 
   const groups = useMemo(() => [SCENES.slice(0, 4), SCENES.slice(4)], []);
