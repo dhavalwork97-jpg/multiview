@@ -183,6 +183,21 @@ export class ObsWebSocketClient {
     });
   }
 
+  async updateBrowserSource(inputName: string, url: string, width = 1920, height = 1080) {
+    await this.request("SetInputSettings", {
+      inputName,
+      inputSettings: {
+        url,
+        width,
+        height,
+        reroute_audio: true,
+        shutdown: false,
+        fps: 60,
+      },
+      overlay: false,
+    });
+  }
+
   async ensureSceneWithBrowserSource(sceneName: string, sourceName: string, url: string) {
     const scenes = await this.getSceneList();
     if (!scenes.some((scene) => scene.sceneName === sceneName)) {
@@ -194,6 +209,10 @@ export class ObsWebSocketClient {
     } catch (error) {
       const message = String(error instanceof Error ? error.message : error).toLowerCase();
       if (!message.includes("already exists") && !message.includes("already has a source")) throw error;
+      // Browser sources are persistent in OBS. If the source already exists, refresh
+      // its URL so an older source created by a previous bridge build cannot keep
+      // showing a stale/login page.
+      await this.updateBrowserSource(sourceName, url);
     }
   }
 
