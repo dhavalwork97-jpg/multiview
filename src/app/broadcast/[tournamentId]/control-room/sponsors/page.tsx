@@ -3,87 +3,124 @@
 import { useEffect, useMemo, useState } from "react";
 import { getActiveSponsor, normalizeSponsor, type BroadcastSponsor } from "@/lib/broadcast/sponsor";
 
-const storageKey = (id: string) => `fgc-broadcast-sponsors:${id}`;
-const defaultSponsors: BroadcastSponsor[] = [];
+const intervalKey = (id: string) => `fgc-broadcast-sponsor-interval:${id}`;
 
 export default function SponsorManager({ params }: { params: Promise<{ tournamentId: string }> }) {
   const [tournamentId, setTournamentId] = useState<string | null>(null);
-  const [sponsors, setSponsors] = useState<BroadcastSponsor[]>(defaultSponsors);
+  const [sponsors, setSponsors] = useState<BroadcastSponsor[]>([]);
   const [intervalMs, setIntervalMs] = useState(6000);
   const [name, setName] = useState("");
   const [logoUrl, setLogoUrl] = useState("");
   const [websiteUrl, setWebsiteUrl] = useState("");
   const [durationMs, setDurationMs] = useState(6000);
   const [previewElapsed, setPreviewElapsed] = useState(0);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    void params.then(({ tournamentId: id }) => {
+    void params.then(async ({ tournamentId: id }) => {
       setTournamentId(id);
+      const savedInterval = Number(window.localStorage.getItem(intervalKey(id)) ?? 6000);
+      setIntervalMs(Math.max(1000, Number.isFinite(savedInterval) ? savedInterval : 6000));
       try {
-        const raw = window.localStorage.getItem(storageKey(id));
-        if (!raw) return;
-        const value = JSON.parse(raw) as { sponsors?: Partial<BroadcastSponsor>[]; intervalMs?: number };
-        setSponsors((value.sponsors ?? []).map((item, index) => normalizeSponsor(item, index)));
-        setIntervalMs(Math.max(1000, Number(value.intervalMs ?? 6000)));
-      } catch {
-        // Keep safe defaults.
+        const response = await fetch(`/api/broadcast/sponsors?tournamentId=${encodeURIComponent(id)}`, { cache: "no-store" });
+        const payload = (await response.json()) as { sponsors?: BroadcastSponsor[]; error?: string };
+        if (!response.ok) throw new Error(payload.error || "Unable to load sponsors");
+        setSponsors((payload.sponsors ?? []).map((item, index) => normalizeSponsor(item, index)));
+      } catch (cause) {
+        setError(cause instanceof Error ? cause.message : "Unable to load sponsors");
+      } finally {
+        setLoading(false);
       }
     });
   }, [params]);
 
   useEffect(() => {
     if (!tournamentId) return;
-    window.localStorage.setItem(storageKey(tournamentId), JSON.stringify({ sponsors, intervalMs }));
-  }, [tournamentId, sponsors, intervalMs]);
+    window.localStorage.setItem(intervalKey(tournamentId), String(intervalMs));
+  }, [tournamentId, intervalMs]);
 
   useEffect(() => {
+    if (!sponsors.length) return;
     const timer = window.setInterval(() => setPreviewElapsed((value) => value + 250), 250);
     return () => window.clearInterval(timer);
-  }, []);
+  }, [sponsors.length]);
 
   const activeSponsor = useMemo(() => getActiveSponsor({ sponsors, intervalMs }, previewElapsed), [sponsors, intervalMs, previewElapsed]);
 
-  function addSponsor() {
-    const next = normalizeSponsor({ name, logoUrl, websiteUrl, durationMs }, sponsors.length);
-    setSponsors((items) => [...items, next]);
-    setName("");
-    setLogoUrl("");
-    setWebsiteUrl("");
-    setDurationMs(6000);
+  async function request(method: "POST" | "PATCH" | "DELETE", body: unknown) {
+    if (!tournamentId) return null;
+    setSaving(true);
+    setError(null);
+    try {
+      const response = await fetch(`/api/broadcast/sponsors?tournamentId=${encodeURIComponent(tournamentId)}`, {
+        method,
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      const payload = (await response.json()) as { sponsor?: BroadcastSponsor; error?: string };
+      if (!response.ok) throw new Error(payload.error || "Sponsor request failed");
+      return payload.sponsor ?? null;
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Sponsor request failed");
+      return null;
+    } finally {
+      setSaving(false);
+    }
   }
 
-  function updateSponsor(id: string, patch: Partial<BroadcastSponsor>) {
-    setSponsors((items) => items.map((item) => item.id === id ? normalizeSponsor({ ...item, ...patch }) : item));
+  async function addSponsor() {
+    const sponsor = await request("POST", { sponsor: { name, logoUrl, websiteUrl, durationMs, enabled: true } });
+    if (!sponsor) return;
+    setSponsors((items) => [...items, normalizeSponsor(sponsor, items.length)]);
+    setName(""); setLogoUrl(""); setWebsiteUrl(""); setDurationMs(6000);
   }
 
-  function removeSponsor(id: string) {
-    setSponsors((items) => items.filter((item) => item.id !== id));
+  async function updateSponsor(id: string, patch: Partial<BroadcastSponsor>) {
+    const current = sponsors.find((item) => item.id === id);
+    if (!current) return;
+    const updated = await request("PATCH", { id, sponsor: patch });
+    if (!updated) return;
+    setSponsors((items) => items.map((item) => item.id === id ? normalizeSponsor({ ...current, ...updated }, 0) : item));
   }
 
-  function reset() {
-    setSponsors([]);
-    setIntervalMs(6000);
+  async function removeSponsor(id: string) {
+    if (!tournamentId) return;
+    setSaving(true); setError(null);
+    try {
+      const response = await fetch(`/api/broadcast/sponsors?tournamentId=${encodeURIComponent(tournamentId)}`, {
+        method: "DELETE", headers: { "content-type": "application/json" }, body: JSON.stringify({ id }),
+      });
+      const payload = (await response.json()) as { error?: string };
+      if (!response.ok) throw new Error(payload.error || "Unable to remove sponsor");
+      setSponsors((items) => items.filter((item) => item.id !== id));
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Unable to remove sponsor");
+    } finally { setSaving(false); }
   }
 
   return (
     <main style={{ minHeight: "100vh", background: "#07080d", color: "#f7f8ff", padding: 28, fontFamily: "Inter, system-ui, sans-serif" }}>
       <div style={{ maxWidth: 1180, margin: "0 auto" }}>
         <header style={{ display: "flex", justifyContent: "space-between", alignItems: "end", gap: 20, marginBottom: 24 }}>
-          <div><div style={eyebrow}>FGC BROADCAST STUDIO</div><h1 style={title}>Sponsor Manager</h1><p style={muted}>Manage rotating sponsor bumpers and browser-source sponsor graphics for this tournament.</p></div>
+          <div><div style={eyebrow}>FGC BROADCAST STUDIO</div><h1 style={title}>Sponsor Manager</h1><p style={muted}>Server-persisted sponsor lineup with native bumper preview. Rotation timing remains an operator preference.</p></div>
           <a href={`/broadcast/${tournamentId}/control-room`} style={link}>← CONTROL ROOM</a>
         </header>
+
+        {error && <div style={errorBox}>{error}</div>}
 
         <section style={{ display: "grid", gridTemplateColumns: "1.3fr .7fr", gap: 18, alignItems: "start" }}>
           <div style={panel}>
             <div style={rowHeader}><div><div style={eyebrow}>ROTATION</div><h2 style={sectionTitle}>Sponsor lineup</h2></div><label style={smallLabel}>INTERVAL <input aria-label="Sponsor rotation interval" type="number" min={1000} step={500} value={intervalMs} onChange={(event) => setIntervalMs(Math.max(1000, Number(event.target.value) || 1000))} style={input} /> ms</label></div>
             <div style={{ display: "grid", gap: 10, marginTop: 16 }}>
-              {sponsors.map((sponsor) => <div key={sponsor.id} style={item}>
+              {loading ? <div style={empty}>Loading sponsor lineup…</div> : sponsors.map((sponsor) => <div key={sponsor.id} style={item}>
                 <div style={{ minWidth: 0, flex: 1 }}><strong>{sponsor.name}</strong><div style={muted}>{sponsor.logoUrl || "No logo URL"}</div></div>
-                <label style={toggle}><input type="checkbox" checked={sponsor.enabled} onChange={(event) => updateSponsor(sponsor.id, { enabled: event.target.checked })} /> ACTIVE</label>
-                <input aria-label={`${sponsor.name} duration`} type="number" min={1000} step={500} value={sponsor.durationMs} onChange={(event) => updateSponsor(sponsor.id, { durationMs: Number(event.target.value) || 1000 })} style={{ ...input, width: 96 }} />
-                <button onClick={() => removeSponsor(sponsor.id)} style={danger}>REMOVE</button>
+                <label style={toggle}><input type="checkbox" checked={sponsor.enabled} disabled={saving} onChange={(event) => void updateSponsor(sponsor.id, { enabled: event.target.checked })} /> ACTIVE</label>
+                <input aria-label={`${sponsor.name} duration`} type="number" min={1000} step={500} value={sponsor.durationMs} disabled={saving} onChange={(event) => void updateSponsor(sponsor.id, { durationMs: Number(event.target.value) || 1000 })} style={{ ...input, width: 96 }} />
+                <button onClick={() => void removeSponsor(sponsor.id)} disabled={saving} style={danger}>REMOVE</button>
               </div>)}
-              {!sponsors.length && <div style={empty}>No sponsors configured. Add the first sponsor below.</div>}
+              {!loading && !sponsors.length && <div style={empty}>No sponsors configured. Add the first sponsor below.</div>}
             </div>
           </div>
 
@@ -101,9 +138,8 @@ export default function SponsorManager({ params }: { params: Promise<{ tournamen
             <Field label="LOGO URL" value={logoUrl} onChange={setLogoUrl} placeholder="https://…" />
             <Field label="WEBSITE URL" value={websiteUrl} onChange={setWebsiteUrl} placeholder="https://…" />
             <Field label="DURATION MS" value={String(durationMs)} onChange={(value) => setDurationMs(Number(value) || 1000)} type="number" />
-            <button onClick={addSponsor} disabled={!name.trim()} style={{ ...button, opacity: name.trim() ? 1 : .4 }}>ADD</button>
+            <button onClick={() => void addSponsor()} disabled={!name.trim() || saving} style={{ ...button, opacity: name.trim() && !saving ? 1 : .4 }}>ADD</button>
           </div>
-          <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 18 }}><button onClick={reset} style={danger}>RESET SPONSORS</button></div>
         </section>
       </div>
     </main>
@@ -125,6 +161,7 @@ const danger = { border: "1px solid #4a2931", borderRadius: 9, background: "#171
 const link = { color: "#c4b5fd", textDecoration: "none", fontSize: 11, letterSpacing: ".12em" } as const;
 const toggle = { fontSize: 9, letterSpacing: ".1em", opacity: .7, whiteSpace: "nowrap" as const };
 const empty = { border: "1px dashed #303441", borderRadius: 12, padding: 22, textAlign: "center" as const, opacity: .55, fontSize: 12 };
+const errorBox = { marginBottom: 18, padding: "11px 14px", borderRadius: 10, border: "1px solid #63323c", background: "#1a1014", color: "#fda4af", fontSize: 12 };
 const preview = { minHeight: 180, borderRadius: 14, margin: "14px 0", padding: 20, background: "linear-gradient(135deg,#171224,#08090e)", border: "1px solid #31244d", display: "flex", flexDirection: "column" as const, justifyContent: "center", alignItems: "center", textAlign: "center" as const };
 const previewLabel = { fontSize: 9, letterSpacing: ".25em", opacity: .5 } as const;
 const sponsorName = { fontSize: 28, fontWeight: 800, margin: "10px 0" } as const;
