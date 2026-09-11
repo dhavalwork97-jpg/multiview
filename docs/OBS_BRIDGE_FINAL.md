@@ -1,0 +1,1 @@
+Run scripts/install-obs-bridge.cmd once on Windows. It saves FGC and OBS connection settings, installs dependencies, and creates the FGC OBS Bridge scheduled task. The bridge starts at Windows sign-in, restarts after failures, and dynamically handles new tournaments without tournament IDs.
