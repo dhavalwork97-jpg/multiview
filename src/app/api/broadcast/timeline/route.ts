@@ -1,46 +1,23 @@
 import { NextResponse } from "next/server";
 import { auth } from "@clerk/nextjs/server";
 import { authorizeBroadcastOperator } from "@/lib/broadcast/authorization";
-import { publishEvent } from "@/lib/events";
+import { createBroadcastCommand, DEFAULT_MATCH_TIMELINE, getTimelineCue } from "@/lib/broadcast/production";
 import { db } from "@/lib/db";
-import type { BroadcastCommand, BroadcastCommandType, BroadcastScene } from "@/lib/broadcast/production";
-
-const scenes: BroadcastScene[] = [
-  "starting-soon",
-  "intro",
-  "versus",
-  "gameplay",
-  "timeout",
-  "replay",
-  "winner",
-  "champion",
-  "brb",
-];
-
-const commandTypes: BroadcastCommandType[] = [
-  "SCENE_SET",
-  "INTRO_PLAY",
-  "COUNTDOWN_START",
-  "REPLAY_PLAY",
-  "WINNER_SHOW",
-  "BRB_SHOW",
-  "PROGRAM_CLEAR",
-];
+import { publishEvent } from "@/lib/events";
 
 export async function POST(request: Request) {
   const { userId } = await auth();
   if (!userId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const body = (await request.json()) as Partial<BroadcastCommand>;
-  if (!body.tournamentId || !body.type || !body.scene) {
-    return NextResponse.json({ error: "tournamentId, type and scene are required" }, { status: 400 });
-  }
+  const body = (await request.json()) as {
+    tournamentId?: string;
+    elapsedMs?: number;
+    matchId?: string | null;
+    stationId?: string | null;
+  };
 
-  if (!commandTypes.includes(body.type as BroadcastCommandType)) {
-    return NextResponse.json({ error: "Invalid broadcast command type" }, { status: 400 });
-  }
-  if (!scenes.includes(body.scene as BroadcastScene)) {
-    return NextResponse.json({ error: "Invalid broadcast scene" }, { status: 400 });
+  if (!body.tournamentId || typeof body.elapsedMs !== "number" || !Number.isFinite(body.elapsedMs)) {
+    return NextResponse.json({ error: "tournamentId and elapsedMs are required" }, { status: 400 });
   }
 
   const authorization = await authorizeBroadcastOperator(userId, body.tournamentId);
@@ -51,15 +28,14 @@ export async function POST(request: Request) {
     );
   }
 
-  const command: BroadcastCommand = {
-    type: body.type as BroadcastCommandType,
-    scene: body.scene as BroadcastScene,
-    tournamentId: body.tournamentId,
+  const elapsedMs = Math.max(0, body.elapsedMs);
+  const cue = getTimelineCue(DEFAULT_MATCH_TIMELINE, elapsedMs);
+  if (!cue) return NextResponse.json({ ok: true, cue: null, command: null });
+
+  const command = createBroadcastCommand(body.tournamentId, cue.command, {
     matchId: body.matchId ?? null,
     stationId: body.stationId ?? null,
-    overlay: body.overlay ?? null,
-    issuedAt: new Date().toISOString(),
-  };
+  });
 
   await db.broadcastCommand.create({
     data: {
@@ -72,6 +48,9 @@ export async function POST(request: Request) {
         matchId: command.matchId,
         stationId: command.stationId,
         overlay: command.overlay,
+        timelineId: DEFAULT_MATCH_TIMELINE.id,
+        cueId: cue.id,
+        elapsedMs,
         issuedAt: command.issuedAt,
       })),
     },
@@ -83,9 +62,13 @@ export async function POST(request: Request) {
     scene: command.scene,
     stationId: command.stationId ?? null,
     matchId: command.matchId ?? null,
-    overlay: command.overlay ?? null,
+    overlay: {
+      ...(command.overlay ?? {}),
+      timelineId: DEFAULT_MATCH_TIMELINE.id,
+      cueId: cue.id,
+    },
     commandType: command.type,
   });
 
-  return NextResponse.json({ ok: true, command });
+  return NextResponse.json({ ok: true, timelineId: DEFAULT_MATCH_TIMELINE.id, cue, command });
 }
