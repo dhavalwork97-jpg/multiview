@@ -60,14 +60,14 @@ export function applyBroadcastOverlayEvent(
   };
 }
 
-export function getOverlayThemeVars(theme: BroadcastTheme) {
+export function getOverlayThemeVars(theme: BroadcastTheme): Record<string, string> {
   return {
     "--broadcast-accent": theme.accent,
     "--broadcast-accent-alt": theme.accentAlt,
     "--broadcast-surface": theme.surface,
     "--broadcast-text": theme.text,
     "--broadcast-glow": theme.glow,
-  } as React.CSSProperties;
+  };
 }
 
 export function readString(value: unknown, fallback = "") {
