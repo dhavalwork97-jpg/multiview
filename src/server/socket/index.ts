@@ -1,4 +1,4 @@
-import { createServer } from "node:http";
+import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import { Server } from "socket.io";
 import { createAdapter } from "@socket.io/redis-adapter";
 import Redis from "ioredis";
@@ -19,15 +19,11 @@ for (const [name, client] of [
   ["socket adapter subscriber", adapterSubClient],
   ["socket event subscriber", eventsSubscriber],
 ] as const) {
-  client?.on("error", (error) =>
-    serverLogger.warn(`${name} Redis client error`, { error: error instanceof Error ? error.message : "unknown_error" }),
-  );
+  client?.on("error", (error) => serverLogger.warn(`${name} Redis client error`, { error: error instanceof Error ? error.message : "unknown_error" }));
 }
 
-const io = new Server(createServer(), {
-  cors: { origin: process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000" },
-});
-const httpServer = io.httpServer!;
+const httpServer = createServer();
+const io = new Server(httpServer, { cors: { origin: process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000" } });
 
 function emitRealtimeEvent(event: AppEvent) {
   switch (event.type) {
@@ -51,7 +47,32 @@ function emitRealtimeEvent(event: AppEvent) {
   }
 }
 
-const requestHandler = async (req: import("node:http").IncomingMessage, res: import("node:http").ServerResponse) => {
+async function handleInternalEvent(req: IncomingMessage, res: ServerResponse) {
+  const token = req.headers["x-fgc-internal-token"];
+  if (!OBS_BRIDGE_TOKEN || token !== OBS_BRIDGE_TOKEN) {
+    res.writeHead(401, { "Content-Type": "application/json" });
+    res.end(JSON.stringify({ error: "Unauthorized" }));
+    return;
+  }
+  const chunks: Buffer[] = [];
+  for await (const chunk of req) chunks.push(Buffer.from(chunk));
+  try {
+    const event = JSON.parse(Buffer.concat(chunks).toString("utf8")) as AppEvent;
+    if (event.type !== "broadcast:updated" || !event.tournamentId || !event.scene) {
+      res.writeHead(400, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ error: "Invalid broadcast event" }));
+      return;
+    }
+    emitRealtimeEvent(event);
+    res.writeHead(202, { "Content-Type": "application/json" });
+    res.end(JSON.stringify({ ok: true }));
+  } catch {
+    res.writeHead(400, { "Content-Type": "application/json" });
+    res.end(JSON.stringify({ error: "Invalid event payload" }));
+  }
+}
+
+httpServer.on("request", (req, res) => {
   if (req.url === "/" || req.url === "/healthz") {
     const redisReady = !REDIS_URL || (adapterPubClient?.status === "ready" && eventsSubscriber?.status === "ready");
     res.writeHead(redisReady ? 200 : 503, { "Content-Type": "text/plain", "Cache-Control": "no-store" });
@@ -59,38 +80,13 @@ const requestHandler = async (req: import("node:http").IncomingMessage, res: imp
     return;
   }
   if (req.url === "/internal/events" && req.method === "POST") {
-    const token = req.headers["x-fgc-internal-token"];
-    if (!OBS_BRIDGE_TOKEN || token !== OBS_BRIDGE_TOKEN) {
-      res.writeHead(401, { "Content-Type": "application/json" });
-      res.end(JSON.stringify({ error: "Unauthorized" }));
-      return;
-    }
-    const chunks: Buffer[] = [];
-    for await (const chunk of req) chunks.push(Buffer.from(chunk));
-    try {
-      const event = JSON.parse(Buffer.concat(chunks).toString("utf8")) as AppEvent;
-      if (event.type !== "broadcast:updated" || !event.tournamentId || !event.scene) {
-        res.writeHead(400, { "Content-Type": "application/json" });
-        res.end(JSON.stringify({ error: "Invalid broadcast event" }));
-        return;
-      }
-      emitRealtimeEvent(event);
-      res.writeHead(202, { "Content-Type": "application/json" });
-      res.end(JSON.stringify({ ok: true }));
-    } catch {
-      res.writeHead(400, { "Content-Type": "application/json" });
-      res.end(JSON.stringify({ error: "Invalid event payload" }));
-    }
+    void handleInternalEvent(req, res);
     return;
   }
+  if (req.url?.startsWith("/socket.io/")) return;
   res.writeHead(404);
   res.end();
-};
-
-// Socket.IO owns the HTTP upgrade path; attach the health/internal handler to
-// the underlying server before listening.
-httpServer.removeAllListeners("request");
-httpServer.on("request", requestHandler);
+});
 
 async function connectRedis() {
   if (!REDIS_URL || !adapterPubClient || !adapterSubClient || !eventsSubscriber) return;
