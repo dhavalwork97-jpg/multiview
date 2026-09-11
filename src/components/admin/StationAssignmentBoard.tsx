@@ -259,7 +259,7 @@ function StreamingCredentialsPanel({ state, onFetch }: { state: CredentialsState
       <p className="text-[10px] uppercase tracking-wide text-ink-faint">Paste these into OBS (Settings → Stream → Custom). This is the YouTube RTMP input for this station; treat the stream key like a password.</p>
       <CredentialRow label="Server (YouTube RTMP URL)" value={ingestUrl} masked={false} copied={justCopied === "url"} onCopy={() => void copy(ingestUrl, "url")} />
       <CredentialRow label="Stream key" value={streamKey} masked={!revealed} copied={justCopied === "key"} onCopy={() => void copy(streamKey, "key")} onToggleReveal={() => setRevealed((r) => !r)} revealed={revealed} />
-      <button type="button" onClick={() => void getStreamingCredentials(stationId)} className="pt-1 font-mono text-[10px] uppercase tracking-wide text-ink-faint underline hover:text-ink">Get / reuse station key</button>
+      <button type="button" onClick={onFetch} className="pt-1 font-mono text-[10px] uppercase tracking-wide text-ink-faint underline hover:text-ink">Get / reuse station key</button>
     </div>
   );
 }
