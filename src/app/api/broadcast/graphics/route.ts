@@ -3,7 +3,7 @@ import { auth } from "@clerk/nextjs/server";
 import { authorizeBroadcastOperator } from "@/lib/broadcast/authorization";
 import { publishEvent } from "@/lib/events";
 
-const eventTypes = ["score", "round", "goal", "ko", "match-point"] as const;
+const eventTypes = ["score", "round", "goal", "ko", "match-point", "mvp", "champion"] as const;
 type GraphicEventType = (typeof eventTypes)[number];
 
 export async function POST(request: Request) {
@@ -21,6 +21,11 @@ export async function POST(request: Request) {
     roundLabel?: string;
     teamA?: string;
     teamB?: string;
+    playerName?: string;
+    playerTag?: string;
+    teamName?: string;
+    placement?: number;
+    title?: string;
   };
 
   if (!body.tournamentId || !body.eventType) return NextResponse.json({ error: "tournamentId and eventType are required" }, { status: 400 });
@@ -38,12 +43,17 @@ export async function POST(request: Request) {
     roundLabel: body.roundLabel?.trim() || undefined,
     teamA: body.teamA?.trim() || undefined,
     teamB: body.teamB?.trim() || undefined,
+    playerName: body.playerName?.trim() || undefined,
+    playerTag: body.playerTag?.trim() || undefined,
+    teamName: body.teamName?.trim() || undefined,
+    placement: body.placement == null ? undefined : Math.max(1, Math.floor(body.placement)),
+    title: body.title?.trim() || undefined,
   };
 
   await publishEvent({
     type: "broadcast:updated",
     tournamentId: body.tournamentId,
-    scene: "gameplay",
+    scene: body.eventType === "champion" ? "champion" : body.eventType === "mvp" ? "winner" : "gameplay",
     stationId: body.stationId ?? null,
     matchId: body.matchId ?? null,
     overlay: JSON.parse(JSON.stringify(overlay)),
