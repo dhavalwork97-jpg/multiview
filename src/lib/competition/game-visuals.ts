@@ -22,7 +22,7 @@ export const GAME_VISUALS: Record<string, GameVisualDefinition> = {
   "mortal kombat": { domain: "mortalkombat.com", art: STEAM_ART(1971870), accent: "from-red-500/35 via-amber-500/10 to-transparent" },
   overwatch: { domain: "overwatch.blizzard.com", art: STEAM_ART(2357570), accent: "from-orange-400/30 via-yellow-400/10 to-transparent" },
   pubg: { domain: "pubg.com", art: STEAM_ART(578080), accent: "from-amber-500/35 via-orange-500/10 to-transparent" },
-  bgmi: { domain: "battlegroundsmobileindia.com", art: STEAM_ART(578080), accent: "from-amber-500/35 via-orange-500/10 to-transparent" },
+  bgmi: { domain: "battlegroundsmobileindia.com", accent: "from-amber-500/35 via-orange-500/10 to-transparent" },
   "street fighter": { domain: "streetfighter.com", art: STEAM_ART(1364780), accent: "from-yellow-500/35 via-red-500/10 to-transparent" },
   "street fighter 6": { domain: "streetfighter.com", art: STEAM_ART(1364780), accent: "from-yellow-500/35 via-red-500/10 to-transparent" },
   tekken: { domain: "tekken.com", art: STEAM_ART(1778820), accent: "from-red-500/35 via-blue-500/10 to-transparent" },
