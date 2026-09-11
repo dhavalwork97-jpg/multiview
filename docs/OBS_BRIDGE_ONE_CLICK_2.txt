@@ -1,1 +1,0 @@
-Run scripts/install-obs-bridge.cmd once on the Windows OBS computer. It saves connection settings, installs dependencies, and creates a Windows scheduled task named FGC OBS Bridge. The task starts at Windows sign-in and restarts after failures. Dynamic mode means new tournaments require no bridge setup or restart.
