@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { cookies } from "next/headers";
 import { Barlow_Condensed, Inter, JetBrains_Mono } from "next/font/google";
 import { ClerkProvider } from "@clerk/nextjs";
 import { NavGate } from "@/components/layout/NavGate";
@@ -34,13 +35,14 @@ export const metadata: Metadata = {
   description: "Universal Esports Competition Platform",
 };
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
   const clerkPublishableKey = process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY;
   const clerkConfigured = Boolean(clerkPublishableKey && clerkPublishableKey !== "pk_test_dummy");
+  const demoMode = (await cookies()).get("fgc-demo")?.value === "1";
 
   const content = (
     <>
@@ -55,7 +57,7 @@ export default function RootLayout({
   return (
     <html lang="en" className={`${displayFont.variable} ${bodyFont.variable} ${monoFont.variable}`}>
       <body>
-        {clerkConfigured ? (
+        {clerkConfigured && !demoMode ? (
           <ClerkProvider publishableKey={clerkPublishableKey}>{content}</ClerkProvider>
         ) : (
           content
