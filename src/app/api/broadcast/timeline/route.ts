@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { auth } from "@clerk/nextjs/server";
 import { authorizeBroadcastOperator } from "@/lib/broadcast/authorization";
 import { createBroadcastCommand, DEFAULT_MATCH_TIMELINE, getTimelineCue } from "@/lib/broadcast/production";
+import { normalizeObsSceneMapping, resolveObsScene, type ObsSceneMapping } from "@/lib/broadcast/obs";
 import { db } from "@/lib/db";
 import { publishEvent } from "@/lib/events";
 
@@ -14,6 +15,7 @@ export async function POST(request: Request) {
     elapsedMs?: number;
     matchId?: string | null;
     stationId?: string | null;
+    obsMapping?: Partial<ObsSceneMapping> | null;
   };
 
   if (!body.tournamentId || typeof body.elapsedMs !== "number" || !Number.isFinite(body.elapsedMs)) {
@@ -36,6 +38,8 @@ export async function POST(request: Request) {
     matchId: body.matchId ?? null,
     stationId: body.stationId ?? null,
   });
+  const obsMapping = normalizeObsSceneMapping(body.obsMapping);
+  const obsScene = resolveObsScene(command.scene, obsMapping);
 
   await db.broadcastCommand.create({
     data: {
@@ -45,6 +49,7 @@ export async function POST(request: Request) {
       payload: JSON.parse(JSON.stringify({
         runtimeCommandType: command.type,
         scene: command.scene,
+        obsScene,
         matchId: command.matchId,
         stationId: command.stationId,
         overlay: command.overlay,
@@ -66,9 +71,10 @@ export async function POST(request: Request) {
       ...(command.overlay ?? {}),
       timelineId: DEFAULT_MATCH_TIMELINE.id,
       cueId: cue.id,
+      obsScene,
     },
     commandType: command.type,
   });
 
-  return NextResponse.json({ ok: true, timelineId: DEFAULT_MATCH_TIMELINE.id, cue, command });
+  return NextResponse.json({ ok: true, timelineId: DEFAULT_MATCH_TIMELINE.id, cue, command, obsScene });
 }
