@@ -169,7 +169,25 @@ const rules = resolveRules(existing.tournament.sport, {
       });
       return NextResponse.json(result);
     } catch (error) {
-      return NextResponse.json({ error: error instanceof Error ? error.message : "Failed to update Battle Royale match" }, { status: 400 });
+      const isStationConflict =
+        typeof error === "object" &&
+        error !== null &&
+        "code" in error &&
+        (error as { code?: string }).code === "P2002" &&
+        "meta" in error &&
+        JSON.stringify((error as { meta?: unknown }).meta ?? "").includes(
+          "matches_one_active_match_per_station",
+        );
+      return NextResponse.json(
+        {
+          error: isStationConflict
+            ? "Station is already occupied by another active match"
+            : error instanceof Error
+              ? error.message
+              : "Failed to update Battle Royale match",
+        },
+        { status: isStationConflict ? 409 : 400 },
+      );
     }
   }
 
@@ -759,14 +777,25 @@ const rules = resolveRules(existing.tournament.sport, {
         error,
       );
 
+      const isStationConflict =
+        typeof error === "object" &&
+        error !== null &&
+        "code" in error &&
+        (error as { code?: string }).code === "P2002" &&
+        "meta" in error &&
+        JSON.stringify((error as { meta?: unknown }).meta ?? "").includes(
+          "matches_one_active_match_per_station",
+        );
+
       return NextResponse.json(
         {
-          error:
-            error instanceof Error
+          error: isStationConflict
+            ? "Station is already occupied by another active match"
+            : error instanceof Error
               ? error.message
               : "Failed to update match",
         },
-        { status: 500 },
+        { status: isStationConflict ? 409 : 500 },
       );
     }
   }
@@ -954,13 +983,34 @@ const rules = resolveRules(existing.tournament.sport, {
       new Date();
   }
 
-  const updated =
+  const updatedResult =
     await db.match.update({
       where: {
         id: matchId,
       },
       data,
+    }).catch((error: unknown) => {
+      const isStationConflict =
+        typeof error === "object" &&
+        error !== null &&
+        "code" in error &&
+        (error as { code?: string }).code === "P2002" &&
+        "meta" in error &&
+        JSON.stringify((error as { meta?: unknown }).meta ?? "").includes(
+          "matches_one_active_match_per_station",
+        );
+      if (isStationConflict) return null;
+      throw error;
     });
+
+  if (!updatedResult) {
+    return NextResponse.json(
+      { error: "Station is already occupied by another active match" },
+      { status: 409 },
+    );
+  }
+
+  const updated = updatedResult;
 
   if (
     updated.status ===
