@@ -4,7 +4,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { db } from "@/lib/db";
 import { BracketExplorer } from "@/components/bracket/BracketExplorer";
-import { GameIcon } from "@/components/competition/GameIcon";
+import { GameVisual } from "@/components/competition/GameVisual";
 import { TournamentCommandCenter } from "@/components/competition/TournamentCommandCenter";
 import { UniversalLiveViewer } from "@/components/competition/UniversalLiveViewer";
 import { CompetitionScoreboard } from "@/components/competition/CompetitionScoreboard";
@@ -54,8 +54,9 @@ export default async function TournamentPage({ params }: { params: Promise<{ tou
   return <main className="page-shell"><div className="page-container max-w-6xl" style={{ "--event-accent": t.organization.brandPrimaryColor ?? "#7c5cff", "--event-accent-2": t.organization.brandAccentColor ?? "#00cfff" } as CSSProperties}>
     <header className="relative overflow-hidden rounded-[24px] border border-violet-400/20 bg-[radial-gradient(circle_at_85%_10%,rgba(124,92,255,.24),transparent_34%),linear-gradient(135deg,rgba(10,18,48,.98),rgba(4,8,22,.98))] p-5 shadow-[0_20px_80px_rgba(0,0,0,.28)] sm:p-8">
       <div className="absolute -right-20 -top-24 h-64 w-64 rounded-full bg-cyan-400/10 blur-3xl" />
-      <div className="relative flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between"><div className="min-w-0"><div className="flex items-center gap-3"><GameIcon game={t.game}/><div><p className="page-kicker text-cyan-300">{t.game} · {t.sport}{t.venue ? ` · ${t.venue}` : ""}</p><h1 className="page-title mt-1 text-3xl sm:text-5xl">{t.name}</h1><p className="page-subtitle mt-2">{t.status} · {new Date(t.startDate).toLocaleDateString()}</p></div></div></div><div className="flex flex-wrap gap-2">{t.status === "LIVE" && <span className="status-live"><span className="h-1.5 w-1.5 rounded-full bg-signal-live animate-live-pulse"/>Live now</span>}<Link href="/tournaments" className="action-secondary">All tournaments</Link></div></div>
-      <nav aria-label="Tournament navigation" className="context-tabs relative mt-7"><Link href={`/tournaments/${t.id}`} className="context-tab context-tab-active">Overview</Link><Link href={`/tournaments/${t.id}/standings`} className="context-tab">Standings</Link>{(live || t.status === "LIVE") && <Link href={`/multiview?tournamentId=${t.id}`} className="context-tab">Watch live</Link>}</nav>
+      <div className="relative grid gap-6 lg:grid-cols-[minmax(0,1fr)_280px] lg:items-end"><div className="min-w-0"><div className="flex items-center gap-3"><div className="min-w-0 flex-1"><p className="page-kicker text-cyan-300">{t.game} · {t.sport}{t.venue ? ` · ${t.venue}` : ""}</p><h1 className="page-title mt-1 text-3xl sm:text-5xl">{t.name}</h1><p className="page-subtitle mt-2">{t.status} · {new Date(t.startDate).toLocaleDateString()}</p></div></div></div><GameVisual game={t.game} size="lg" /></div>
+      <div className="relative mt-6 flex flex-wrap items-center justify-between gap-3"><div className="flex flex-wrap gap-2">{t.status === "LIVE" && <span className="status-live"><span className="h-1.5 w-1.5 rounded-full bg-signal-live animate-live-pulse"/>Live now</span>}</div><Link href="/tournaments" className="action-secondary">All tournaments</Link></div>
+      <nav aria-label="Tournament navigation" className="context-tabs relative mt-5"><Link href={`/tournaments/${t.id}`} className="context-tab context-tab-active">Overview</Link><Link href={`/tournaments/${t.id}/standings`} className="context-tab">Standings</Link>{(live || t.status === "LIVE") && <Link href={`/multiview?tournamentId=${t.id}`} className="context-tab">Watch live</Link>}</nav>
     </header>
 
     <div className="mt-6 space-y-7">
