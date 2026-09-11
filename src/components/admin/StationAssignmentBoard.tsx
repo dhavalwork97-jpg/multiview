@@ -35,10 +35,6 @@ export function StationAssignmentBoard({ tournamentId }: { tournamentId: string 
   const [stations, setStations] = useState<StationHealth[]>([]);
   const [assigning, setAssigning] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  // Keyed by stationId. Credentials only ever live in component state —
-  // never written to the URL, localStorage, or anywhere else a stream
-  // key (which is bearer-token-equivalent, per src/lib/livekit.ts) could
-  // leak beyond this session.
   const [credentials, setCredentials] = useState<Record<string, CredentialsState>>({});
   const socket = useSocket({ tournamentId });
 
@@ -59,8 +55,6 @@ export function StationAssignmentBoard({ tournamentId }: { tournamentId: string 
 
   useEffect(() => {
     refresh();
-    // YouTube has no per-station webhook in this app, so the socket server
-    // heartbeat and this dashboard refresh provide the near-real-time UI.
     socket.on("station:status", refresh);
     socket.on("match:assigned", refresh);
     const timer = setInterval(refresh, 30000);
@@ -72,7 +66,7 @@ export function StationAssignmentBoard({ tournamentId }: { tournamentId: string 
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tournamentId, socket]);
 
-  async function assign(matchId: string, stationId: string) {
+  async function assign(matchId: string, stationId: string | null) {
     setAssigning(matchId);
     setError(null);
     try {
@@ -82,20 +76,17 @@ export function StationAssignmentBoard({ tournamentId }: { tournamentId: string 
         body: JSON.stringify({ stationId }),
       });
       if (!res.ok) {
-        const data = await res.json();
-        throw new Error(data.error ?? "Failed to assign");
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error ?? "Failed to update assignment");
       }
       await refresh();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to assign");
+      setError(err instanceof Error ? err.message : "Failed to update assignment");
     } finally {
       setAssigning(null);
     }
   }
 
-  // The station's YouTube RTMP stream is persistent. Re-calling this endpoint
-  // returns the stored credentials and does not create another stream or
-  // consume additional YouTube quota.
   async function getStreamingCredentials(stationId: string) {
     setCredentials((prev) => ({ ...prev, [stationId]: { status: "loading" } }));
     try {
@@ -117,24 +108,20 @@ export function StationAssignmentBoard({ tournamentId }: { tournamentId: string 
     }
   }
 
-
+  const stationIsAvailable = (station: StationHealth) =>
+    station.status !== "LIVE" && station.status !== "ERROR" && station.status !== "OFFLINE" && station.matches.length === 0;
 
   return (
     <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
       <div>
-        <h3 className="mb-2 font-display text-lg uppercase tracking-wide text-ink-muted">
-          Queued matches
-        </h3>
+        <h3 className="mb-2 font-display text-lg uppercase tracking-wide text-ink-muted">Queued matches</h3>
         {error && <p className="mb-2 text-sm text-signal-error">{error}</p>}
         {queued.length === 0 ? (
           <p className="text-sm text-ink-faint">Nothing waiting on a station.</p>
         ) : (
           <ul className="space-y-2">
             {queued.map((m) => (
-              <li
-                key={m.id}
-                className="flex items-center justify-between rounded-card border border-arena-600 bg-arena-800 px-3 py-2 text-sm"
-              >
+              <li key={m.id} className="flex items-center justify-between rounded-card border border-arena-600 bg-arena-800 px-3 py-2 text-sm">
                 <span>
                   <span className="text-corner-p1">{m.playerOne.gamertag}</span>
                   {" vs "}
@@ -147,16 +134,10 @@ export function StationAssignmentBoard({ tournamentId }: { tournamentId: string 
                   onChange={(e) => e.target.value && assign(m.id, e.target.value)}
                   className="rounded border border-arena-600 bg-arena-900 px-2 py-1 text-xs"
                 >
-                  <option value="" disabled>
-                    Assign to…
-                  </option>
-                  {stations
-                    .filter((s) => s.status !== "LIVE")
-                    .map((s) => (
-                      <option key={s.id} value={s.id}>
-                        {s.label}
-                      </option>
-                    ))}
+                  <option value="" disabled>Assign to…</option>
+                  {stations.filter(stationIsAvailable).map((s) => (
+                    <option key={s.id} value={s.id}>{s.label}</option>
+                  ))}
                 </select>
               </li>
             ))}
@@ -165,37 +146,69 @@ export function StationAssignmentBoard({ tournamentId }: { tournamentId: string 
       </div>
 
       <div>
-        <h3 className="mb-2 font-display text-lg uppercase tracking-wide text-ink-muted">
-          Stations
-        </h3>
+        <h3 className="mb-2 font-display text-lg uppercase tracking-wide text-ink-muted">Stations</h3>
         <ul className="space-y-2">
-          {stations.map((s) => (
-            <li
-              key={s.id}
-              className="rounded-card border border-arena-600 bg-arena-800 px-3 py-2 text-sm"
-            >
-              <div className="flex items-center justify-between">
-                <span className="font-medium">{s.label}</span>
-                <StatusPill status={s.isStale ? "ERROR" : s.status} />
-              </div>
-              {s.matches[0] && (
-                <p className="mt-1 text-xs text-ink-faint">
-                  {s.matches[0].playerOne.gamertag} vs {s.matches[0].playerTwo.gamertag}
-                </p>
-              )}
-              {s.status === "LIVE" && (
-                <p className="mt-1 font-mono text-[11px] text-ink-faint">
-                  {s.currentBitrateKbps ?? "—"} kbps · {s.droppedFrames ?? 0} dropped frames
-                </p>
-              )}
+          {stations.map((s) => {
+            const assignedMatch = s.matches[0];
+            const canEditAssignment = s.status !== "LIVE" && s.status !== "ERROR" && s.status !== "OFFLINE";
+            return (
+              <li key={s.id} className="rounded-card border border-arena-600 bg-arena-800 px-3 py-2 text-sm">
+                <div className="flex items-center justify-between">
+                  <span className="font-medium">{s.label}</span>
+                  <StatusPill status={s.isStale ? "ERROR" : s.status} />
+                </div>
 
-              <StreamingCredentialsPanel
-                state={credentials[s.id] ?? { status: "idle" }}
-                onFetch={() => getStreamingCredentials(s.id)}
-              />
+                {assignedMatch ? (
+                  <div className="mt-2 rounded border border-arena-600 bg-arena-900 p-2">
+                    <p className="text-xs text-ink-faint">Assigned queued match</p>
+                    <p className="mt-1 text-xs">
+                      <span className="text-corner-p1">{assignedMatch.playerOne.gamertag}</span>
+                      {" vs "}
+                      <span className="text-corner-p2">{assignedMatch.playerTwo.gamertag}</span>
+                    </p>
+                    {s.status !== "LIVE" && (
+                      <div className="mt-2 flex items-center gap-2">
+                        <select
+                          disabled={assigning === assignedMatch.id || !canEditAssignment}
+                          defaultValue=""
+                          onChange={(e) => {
+                            if (e.target.value) assign(assignedMatch.id, e.target.value);
+                          }}
+                          className="min-w-0 flex-1 rounded border border-arena-600 bg-arena-950 px-2 py-1 text-[11px]"
+                        >
+                          <option value="">Move to…</option>
+                          {stations.filter((candidate) => candidate.id !== s.id && stationIsAvailable(candidate)).map((candidate) => (
+                            <option key={candidate.id} value={candidate.id}>{candidate.label}</option>
+                          ))}
+                        </select>
+                        <button
+                          type="button"
+                          disabled={assigning === assignedMatch.id || !canEditAssignment}
+                          onClick={() => assign(assignedMatch.id, null)}
+                          className="shrink-0 rounded border border-arena-600 px-2 py-1 text-[11px] uppercase tracking-wide text-ink-faint hover:border-signal-error hover:text-signal-error disabled:opacity-50"
+                        >
+                          Unassign
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <p className="mt-1 text-xs text-ink-faint">No queued match assigned.</p>
+                )}
 
-            </li>
-          ))}
+                {s.status === "LIVE" && (
+                  <p className="mt-1 font-mono text-[11px] text-ink-faint">
+                    {s.currentBitrateKbps ?? "—"} kbps · {s.droppedFrames ?? 0} dropped frames
+                  </p>
+                )}
+
+                <StreamingCredentialsPanel
+                  state={credentials[s.id] ?? { status: "idle" }}
+                  onFetch={() => getStreamingCredentials(s.id)}
+                />
+              </li>
+            );
+          })}
         </ul>
       </div>
     </div>
@@ -209,20 +222,10 @@ function StatusPill({ status }: { status: StationHealth["status"] }) {
     OFFLINE: "text-ink-faint",
     ERROR: "text-signal-error",
   };
-  return (
-    <span className={`font-mono text-[10px] uppercase tracking-widest ${styles[status]}`}>
-      {status}
-    </span>
-  );
+  return <span className={`font-mono text-[10px] uppercase tracking-widest ${styles[status]}`}>{status}</span>;
 }
 
-function StreamingCredentialsPanel({
-  state,
-  onFetch,
-}: {
-  state: CredentialsState;
-  onFetch: () => void;
-}) {
+function StreamingCredentialsPanel({ state, onFetch }: { state: CredentialsState; onFetch: () => void }) {
   const [revealed, setRevealed] = useState(false);
   const [justCopied, setJustCopied] = useState<"url" | "key" | null>(null);
 
@@ -235,102 +238,36 @@ function StreamingCredentialsPanel({
   if (state.status === "idle" || state.status === "error") {
     return (
       <div className="mt-2">
-        <button
-          type="button"
-          onClick={onFetch}
-          className="rounded border border-arena-600 px-2 py-1 font-mono text-[11px] uppercase tracking-wide text-ink-muted hover:border-signal-live hover:text-signal-live"
-        >
+        <button type="button" onClick={onFetch} className="rounded border border-arena-600 px-2 py-1 font-mono text-[11px] uppercase tracking-wide text-ink-muted hover:border-signal-live hover:text-signal-live">
           Get streaming credentials
         </button>
-        {state.status === "error" && (
-          <p className="mt-1 text-xs text-signal-error">{state.message}</p>
-        )}
+        {state.status === "error" && <p className="mt-1 text-xs text-signal-error">{state.message}</p>}
       </div>
     );
   }
 
-  if (state.status === "loading") {
-    return <p className="mt-2 text-xs text-ink-faint">Requesting credentials…</p>;
-  }
+  if (state.status === "loading") return <p className="mt-2 text-xs text-ink-faint">Requesting credentials…</p>;
 
   const { ingestUrl, streamKey } = state.credentials;
-
   return (
     <div className="mt-2 space-y-1.5 rounded border border-arena-600 bg-arena-900 p-2">
-      <p className="text-[10px] uppercase tracking-wide text-ink-faint">
-        Paste these into OBS (Settings → Stream → Custom). This is the YouTube RTMP input for this station; treat the stream key like a password.
-      </p>
-
-      <CredentialRow
-        label="Server (YouTube RTMP URL)"
-        value={ingestUrl}
-        masked={false}
-        copied={justCopied === "url"}
-        onCopy={() => copy(ingestUrl, "url")}
-      />
-      <CredentialRow
-        label="Stream key"
-        value={streamKey}
-        masked={!revealed}
-        copied={justCopied === "key"}
-        onCopy={() => copy(streamKey, "key")}
-        onToggleReveal={() => setRevealed((r) => !r)}
-        revealed={revealed}
-      />
-
-      <button
-        type="button"
-        onClick={onFetch}
-        className="pt-1 font-mono text-[10px] uppercase tracking-wide text-ink-faint underline hover:text-ink"
-      >
-        Get / reuse station key
-      </button>
+      <p className="text-[10px] uppercase tracking-wide text-ink-faint">Paste these into OBS (Settings → Stream → Custom). This is the YouTube RTMP input for this station; treat the stream key like a password.</p>
+      <CredentialRow label="Server (YouTube RTMP URL)" value={ingestUrl} masked={false} copied={justCopied === "url"} onCopy={() => copy(ingestUrl, "url")} />
+      <CredentialRow label="Stream key" value={streamKey} masked={!revealed} copied={justCopied === "key"} onCopy={() => copy(streamKey, "key")} onToggleReveal={() => setRevealed((r) => !r)} revealed={revealed} />
+      <button type="button" onClick={onFetch} className="pt-1 font-mono text-[10px] uppercase tracking-wide text-ink-faint underline hover:text-ink">Get / reuse station key</button>
     </div>
   );
 }
 
-function CredentialRow({
-  label,
-  value,
-  masked,
-  copied,
-  onCopy,
-  onToggleReveal,
-  revealed,
-}: {
-  label: string;
-  value: string;
-  masked: boolean;
-  copied: boolean;
-  onCopy: () => void;
-  onToggleReveal?: () => void;
-  revealed?: boolean;
-}) {
+function CredentialRow({ label, value, masked, copied, onCopy, onToggleReveal, revealed }: { label: string; value: string; masked: boolean; copied: boolean; onCopy: () => void; onToggleReveal?: () => void; revealed?: boolean }) {
   const displayValue = masked ? "•".repeat(Math.min(value.length, 28)) : value;
-
   return (
     <div>
       <p className="text-[10px] uppercase tracking-wide text-ink-faint">{label}</p>
       <div className="flex items-center gap-1.5">
-        <code className="flex-1 truncate rounded bg-arena-950 px-2 py-1 font-mono text-xs text-ink">
-          {displayValue}
-        </code>
-        {onToggleReveal && (
-          <button
-            type="button"
-            onClick={onToggleReveal}
-            className="shrink-0 rounded border border-arena-600 px-1.5 py-1 text-[10px] uppercase text-ink-faint hover:text-ink"
-          >
-            {revealed ? "Hide" : "Show"}
-          </button>
-        )}
-        <button
-          type="button"
-          onClick={onCopy}
-          className="shrink-0 rounded border border-arena-600 px-1.5 py-1 text-[10px] uppercase text-ink-faint hover:border-signal-live hover:text-signal-live"
-        >
-          {copied ? "Copied" : "Copy"}
-        </button>
+        <code className="flex-1 truncate rounded bg-arena-950 px-2 py-1 font-mono text-xs text-ink">{displayValue}</code>
+        {onToggleReveal && <button type="button" onClick={onToggleReveal} className="shrink-0 rounded border border-arena-600 px-1.5 py-1 text-[10px] uppercase text-ink-faint hover:text-ink">{revealed ? "Hide" : "Show"}</button>}
+        <button type="button" onClick={onCopy} className="shrink-0 rounded border border-arena-600 px-1.5 py-1 text-[10px] uppercase text-ink-faint hover:border-signal-live hover:text-signal-live">{copied ? "Copied" : "Copy"}</button>
       </div>
     </div>
   );

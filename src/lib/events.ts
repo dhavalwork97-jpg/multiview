@@ -10,7 +10,7 @@ export type AppEvent =
   | { type: "competition:updated"; tournamentId: string; reason: "MATCH_UPDATED" | "RESULT_UPDATED" | "STANDINGS_UPDATED" | "BRACKET_UPDATED" | "LIVE_STATE_UPDATED" }
   | { type: "match:updated"; tournamentId: string; matchId: string; status: string; playerOneScore: number; playerTwoScore: number; winnerId: string | null; winnerSideId?: string | null; sideScores?: { A: number; B: number }; stationId: string | null }
   | { type: "station:status"; tournamentId: string; stationId: string; status: string; lastHeartbeatAt: string | null }
-  | { type: "match:assigned"; tournamentId: string; matchId: string; stationId: string }
+  | { type: "match:assigned"; tournamentId: string; matchId: string; stationId: string | null }
   | { type: "tournament:completed"; tournamentId: string }
   | { type: "clip:ready"; tournamentId: string; matchId: string; clipId: string; s3Key: string }
   | { type: "bracket:advanced"; tournamentId: string; bracketId: string; matchId: string; targetSideKey: string }
