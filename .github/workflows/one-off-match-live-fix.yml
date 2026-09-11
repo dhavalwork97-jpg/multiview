@@ -27,12 +27,6 @@ jobs:
           path = Path("src/app/api/matches/[matchId]/route.ts")
           text = path.read_text()
 
-          old = '''      return NextResponse.json(\n        {\n          error:\n            error instanceof Error\n              ? error.message\n              : "Failed to update match",\n        },\n        { status: 500 },\n      );'''
-          new = '''      const isStationConflict =\n        typeof error === "object" &&\n        error !== null &&\n        "code" in error &&\n        (error as { code?: string }).code === "P2002" &&\n        "meta" in error &&\n        JSON.stringify((error as { meta?: unknown }).meta ?? "").includes(\n          "matches_one_active_match_per_station",\n        );\n\n      return NextResponse.json(\n        {\n          error: isStationConflict\n            ? "Station is already occupied by another active match"\n            : error instanceof Error\n              ? error.message\n              : "Failed to update match",\n        },\n        { status: isStationConflict ? 409 : 500 },\n      );'''
-          if text.count(old) != 1:
-              raise SystemExit("generic catch target not found exactly once")
-          text = text.replace(old, new, 1)
-
           old = '''    } catch (error) {\n      return NextResponse.json({ error: error instanceof Error ? error.message : "Failed to update Battle Royale match" }, { status: 400 });\n    }'''
           new = '''    } catch (error) {\n      const isStationConflict =\n        typeof error === "object" &&\n        error !== null &&\n        "code" in error &&\n        (error as { code?: string }).code === "P2002" &&\n        "meta" in error &&\n        JSON.stringify((error as { meta?: unknown }).meta ?? "").includes(\n          "matches_one_active_match_per_station",\n        );\n      return NextResponse.json(\n        {\n          error: isStationConflict\n            ? "Station is already occupied by another active match"\n            : error instanceof Error\n              ? error.message\n              : "Failed to update Battle Royale match",\n        },\n        { status: isStationConflict ? 409 : 400 },\n      );\n    }'''
           if text.count(old) != 1:
