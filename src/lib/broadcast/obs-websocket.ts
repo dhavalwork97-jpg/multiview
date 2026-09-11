@@ -31,6 +31,11 @@ export type ObsWebSocketConfig = {
   reconnectDelayMs?: number;
 };
 
+export type ObsScene = {
+  sceneIndex: number;
+  sceneName: string;
+};
+
 export class ObsWebSocketClient {
   private socket: WebSocket | null = null;
   private connectPromise: Promise<void> | null = null;
@@ -137,6 +142,59 @@ export class ObsWebSocketClient {
   async getCurrentProgramScene() {
     const response = await this.request("GetCurrentProgramScene");
     return String(response.responseData?.currentProgramSceneName ?? "");
+  }
+
+  async getSceneList() {
+    const response = await this.request("GetSceneList");
+    const scenes = Array.isArray(response.responseData?.scenes) ? response.responseData.scenes : [];
+    return scenes.flatMap((scene) => {
+      if (!scene || typeof scene !== "object") return [];
+      const value = scene as Record<string, unknown>;
+      const sceneName = typeof value.sceneName === "string" ? value.sceneName : "";
+      const sceneIndex = typeof value.sceneIndex === "number" ? value.sceneIndex : 0;
+      return sceneName ? [{ sceneName, sceneIndex }] : [];
+    });
+  }
+
+  async createScene(sceneName: string) {
+    const name = sceneName.trim();
+    if (!name) throw new Error("OBS scene name cannot be empty");
+    try {
+      await this.request("CreateScene", { sceneName: name });
+    } catch (error) {
+      if (!String(error instanceof Error ? error.message : error).toLowerCase().includes("already exists")) throw error;
+    }
+  }
+
+  async createBrowserSource(sceneName: string, inputName: string, url: string, width = 1920, height = 1080) {
+    await this.request("CreateInput", {
+      sceneName,
+      inputName,
+      inputKind: "browser_source",
+      inputSettings: {
+        url,
+        width,
+        height,
+        reroute_audio: true,
+        shutdown: false,
+        fps: 60,
+      },
+      sceneItemEnabled: true,
+    });
+  }
+
+  async ensureSceneWithBrowserSource(sceneName: string, sourceName: string, url: string) {
+    const scenes = await this.getSceneList();
+    if (!scenes.some((scene) => scene.sceneName === sceneName)) {
+      await this.createScene(sceneName);
+    }
+
+    try {
+      await this.createBrowserSource(sceneName, sourceName, url);
+    } catch (error) {
+      const message = String(error instanceof Error ? error.message : error).toLowerCase();
+      if (!message.includes("already exists") && !message.includes("already has a source")) throw error;
+    }
   }
 
   close() {
