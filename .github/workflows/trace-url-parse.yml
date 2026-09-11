@@ -1,0 +1,23 @@
+name: Trace url.parse
+on:
+  push:
+    branches: [chore/trace-url-parse]
+jobs:
+  trace:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Build with deprecation tracing
+        env:
+          NODE_OPTIONS: --trace-deprecation
+        run: npm run build 2>&1 | tee /tmp/build.log
+      - name: Show deprecation traces
+        if: always()
+        run: |
+          echo '--- DEP0169 / url.parse traces ---'
+          grep -n -A12 -B4 -E 'DEP0169|url\.parse' /tmp/build.log || true
