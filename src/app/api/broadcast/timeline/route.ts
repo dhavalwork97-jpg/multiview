@@ -60,8 +60,8 @@ export async function POST(request: Request) {
     type: "broadcast:updated",
     tournamentId: command.tournamentId,
     scene: command.scene,
-    stationId: command.stationId,
-    matchId: command.matchId,
+    stationId: command.stationId ?? null,
+    matchId: command.matchId ?? null,
     overlay: {
       ...(command.overlay ?? {}),
       timelineId: DEFAULT_MATCH_TIMELINE.id,
