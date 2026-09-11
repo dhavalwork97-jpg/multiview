@@ -8,6 +8,7 @@ import { startStationHeartbeat } from "./heartbeat";
 
 const PORT = Number(process.env.PORT ?? process.env.SOCKET_SERVER_PORT ?? 4000);
 const REDIS_URL = process.env.REDIS_URL?.trim() || null;
+const OBS_BRIDGE_TOKEN = process.env.FGC_OBS_BRIDGE_TOKEN?.trim() || null;
 
 // Redis is an optional scale-out dependency. The socket server must remain
 // usable as a single instance when Redis is unavailable or not configured.
@@ -69,7 +70,10 @@ async function connectRedis() {
       }
 
       switch (event.type) {
-        case "broadcast:updated": io.to(`tournament:${event.tournamentId}`).emit("broadcast:updated", event); break;
+        case "broadcast:updated":
+          io.to(`tournament:${event.tournamentId}`).emit("broadcast:updated", event);
+          io.to("obs-bridge").emit("broadcast:updated", event);
+          break;
         case "match:updated": io.to(`tournament:${event.tournamentId}`).emit("match:updated", event); io.to(`match:${event.matchId}`).emit("match:updated", event); break;
         case "station:status": io.to(`tournament:${event.tournamentId}`).emit("station:status", event); break;
         case "match:assigned": io.to(`tournament:${event.tournamentId}`).emit("match:assigned", event); break;
@@ -102,6 +106,15 @@ io.on("connection", (socket) => {
     if (typeof tournamentId === "string" && tournamentId.length <= 100) socket.join(`tournament:${tournamentId}`);
   });
   socket.on("leave:tournament", (tournamentId: string) => socket.leave(`tournament:${tournamentId}`));
+  socket.on("join:obs-bridge", () => {
+    const token = socket.handshake.auth?.obsBridgeToken;
+    if (!OBS_BRIDGE_TOKEN || token !== OBS_BRIDGE_TOKEN) {
+      serverLogger.warn("rejected OBS bridge socket connection", { socketId: socket.id });
+      return;
+    }
+    socket.join("obs-bridge");
+    serverLogger.info("OBS bridge socket connected", { socketId: socket.id });
+  });
   socket.on("join:party", (code: string) => { if (/^[A-Z0-9]{8}$/.test(code)) socket.join(`party:${code}`); });
   socket.on("leave:party", (code: string) => socket.leave(`party:${code}`));
   socket.on("party:sync", (code: string, state: { position: number; playing: boolean; at: number; actorId: string }) => {
