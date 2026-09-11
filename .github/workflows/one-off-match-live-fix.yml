@@ -1,0 +1,54 @@
+name: one-off-match-live-fix
+
+on:
+  push:
+    branches:
+      - fix/match-live-station-conflict
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Patch station conflict handling
+        shell: python
+        run: |
+          from pathlib import Path
+
+          path = Path("src/app/api/matches/[matchId]/route.ts")
+          text = path.read_text()
+
+          old = '''      return NextResponse.json(\n        {\n          error:\n            error instanceof Error\n              ? error.message\n              : "Failed to update match",\n        },\n        { status: 500 },\n      );'''
+          new = '''      const isStationConflict =\n        typeof error === "object" &&\n        error !== null &&\n        "code" in error &&\n        (error as { code?: string }).code === "P2002" &&\n        "meta" in error &&\n        JSON.stringify((error as { meta?: unknown }).meta ?? "").includes(\n          "matches_one_active_match_per_station",\n        );\n\n      return NextResponse.json(\n        {\n          error: isStationConflict\n            ? "Station is already occupied by another active match"\n            : error instanceof Error\n              ? error.message\n              : "Failed to update match",\n        },\n        { status: isStationConflict ? 409 : 500 },\n      );'''
+          if text.count(old) != 1:
+              raise SystemExit("generic catch target not found exactly once")
+          text = text.replace(old, new, 1)
+
+          old = '''    } catch (error) {\n      return NextResponse.json({ error: error instanceof Error ? error.message : "Failed to update Battle Royale match" }, { status: 400 });\n    }'''
+          new = '''    } catch (error) {\n      const isStationConflict =\n        typeof error === "object" &&\n        error !== null &&\n        "code" in error &&\n        (error as { code?: string }).code === "P2002" &&\n        "meta" in error &&\n        JSON.stringify((error as { meta?: unknown }).meta ?? "").includes(\n          "matches_one_active_match_per_station",\n        );\n      return NextResponse.json(\n        {\n          error: isStationConflict\n            ? "Station is already occupied by another active match"\n            : error instanceof Error\n              ? error.message\n              : "Failed to update Battle Royale match",\n        },\n        { status: isStationConflict ? 409 : 400 },\n      );\n    }'''
+          if text.count(old) != 1:
+              raise SystemExit("battle royale catch target not found exactly once")
+          text = text.replace(old, new, 1)
+
+          old = '''  const updated =\n    await db.match.update({\n      where: {\n        id: matchId,\n      },\n      data,\n    });'''
+          new = '''  const updatedResult =\n    await db.match.update({\n      where: {\n        id: matchId,\n      },\n      data,\n    }).catch((error: unknown) => {\n      const isStationConflict =\n        typeof error === "object" &&\n        error !== null &&\n        "code" in error &&\n        (error as { code?: string }).code === "P2002" &&\n        "meta" in error &&\n        JSON.stringify((error as { meta?: unknown }).meta ?? "").includes(\n          "matches_one_active_match_per_station",\n        );\n      if (isStationConflict) return null;\n      throw error;\n    });\n\n  if (!updatedResult) {\n    return NextResponse.json(\n      { error: "Station is already occupied by another active match" },\n      { status: 409 },\n    );\n  }\n\n  const updated = updatedResult;'''
+          if text.count(old) != 1:
+              raise SystemExit("legacy update target not found exactly once")
+          text = text.replace(old, new, 1)
+
+          path.write_text(text)
+
+      - name: Commit and remove one-off workflow
+        run: |
+          rm .github/workflows/one-off-match-live-fix.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/app/api/matches/[matchId]/route.ts .github/workflows/one-off-match-live-fix.yml
+          git commit -m "fix: return conflict when station is already occupied"
+          git push
