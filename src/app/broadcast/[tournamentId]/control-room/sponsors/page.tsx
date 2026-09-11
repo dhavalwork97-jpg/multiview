@@ -45,10 +45,10 @@ export default function SponsorManager({ params }: { params: Promise<{ tournamen
   }, [params]);
 
   useEffect(() => {
-    if (!tournamentId) return;
+    if (!tournamentId || loading) return;
     window.localStorage.setItem(intervalKey(tournamentId), String(intervalMs));
     void fetch("/api/broadcast/state", { method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify({ tournamentId, patch: { sponsorIntervalMs: intervalMs } }) });
-  }, [tournamentId, intervalMs]);
+  }, [tournamentId, intervalMs, loading]);
 
   useEffect(() => { if (!sponsors.length) return; const timer = window.setInterval(() => setPreviewElapsed((value) => value + 250), 250); return () => window.clearInterval(timer); }, [sponsors.length]);
   const activeSponsor = useMemo(() => getActiveSponsor({ sponsors, intervalMs }, previewElapsed), [sponsors, intervalMs, previewElapsed]);
