@@ -212,31 +212,26 @@ const rules = resolveRules(existing.tournament.sport, {
   ) {
     try {
       /*
-       * Start YouTube broadcast when moving to LIVE.
+       * Reserve the station in the database before creating any external
+       * YouTube resource. The partial unique index is the final concurrency
+       * guard, so a losing LIVE transition cannot leave an orphan broadcast.
        */
+      const isStartingLive =
+        parsed.data.status === "LIVE" &&
+        existing.status !== "LIVE";
+
+      if (isStartingLive && !existing.stationId) {
+        return NextResponse.json(
+          {
+            error:
+              "Match must be assigned to a station before going LIVE",
+          },
+          { status: 409 },
+        );
+      }
+
       let youtubeBroadcastId = existing.youtubeBroadcastId;
       let youtubeVideoId = existing.youtubeVideoId;
-
-      if (
-        parsed.data.status === "LIVE" &&
-        existing.status !== "LIVE"
-      ) {
-        if (!existing.stationId) {
-          return NextResponse.json(
-            {
-              error:
-                "Match must be assigned to a station before going LIVE",
-            },
-            { status: 409 },
-          );
-        }
-
-        const broadcast =
-          await createBroadcastForMatch(matchId);
-
-        youtubeBroadcastId = broadcast.broadcastId;
-        youtubeVideoId = broadcast.videoId;
-      }
 
       const rules = resolveRules(
         existing.tournament.sport,
@@ -508,6 +503,60 @@ const rules = resolveRules(existing.tournament.sport, {
           updated,
         };
       });
+
+      /*
+       * Create the external YouTube broadcast only after the database has
+       * successfully reserved the station and transitioned the match to LIVE.
+       * If YouTube setup fails, release the reservation so the match can be
+       * retried safely.
+       */
+      if (isStartingLive) {
+        try {
+          const broadcast = await createBroadcastForMatch(matchId);
+          youtubeBroadcastId = broadcast.broadcastId;
+          youtubeVideoId = broadcast.videoId;
+
+          const persisted = await db.match.update({
+            where: { id: matchId },
+            data: {
+              youtubeBroadcastId,
+              youtubeVideoId,
+            },
+          });
+
+          result.updated = persisted;
+        } catch (error) {
+          try {
+            await db.match.update({
+              where: { id: matchId },
+              data: {
+                status: "QUEUED",
+                startedAt: null,
+              },
+            });
+          } catch (rollbackError) {
+            console.error(
+              "[youtube broadcast] failed to roll back LIVE reservation",
+              rollbackError,
+            );
+          }
+
+          console.error(
+            "[youtube broadcast] failed to create broadcast after LIVE reservation",
+            error,
+          );
+
+          return NextResponse.json(
+            {
+              error:
+                error instanceof Error
+                  ? error.message
+                  : "Failed to create YouTube broadcast",
+            },
+            { status: 503 },
+          );
+        }
+      }
 
       /*
        * End YouTube broadcast after the DB update has succeeded.

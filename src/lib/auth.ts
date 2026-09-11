@@ -35,7 +35,7 @@ async function ensureLocalUser(clerkId: string) {
 
 export async function getCurrentUser() {
   const demoEnabled = process.env.FGC_PUBLIC_DEMO_ENABLED !== "false";
-  if (demoEnabled) {
+  if (demoEnabled && process.env.NODE_ENV !== "test") {
     const { cookies } = await import("next/headers");
     if ((await cookies()).get("fgc-demo")?.value === "1") return DEMO_USER as Awaited<ReturnType<typeof ensureLocalUser>>;
   }
