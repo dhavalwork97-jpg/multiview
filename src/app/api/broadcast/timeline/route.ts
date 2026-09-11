@@ -41,8 +41,9 @@ export async function POST(request: Request) {
     data: {
       tournamentId: command.tournamentId,
       actorUserId: authorization.userId,
-      type: command.type,
+      type: "SET_SCENE",
       payload: JSON.parse(JSON.stringify({
+        runtimeCommandType: command.type,
         scene: command.scene,
         matchId: command.matchId,
         stationId: command.stationId,
