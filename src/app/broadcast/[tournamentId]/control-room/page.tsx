@@ -21,12 +21,50 @@ export default function BroadcastControlRoom({ params }: { params: Promise<{ tou
   const [timelineStartedAt, setTimelineStartedAt] = useState<number | null>(null);
   const [elapsedMs, setElapsedMs] = useState(0);
 
-  useEffect(() => { void params.then(({ tournamentId: id }) => { setTournamentId(id); try { const raw = window.localStorage.getItem(mappingKey(id)); if (raw) setObsMapping(normalizeObsSceneMapping(JSON.parse(raw) as Partial<ObsSceneMapping>)); } catch { /* defaults */ } }); }, [params]);
-  useEffect(() => { if (!tournamentId) return; const socketUrl = process.env.NEXT_PUBLIC_SOCKET_URL?.trim() || window.location.origin; const socket = io(socketUrl, { transports: ["websocket", "polling"] }); const onConnect = () => { socket.emit("join:tournament", tournamentId); setStatus("LIVE"); }; const onBroadcastUpdated = (event: { tournamentId?: string; scene?: string; commandType?: string }) => { if (event.tournamentId !== tournamentId || !scenes.includes(event.scene as BroadcastScene)) return; setProgram(event.scene as BroadcastScene); setLastCommand(`${event.commandType ?? "SCENE_SET"} · ${event.scene}`); setStatus("LIVE"); }; socket.on("connect", onConnect); socket.on("broadcast:updated", onBroadcastUpdated); socket.on("connect_error", () => setStatus("OFFLINE")); return () => { socket.emit("leave:tournament", tournamentId); socket.off("connect", onConnect); socket.off("broadcast:updated", onBroadcastUpdated); socket.disconnect(); }; }, [tournamentId]);
+  useEffect(() => {
+    void params.then(async ({ tournamentId: id }) => {
+      setTournamentId(id);
+      try {
+        const raw = window.localStorage.getItem(mappingKey(id));
+        if (raw) setObsMapping(normalizeObsSceneMapping(JSON.parse(raw) as Partial<ObsSceneMapping>));
+      } catch { /* server state below remains authoritative when available */ }
+      try {
+        const response = await fetch(`/api/broadcast/state?tournamentId=${encodeURIComponent(id)}`, { cache: "no-store" });
+        if (!response.ok) return;
+        const payload = (await response.json()) as { scene?: string; persistent?: { previewScene?: string; obsMapping?: Partial<ObsSceneMapping> } };
+        if (scenes.includes(payload.scene as BroadcastScene)) setProgram(payload.scene as BroadcastScene);
+        if (scenes.includes(payload.persistent?.previewScene as BroadcastScene)) setPreview(payload.persistent?.previewScene as BroadcastScene);
+        if (payload.persistent?.obsMapping) setObsMapping(normalizeObsSceneMapping(payload.persistent.obsMapping));
+        setStatus("RECOVERED");
+      } catch { /* realtime connection will retry */ }
+    });
+  }, [params]);
+
+  useEffect(() => {
+    if (!tournamentId) return;
+    const socketUrl = process.env.NEXT_PUBLIC_SOCKET_URL?.trim() || window.location.origin;
+    const socket = io(socketUrl, { transports: ["websocket", "polling"] });
+    const onConnect = () => { socket.emit("join:tournament", tournamentId); setStatus("LIVE"); };
+    const onBroadcastUpdated = (event: { tournamentId?: string; scene?: string; commandType?: string }) => { if (event.tournamentId !== tournamentId || !scenes.includes(event.scene as BroadcastScene)) return; setProgram(event.scene as BroadcastScene); setLastCommand(`${event.commandType ?? "SCENE_SET"} · ${event.scene}`); setStatus("LIVE"); };
+    socket.on("connect", onConnect); socket.on("broadcast:updated", onBroadcastUpdated); socket.on("connect_error", () => setStatus("OFFLINE"));
+    return () => { socket.emit("leave:tournament", tournamentId); socket.off("connect", onConnect); socket.off("broadcast:updated", onBroadcastUpdated); socket.off("connect_error"); socket.disconnect(); };
+  }, [tournamentId]);
+
   useEffect(() => { if (!timelineRunning || timelineStartedAt === null) return; const timer = window.setInterval(() => setElapsedMs(Date.now() - timelineStartedAt), 100); return () => window.clearInterval(timer); }, [timelineRunning, timelineStartedAt]);
   const nextCue = useMemo(() => getNextTimelineCue(DEFAULT_MATCH_TIMELINE, cueIndex), [cueIndex]);
   const currentCue = DEFAULT_MATCH_TIMELINE.cues[cueIndex] ?? null;
-  async function issueCommand(scene: BroadcastScene, type: BroadcastCommandType = "SCENE_SET") { if (!tournamentId) return false; setStatus("SYNCING"); try { const response = await fetch("/api/broadcast/command", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ tournamentId, type, scene, obsMapping }) }); if (!response.ok) throw new Error("Broadcast command failed"); const result = await response.json() as { obsScene?: string }; setProgram(scene); setLastCommand(`${type} · ${scene}${result.obsScene ? ` · OBS ${result.obsScene}` : ""}`); setStatus("LIVE"); return true; } catch { setStatus("ERROR"); return false; } }
+
+  async function issueCommand(scene: BroadcastScene, type: BroadcastCommandType = "SCENE_SET") {
+    if (!tournamentId) return false;
+    setStatus("SYNCING");
+    try {
+      const response = await fetch("/api/broadcast/command", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ tournamentId, type, scene, previewScene: preview, obsMapping }) });
+      if (!response.ok) throw new Error("Broadcast command failed");
+      const result = await response.json() as { obsScene?: string };
+      setProgram(scene); setLastCommand(`${type} · ${scene}${result.obsScene ? ` · OBS ${result.obsScene}` : ""}`); setStatus("LIVE");
+      return true;
+    } catch { setStatus("ERROR"); return false; }
+  }
   async function takePreview() { await issueCommand(preview, specializedCommands[preview] ?? "SCENE_SET"); }
   async function sendCue() { if (!nextCue || !tournamentId) return; const ok = await issueCommand(nextCue.command.scene, nextCue.command.type); if (ok) setCueIndex((index) => Math.min(index + 1, DEFAULT_MATCH_TIMELINE.cues.length - 1)); }
   function startTimelineClock() { setTimelineRunning(true); setTimelineStartedAt(Date.now() - elapsedMs); setStatus("LIVE"); }

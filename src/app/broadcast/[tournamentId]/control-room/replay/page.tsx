@@ -5,8 +5,6 @@ import type { CSSProperties } from "react";
 import { getActiveReplay, type ReplayClip } from "@/lib/broadcast/replay-manager";
 import { normalizeReplayBumper, normalizeReplayClip, type ReplayBumper } from "@/lib/broadcast/replay";
 
-const storageKey = (id: string) => `fgc-broadcast-replays:${id}`;
-
 export default function ReplayManager({ params }: { params: Promise<{ tournamentId: string }> }) {
   const [tournamentId, setTournamentId] = useState<string | null>(null);
   const [clips, setClips] = useState<ReplayClip[]>([]);
@@ -20,29 +18,96 @@ export default function ReplayManager({ params }: { params: Promise<{ tournament
   const [durationMs, setDurationMs] = useState(10000);
   const [matchId, setMatchId] = useState("");
   const [stationId, setStationId] = useState("");
-  const [commandStatus, setCommandStatus] = useState("READY");
+  const [commandStatus, setCommandStatus] = useState("LOADING");
 
-  useEffect(() => { void params.then(({ tournamentId: id }) => { setTournamentId(id); try { const raw = window.localStorage.getItem(storageKey(id)); if (!raw) return; const value = JSON.parse(raw) as { clips?: Partial<ReplayClip>[]; bumper?: Partial<ReplayBumper> }; const loaded = (value.clips ?? []).map((item, index) => normalizeReplayClip(item, index)); setClips(loaded); setSelectedId(loaded[0]?.id ?? null); setBumper(normalizeReplayBumper(value.bumper)); } catch { /* safe defaults */ } }); }, [params]);
-  useEffect(() => { if (tournamentId) window.localStorage.setItem(storageKey(tournamentId), JSON.stringify({ clips, bumper })); }, [tournamentId, clips, bumper]);
+  useEffect(() => {
+    void params.then(async ({ tournamentId: id }) => {
+      setTournamentId(id);
+      try {
+        const [replayResponse, stateResponse] = await Promise.all([
+          fetch(`/api/broadcast/replays?tournamentId=${encodeURIComponent(id)}`, { cache: "no-store" }),
+          fetch(`/api/broadcast/state?tournamentId=${encodeURIComponent(id)}`, { cache: "no-store" }),
+        ]);
+        const replayPayload = (await replayResponse.json()) as { clips?: ReplayClip[]; error?: string };
+        if (!replayResponse.ok) throw new Error(replayPayload.error || "Unable to load replay library");
+        const loaded = (replayPayload.clips ?? []).map((item, index) => normalizeReplayClip(item, index));
+        setClips(loaded);
+        setSelectedId(loaded[0]?.id ?? null);
+        if (stateResponse.ok) {
+          const statePayload = (await stateResponse.json()) as { persistent?: { replay?: { bumper?: Partial<ReplayBumper> } } };
+          setBumper(normalizeReplayBumper(statePayload.persistent?.replay?.bumper));
+        }
+        setCommandStatus("READY");
+      } catch (cause) {
+        setCommandStatus(cause instanceof Error ? cause.message : "LOAD ERROR");
+      }
+    });
+  }, [params]);
+
   useEffect(() => { const timer = window.setInterval(() => setPreviewElapsed((value) => value + 250), 250); return () => window.clearInterval(timer); }, []);
+  useEffect(() => {
+    if (!tournamentId) return;
+    void fetch("/api/broadcast/state", { method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify({ tournamentId, patch: { replay: { clips, bumper } } }) });
+  }, [tournamentId, bumper]);
 
   const selected = useMemo(() => clips.find((clip) => clip.id === selectedId) ?? null, [clips, selectedId]);
   const preview = useMemo(() => clips.find((clip) => clip.id === previewId) ?? null, [clips, previewId]);
   const previewProgress = preview ? Math.min(1, previewElapsed / Math.max(1, preview.durationMs)) : 0;
   const activeReplay = getActiveReplay(clips, selectedId);
 
-  function addClip() { const clip = normalizeReplayClip({ title, sourceUrl, thumbnailUrl, durationMs, matchId, stationId }, clips.length); setClips((items) => [...items, clip]); setSelectedId(clip.id); setTitle(""); setSourceUrl(""); setThumbnailUrl(""); setDurationMs(10000); setMatchId(""); setStationId(""); }
-  function removeClip(id: string) { setClips((items) => items.filter((item) => item.id !== id)); if (selectedId === id) setSelectedId(null); if (previewId === id) setPreviewId(null); }
+  async function addClip() {
+    if (!tournamentId || !title.trim()) return;
+    const clip = normalizeReplayClip({ title, sourceUrl, thumbnailUrl, durationMs, matchId, stationId }, clips.length);
+    setCommandStatus("SAVING");
+    try {
+      const response = await fetch(`/api/broadcast/replays?tournamentId=${encodeURIComponent(tournamentId)}`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ clip }) });
+      const payload = (await response.json()) as { clip?: ReplayClip; error?: string };
+      if (!response.ok || !payload.clip) throw new Error(payload.error || "Unable to add replay");
+      setClips((items) => [...items, normalizeReplayClip(payload.clip!, items.length)]);
+      setSelectedId(payload.clip.id);
+      setTitle(""); setSourceUrl(""); setThumbnailUrl(""); setDurationMs(10000); setMatchId(""); setStationId(""); setCommandStatus("READY");
+    } catch (cause) { setCommandStatus(cause instanceof Error ? cause.message : "SAVE ERROR"); }
+  }
 
-  async function playReplay() { if (!tournamentId || !selected) return; setCommandStatus("SENDING"); try { const response = await fetch("/api/broadcast/command", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ tournamentId, type: "REPLAY_PLAY", scene: "replay", matchId: selected.matchId, stationId: selected.stationId, overlay: { replayClip: selected, replayBumper: bumper } }) }); if (!response.ok) throw new Error("Replay command failed"); setCommandStatus("REPLAY ON AIR"); } catch { setCommandStatus("ERROR"); } }
-  async function endReplay() { if (!tournamentId) return; setCommandStatus("SENDING"); try { const response = await fetch("/api/broadcast/command", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ tournamentId, type: "SCENE_SET", scene: "gameplay" }) }); if (!response.ok) throw new Error("Return command failed"); setCommandStatus("GAMEPLAY ON AIR"); } catch { setCommandStatus("ERROR"); } }
+  async function removeClip(id: string) {
+    if (!tournamentId) return;
+    setCommandStatus("SAVING");
+    try {
+      const response = await fetch(`/api/broadcast/replays?tournamentId=${encodeURIComponent(tournamentId)}&id=${encodeURIComponent(id)}`, { method: "DELETE" });
+      if (!response.ok) throw new Error("Unable to remove replay");
+      setClips((items) => items.filter((item) => item.id !== id));
+      if (selectedId === id) setSelectedId(null);
+      if (previewId === id) setPreviewId(null);
+      setCommandStatus("READY");
+    } catch (cause) { setCommandStatus(cause instanceof Error ? cause.message : "DELETE ERROR"); }
+  }
+
+  async function playReplay() {
+    if (!tournamentId || !selected) return;
+    setCommandStatus("SENDING");
+    try {
+      const response = await fetch("/api/broadcast/command", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ tournamentId, type: "REPLAY_PLAY", scene: "replay", matchId: selected.matchId, stationId: selected.stationId, overlay: { replayClip: selected, replayBumper: bumper } }) });
+      if (!response.ok) throw new Error("Replay command failed");
+      setCommandStatus("REPLAY ON AIR");
+    } catch { setCommandStatus("ERROR"); }
+  }
+
+  async function endReplay() {
+    if (!tournamentId) return;
+    setCommandStatus("SENDING");
+    try {
+      const response = await fetch("/api/broadcast/command", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ tournamentId, type: "SCENE_SET", scene: "gameplay" }) });
+      if (!response.ok) throw new Error("Return command failed");
+      setCommandStatus("GAMEPLAY ON AIR");
+    } catch { setCommandStatus("ERROR"); }
+  }
 
   return <main style={styles.main}><div style={styles.container}>
-    <header style={styles.header}><div><div style={styles.eyebrow}>FGC BROADCAST STUDIO</div><h1 style={styles.title}>Replay Production</h1><p style={styles.muted}>Prepare clips, preview the bumper, and manually send replay graphics to Program.</p></div><a href={`/broadcast/${tournamentId}/control-room`} style={styles.link}>← CONTROL ROOM</a></header>
-    <section style={styles.grid}><div style={styles.panel}><div style={styles.rowHeader}><div><div style={styles.eyebrow}>REPLAY LIBRARY</div><h2 style={styles.sectionTitle}>Operator clips</h2></div><span style={styles.status}>{commandStatus}</span></div><div style={styles.list}>{clips.map((clip) => <div key={clip.id} style={{ ...styles.item, borderColor: selectedId === clip.id ? "#7c3aed" : "#252936" }}><button onClick={() => setSelectedId(clip.id)} style={styles.selectButton}>{clip.title}</button><span style={styles.meta}>{Math.round(clip.durationMs / 1000)}s</span><span style={styles.meta}>{clip.matchId || "—"}</span><button onClick={() => { setPreviewId(clip.id); setPreviewElapsed(0); }} style={styles.secondary}>PREVIEW</button><button onClick={() => removeClip(clip.id)} style={styles.danger}>REMOVE</button></div>)}{!clips.length && <div style={styles.empty}>No replay clips configured. Add a clip below.</div>}</div></div><div style={styles.panel}><div style={styles.eyebrow}>OPERATOR ACTION</div><h2 style={styles.sectionTitle}>{activeReplay?.title ?? "No clip selected"}</h2><button onClick={playReplay} disabled={!selected} style={{ ...styles.primary, opacity: selected ? 1 : .4 }}>PLAY REPLAY</button><button onClick={endReplay} disabled={!tournamentId} style={styles.secondaryWide}>END REPLAY · SEND GAMEPLAY</button><p style={styles.muted}>END REPLAY is an explicit operator action. There is no automatic return.</p></div></section>
+    <header style={styles.header}><div><div style={styles.eyebrow}>FGC BROADCAST STUDIO</div><h1 style={styles.title}>Replay Production</h1><p style={styles.muted}>Durable tournament replay library, native bumper preview, and manual Program control.</p></div><a href={`/broadcast/${tournamentId}/control-room`} style={styles.link}>← CONTROL ROOM</a></header>
+    <section style={styles.grid}><div style={styles.panel}><div style={styles.rowHeader}><div><div style={styles.eyebrow}>REPLAY LIBRARY</div><h2 style={styles.sectionTitle}>Operator clips</h2></div><span style={styles.status}>{commandStatus}</span></div><div style={styles.list}>{clips.map((clip) => <div key={clip.id} style={{ ...styles.item, borderColor: selectedId === clip.id ? "#7c3aed" : "#252936" }}><button onClick={() => setSelectedId(clip.id)} style={styles.selectButton}>{clip.title}</button><span style={styles.meta}>{Math.round(clip.durationMs / 1000)}s</span><span style={styles.meta}>{clip.matchId || "—"}</span><button onClick={() => { setPreviewId(clip.id); setPreviewElapsed(0); }} style={styles.secondary}>PREVIEW</button><button onClick={() => void removeClip(clip.id)} style={styles.danger}>REMOVE</button></div>)}{!clips.length && <div style={styles.empty}>No replay clips configured. Add a clip below.</div>}</div></div><div style={styles.panel}><div style={styles.eyebrow}>OPERATOR ACTION</div><h2 style={styles.sectionTitle}>{activeReplay?.title ?? "No clip selected"}</h2><button onClick={() => void playReplay()} disabled={!selected} style={{ ...styles.primary, opacity: selected ? 1 : .4 }}>PLAY REPLAY</button><button onClick={() => void endReplay()} disabled={!tournamentId} style={styles.secondaryWide}>END REPLAY · SEND GAMEPLAY</button><p style={styles.muted}>END REPLAY is an explicit operator action. There is no automatic return.</p></div></section>
     <section style={{ ...styles.panel, marginTop: 18 }}><div style={styles.eyebrow}>PREVIEW</div><h2 style={styles.sectionTitle}>Replay monitor</h2><div style={styles.monitor}>{preview?.thumbnailUrl ? <img src={preview.thumbnailUrl} alt="" style={styles.thumb} /> : <div style={styles.monitorFallback}>INSTANT REPLAY</div>}<div style={styles.progressWrap}><div style={styles.progressMeta}><span>{preview?.title ?? "NO CLIP"}</span><span>{Math.round(previewProgress * 100)}%</span></div><div style={styles.track}><div style={{ ...styles.fill, width: `${previewProgress * 100}%` }} /></div></div></div></section>
     <section style={{ ...styles.panel, marginTop: 18 }}><div style={styles.eyebrow}>REPLAY BUMPER</div><h2 style={styles.sectionTitle}>Native transition package</h2><div style={styles.threeCol}><Field label="LABEL" value={bumper.label} onChange={(value) => setBumper((item) => normalizeReplayBumper({ ...item, label: value }))} /><Field label="DURATION MS" type="number" value={String(bumper.durationMs)} onChange={(value) => setBumper((item) => normalizeReplayBumper({ ...item, durationMs: Number(value) || 500 }))} /><label style={styles.smallLabel}>ENABLED<input type="checkbox" checked={bumper.enabled} onChange={(event) => setBumper((item) => normalizeReplayBumper({ ...item, enabled: event.target.checked }))} style={styles.checkbox} /></label></div></section>
-    <section style={{ ...styles.panel, marginTop: 18 }}><div style={styles.eyebrow}>ADD CLIP</div><h2 style={styles.sectionTitle}>New replay source</h2><div style={styles.fourCol}><Field label="TITLE" value={title} onChange={setTitle} placeholder="Round 3 clutch" /><Field label="SOURCE URL" value={sourceUrl} onChange={setSourceUrl} placeholder="https://…" /><Field label="THUMBNAIL URL" value={thumbnailUrl} onChange={setThumbnailUrl} placeholder="https://…" /><Field label="DURATION MS" type="number" value={String(durationMs)} onChange={(value) => setDurationMs(Number(value) || 1000)} /></div><div style={styles.addRow}><Field label="MATCH ID" value={matchId} onChange={setMatchId} placeholder="Optional" /><Field label="STATION ID" value={stationId} onChange={setStationId} placeholder="Optional" /><button onClick={addClip} disabled={!title.trim()} style={{ ...styles.primary, opacity: title.trim() ? 1 : .4 }}>ADD CLIP</button></div></section>
+    <section style={{ ...styles.panel, marginTop: 18 }}><div style={styles.eyebrow}>ADD CLIP</div><h2 style={styles.sectionTitle}>New replay source</h2><div style={styles.fourCol}><Field label="TITLE" value={title} onChange={setTitle} placeholder="Round 3 clutch" /><Field label="SOURCE URL" value={sourceUrl} onChange={setSourceUrl} placeholder="https://…" /><Field label="THUMBNAIL URL" value={thumbnailUrl} onChange={setThumbnailUrl} placeholder="https://…" /><Field label="DURATION MS" type="number" value={String(durationMs)} onChange={(value) => setDurationMs(Number(value) || 1000)} /></div><div style={styles.addRow}><Field label="MATCH ID" value={matchId} onChange={setMatchId} placeholder="Optional" /><Field label="STATION ID" value={stationId} onChange={setStationId} placeholder="Optional" /><button onClick={() => void addClip()} disabled={!title.trim()} style={{ ...styles.primary, opacity: title.trim() ? 1 : .4 }}>ADD CLIP</button></div></section>
   </div></main>;
 }
 
