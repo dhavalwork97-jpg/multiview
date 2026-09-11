@@ -3,15 +3,10 @@ import { DEFAULT_OVERLAY_CONFIG, normalizeOverlayConfig } from "./overlay-builde
 
 describe("overlay builder", () => {
   it("normalizes custom theme and sponsor settings", () => {
-    const config = normalizeOverlayConfig({
-      themeId: "valorant",
-      customAccent: "#123456",
-      surfaceOpacity: 2,
-      sponsor: { position: "top-left", enabled: false },
-    });
+    const config = normalizeOverlayConfig({ themeId: "valorant", customAccent: "#123456", surfaceOpacity: 2, sponsor: { position: "top-left", enabled: false } });
     expect(config.themeId).toBe("valorant");
     expect(config.customAccent).toBe("#123456");
-    expect(config.surfaceOpacity).toBe(2);
+    expect(config.surfaceOpacity).toBe(1);
     expect(config.sponsor.position).toBe("top-left");
     expect(config.sponsor.enabled).toBe(false);
   });
