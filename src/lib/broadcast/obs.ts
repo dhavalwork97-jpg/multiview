@@ -1,7 +1,6 @@
 import type { BroadcastScene } from "@/lib/broadcast/production";
 
-export type ObsSceneId = BroadcastScene;
-
+export type ObsSceneId = string;
 export type ObsSceneMapping = Record<BroadcastScene, ObsSceneId>;
 
 export const DEFAULT_OBS_SCENE_MAPPING: ObsSceneMapping = {
@@ -17,10 +16,7 @@ export const DEFAULT_OBS_SCENE_MAPPING: ObsSceneMapping = {
 };
 
 export function normalizeObsSceneMapping(value: Partial<ObsSceneMapping> | null | undefined): ObsSceneMapping {
-  return {
-    ...DEFAULT_OBS_SCENE_MAPPING,
-    ...(value ?? {}),
-  };
+  return { ...DEFAULT_OBS_SCENE_MAPPING, ...(value ?? {}) };
 }
 
 export function resolveObsScene(scene: BroadcastScene, mapping: Partial<ObsSceneMapping> = {}): ObsSceneId {
