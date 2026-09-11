@@ -3,6 +3,7 @@ import { auth } from "@clerk/nextjs/server";
 import { authorizeBroadcastOperator } from "@/lib/broadcast/authorization";
 import { publishEvent } from "@/lib/events";
 import { db } from "@/lib/db";
+import { normalizeObsSceneMapping, resolveObsScene, type ObsSceneMapping } from "@/lib/broadcast/obs";
 import type { BroadcastCommand, BroadcastCommandType, BroadcastScene } from "@/lib/broadcast/production";
 
 const scenes: BroadcastScene[] = [
@@ -31,7 +32,9 @@ export async function POST(request: Request) {
   const { userId } = await auth();
   if (!userId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const body = (await request.json()) as Partial<BroadcastCommand>;
+  const body = (await request.json()) as Partial<BroadcastCommand> & {
+    obsMapping?: Partial<ObsSceneMapping> | null;
+  };
   if (!body.tournamentId || !body.type || !body.scene) {
     return NextResponse.json({ error: "tournamentId, type and scene are required" }, { status: 400 });
   }
@@ -60,6 +63,11 @@ export async function POST(request: Request) {
     overlay: body.overlay ?? null,
     issuedAt: new Date().toISOString(),
   };
+  const obsScene = resolveObsScene(command.scene, normalizeObsSceneMapping(body.obsMapping));
+  const overlay = {
+    ...(command.overlay ?? {}),
+    obsScene,
+  };
 
   await db.broadcastCommand.create({
     data: {
@@ -69,9 +77,10 @@ export async function POST(request: Request) {
       payload: JSON.parse(JSON.stringify({
         runtimeCommandType: command.type,
         scene: command.scene,
+        obsScene,
         matchId: command.matchId,
         stationId: command.stationId,
-        overlay: command.overlay,
+        overlay,
         issuedAt: command.issuedAt,
       })),
     },
@@ -83,9 +92,9 @@ export async function POST(request: Request) {
     scene: command.scene,
     stationId: command.stationId ?? null,
     matchId: command.matchId ?? null,
-    overlay: command.overlay ?? null,
+    overlay,
     commandType: command.type,
   });
 
-  return NextResponse.json({ ok: true, command });
+  return NextResponse.json({ ok: true, command: { ...command, overlay }, obsScene });
 }
