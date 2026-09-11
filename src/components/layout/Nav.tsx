@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { cookies } from "next/headers";
 import { SignedIn, SignedOut, SignInButton, UserButton } from "@clerk/nextjs";
 import { getCurrentUser } from "@/lib/auth";
 import { NavLinks } from "./NavLinks";
@@ -13,6 +14,7 @@ const MOBILE_LINKS = [
 
 export async function Nav() {
   const user = await getCurrentUser();
+  const demoMode = (await cookies()).get("fgc-demo")?.value === "1";
   const canManage = user?.role === "ADMIN" || user?.role === "ORGANIZER";
 
   return (
@@ -34,8 +36,14 @@ export async function Nav() {
           </div>
           <div className="flex shrink-0 items-center gap-2 border-l border-white/10 pl-2 sm:pl-3">
             {user?.role === "ADMIN" && <Link href="/admin/users" className="hidden min-h-10 items-center rounded-[12px] border border-white/10 px-3 font-mono text-[10px] font-bold uppercase tracking-[.12em] text-white/60 transition hover:border-[#6f3cff]/60 hover:bg-white/5 hover:text-white lg:inline-flex">Users</Link>}
-            <SignedIn><UserButton afterSignOutUrl="/" /></SignedIn>
-            <SignedOut><SignInButton mode="modal"><button type="button" className="action-secondary">Sign in</button></SignInButton></SignedOut>
+            {demoMode ? (
+              <span className="status-live">Demo · Read only</span>
+            ) : (
+              <>
+                <SignedIn><UserButton afterSignOutUrl="/" /></SignedIn>
+                <SignedOut><SignInButton mode="modal"><button type="button" className="action-secondary">Sign in</button></SignInButton></SignedOut>
+              </>
+            )}
           </div>
         </div>
       </header>
