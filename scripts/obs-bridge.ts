@@ -10,7 +10,8 @@ type BroadcastUpdated = {
 };
 
 const socketUrl = process.env.FGC_SOCKET_URL?.trim();
-const tournamentIds = (process.env.FGC_TOURNAMENT_IDS ?? process.env.FGC_TOURNAMENT_ID ?? "")
+const bridgeToken = process.env.FGC_OBS_BRIDGE_TOKEN?.trim();
+const configuredTournamentIds = (process.env.FGC_TOURNAMENT_IDS ?? process.env.FGC_TOURNAMENT_ID ?? "")
   .split(",")
   .map((id) => id.trim())
   .filter(Boolean);
@@ -18,14 +19,25 @@ const obsUrl = process.env.OBS_WEBSOCKET_URL?.trim() || "ws://127.0.0.1:4455";
 const obsPassword = process.env.OBS_WEBSOCKET_PASSWORD ?? "";
 
 if (!socketUrl) throw new Error("FGC_SOCKET_URL is required");
-if (!tournamentIds.length) throw new Error("FGC_TOURNAMENT_ID or FGC_TOURNAMENT_IDS is required");
 
 const obs = new ObsWebSocketClient({ url: obsUrl, password: obsPassword });
-const socket = io(socketUrl, { transports: ["websocket", "polling"], reconnection: true });
+const socket = io(socketUrl, {
+  auth: bridgeToken ? { obsBridgeToken: bridgeToken } : undefined,
+  transports: ["websocket", "polling"],
+  reconnection: true,
+});
 
 socket.on("connect", async () => {
   console.log(`[FGC→OBS] connected to ${socketUrl}`);
-  for (const tournamentId of tournamentIds) socket.emit("join:tournament", tournamentId);
+
+  if (configuredTournamentIds.length) {
+    for (const tournamentId of configuredTournamentIds) socket.emit("join:tournament", tournamentId);
+    console.log(`[FGC→OBS] filtered tournaments: ${configuredTournamentIds.join(", ")}`);
+  } else {
+    socket.emit("join:obs-bridge");
+    console.log("[FGC→OBS] dynamic tournament mode enabled");
+  }
+
   try {
     await obs.connect();
     console.log(`[FGC→OBS] connected to OBS at ${obsUrl}`);
@@ -39,16 +51,18 @@ socket.on("disconnect", (reason) => console.warn(`[FGC→OBS] FGC socket disconn
 socket.on("connect_error", (error) => console.error(`[FGC→OBS] FGC socket error: ${error.message}`));
 
 socket.on("broadcast:updated", async (event: BroadcastUpdated) => {
-  if (!event.tournamentId || !tournamentIds.includes(event.tournamentId)) return;
+  if (!event.tournamentId) return;
+  if (configuredTournamentIds.length && !configuredTournamentIds.includes(event.tournamentId)) return;
+
   const sceneName = typeof event.overlay?.obsScene === "string" ? event.overlay.obsScene.trim() : "";
   if (!sceneName) {
-    console.warn(`[FGC→OBS] no OBS scene mapping for ${event.scene ?? "unknown"}`);
+    console.warn(`[FGC→OBS] no OBS scene mapping for ${event.scene ?? "unknown"} (${event.tournamentId})`);
     return;
   }
 
   try {
     await obs.setCurrentProgramScene(sceneName);
-    console.log(`[FGC→OBS] ${event.scene ?? "unknown"} → ${sceneName}`);
+    console.log(`[FGC→OBS] ${event.tournamentId}: ${event.scene ?? "unknown"} → ${sceneName}`);
   } catch (error) {
     console.error(`[FGC→OBS] failed to switch to ${sceneName}: ${error instanceof Error ? error.message : String(error)}`);
   }
