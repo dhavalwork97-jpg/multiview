@@ -25,8 +25,8 @@ export async function POST(request: Request) {
     data: {
       tournamentId: body.tournamentId,
       actorUserId: authorization.userId,
-      type: "SCENE_SET",
-      payload: JSON.parse(JSON.stringify({ kind: "sponsor", sponsor })),
+      type: "SET_SCENE",
+      payload: JSON.parse(JSON.stringify({ runtimeCommandType: "SPONSOR_BUMPER", kind: "sponsor", sponsor })),
     },
   });
 
