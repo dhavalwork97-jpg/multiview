@@ -26,7 +26,7 @@ export async function POST(request: Request) {
       tournamentId: body.tournamentId,
       actorUserId: authorization.userId,
       type: "SCENE_SET",
-      payload: { kind: "sponsor", sponsor },
+      payload: JSON.parse(JSON.stringify({ kind: "sponsor", sponsor })),
     },
   });
 
