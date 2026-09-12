@@ -9,10 +9,32 @@ export default function HudStudioPage({ params }: { params: { tournamentId: stri
   const [family, setFamily] = useState("All");
   const [selected, setSelected] = useState("fgc-pro");
   const [installed, setInstalled] = useState("fgc-pro");
+  const [installing, setInstalling] = useState(false);
+  const [installMessage, setInstallMessage] = useState("");
   const [copied, setCopied] = useState(false);
   const filtered = useMemo(() => HUD_PACKAGES.filter((p) => family === "All" || p.family === family), [family]);
   const selectedPackage = HUD_PACKAGES.find((p) => p.id === selected) ?? HUD_PACKAGES[0];
   const overlayUrl = `${typeof window !== "undefined" ? window.location.origin : ""}/broadcast/${params.tournamentId}/overlay/hud/${selectedPackage.id}?station=main`;
+
+  const installPackage = async () => {
+    setInstalling(true);
+    setInstallMessage("");
+    try {
+      const response = await fetch("/api/hud/install", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ tournamentId: params.tournamentId, packageId: selectedPackage.id, stationId: "main" }),
+      });
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(typeof result.error === "string" ? result.error : "Could not install HUD package");
+      setInstalled(selectedPackage.id);
+      setInstallMessage("Package installed. The OBS bridge will update the Browser Source automatically.");
+    } catch (error) {
+      setInstallMessage(error instanceof Error ? error.message : "Could not install HUD package");
+    } finally {
+      setInstalling(false);
+    }
+  };
 
   const copyUrl = async () => {
     await navigator.clipboard?.writeText(overlayUrl);
@@ -60,10 +82,11 @@ export default function HudStudioPage({ params }: { params: { tournamentId: stri
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, margin: "18px 0" }}>
               {[["MAIN HUD", "Live"], ["PLAYER INTRO", "Live"], ["WINNER", "Ready"], ["REPLAY", "Ready"], ["NEXT MATCH", "Ready"], ["BREAK", "Ready"]].map(([a,b]) => <div key={a} style={{ padding: 11, border: "1px solid #202731", borderRadius: 10, background: "#090b0f" }}><div style={{ fontSize: 9, color: "#687180", letterSpacing: ".1em" }}>{a}</div><div style={{ marginTop: 4, fontSize: 11, fontWeight: 800, color: "#b9c0ca" }}>● {b}</div></div>)}
             </div>
-            <button onClick={() => setInstalled(selectedPackage.id)} style={{ width: "100%", padding: 13, border: 0, borderRadius: 11, background: selectedPackage.accent, color: "#fff", fontWeight: 900, cursor: "pointer" }}>{installed === selectedPackage.id ? "✓ Package installed" : "Install package"}</button>
+            <button disabled={installing} onClick={installPackage} style={{ width: "100%", padding: 13, border: 0, borderRadius: 11, background: selectedPackage.accent, color: "#fff", fontWeight: 900, cursor: installing ? "wait" : "pointer", opacity: installing ? .7 : 1 }}>{installing ? "Installing…" : installed === selectedPackage.id ? "✓ Package installed" : "Install package"}</button>
             <button onClick={copyUrl} style={{ width: "100%", padding: 12, marginTop: 9, border: "1px solid #303845", borderRadius: 11, background: "#12161c", color: "#d7dce3", fontWeight: 800, cursor: "pointer" }}>{copied ? "Copied HUD URL" : "Copy OBS Browser Source URL"}</button>
+            {installMessage && <div style={{ marginTop: 12, padding: 11, borderRadius: 10, background: "#10151c", border: "1px solid #27313d", color: "#aeb7c4", fontSize: 11, lineHeight: 1.45 }}>{installMessage}</div>}
             <div style={{ marginTop: 15, padding: 12, borderRadius: 10, background: "#080a0d", border: "1px solid #1d232c", fontFamily: "monospace", fontSize: 10, color: "#77808d", wordBreak: "break-all" }}>{overlayUrl}</div>
-            <div style={{ marginTop: 15, fontSize: 11, lineHeight: 1.5, color: "#687180" }}>V1 uses browser-source delivery. The same URL can be loaded into OBS at 1920×1080 with transparent background; match data is owned by FGC rather than typed into OBS.</div>
+            <div style={{ marginTop: 15, fontSize: 11, lineHeight: 1.5, color: "#687180" }}>With the local FGC OBS Bridge running, Install Package provisions or refreshes the Browser Source in OBS automatically. Without the bridge, use the URL above as a normal OBS Browser Source.</div>
           </aside>
         </section>
       </div>
