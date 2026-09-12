@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { io } from "socket.io-client";
 
 type Match = {
   id: string;
@@ -39,6 +40,8 @@ export default function OperationsClient({ tournamentId }: { tournamentId: strin
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [filter, setFilter] = useState<"ALL" | "UNASSIGNED" | "LIVE">("ALL");
+  const [connection, setConnection] = useState<"LIVE" | "OFFLINE">("OFFLINE");
+  const [runAcknowledged, setRunAcknowledged] = useState(false);
 
   const load = useCallback(async () => {
     try {
@@ -65,9 +68,45 @@ export default function OperationsClient({ tournamentId }: { tournamentId: strin
     return () => window.clearInterval(timer);
   }, [load]);
 
+  useEffect(() => {
+    const socketUrl = process.env.NEXT_PUBLIC_SOCKET_URL?.trim() || window.location.origin;
+    const socket = io(socketUrl, { transports: ["websocket", "polling"] });
+    const onConnect = () => {
+      socket.emit("join:tournament", tournamentId);
+      setConnection("LIVE");
+    };
+    const onDisconnect = () => setConnection("OFFLINE");
+    const onMatchUpdated = (event: { tournamentId?: string; matchId?: string }) => {
+      if (event.tournamentId !== tournamentId || !event.matchId) return;
+      void load();
+    };
+    socket.on("connect", onConnect);
+    socket.on("disconnect", onDisconnect);
+    socket.on("match:updated", onMatchUpdated);
+    socket.on("broadcast:updated", onMatchUpdated);
+    return () => {
+      socket.emit("leave:tournament", tournamentId);
+      socket.off("connect", onConnect);
+      socket.off("disconnect", onDisconnect);
+      socket.off("match:updated", onMatchUpdated);
+      socket.off("broadcast:updated", onMatchUpdated);
+      socket.disconnect();
+    };
+  }, [load, tournamentId]);
+
   const assignedIds = useMemo(() => new Set(stations.flatMap((station) => station.matches.map((match) => match.id))), [stations]);
   const unassigned = matches.filter((match) => !assignedIds.has(match.id));
-  const visibleMatches = filter === "UNASSIGNED" ? unassigned : matches;
+  const visibleMatches = filter === "UNASSIGNED" ? unassigned : filter === "LIVE" ? [] : matches;
+  const liveStations = stations.filter((s) => s.matches[0]?.status === "LIVE").length;
+  const attentionStations = stations.filter((s) => health(s).label === "ATTENTION" || health(s).label === "ERROR").length;
+  const onlineStations = stations.filter((s) => s.status !== "OFFLINE" && !s.isStale && s.status !== "ERROR").length;
+  const readiness = [
+    { label: "Stations registered", detail: stations.length > 0 ? `${stations.length} station${stations.length === 1 ? "" : "s"}` : "Add at least one station", ok: stations.length > 0 },
+    { label: "Station health", detail: attentionStations === 0 ? "All stations healthy" : `${attentionStations} station${attentionStations === 1 ? "" : "s"} need attention`, ok: stations.length > 0 && attentionStations === 0 },
+    { label: "Queued matches assigned", detail: unassigned.length === 0 ? "Queue is fully assigned" : `${unassigned.length} match${unassigned.length === 1 ? "" : "es"} unassigned`, ok: matches.length > 0 && unassigned.length === 0 },
+    { label: "Operations link", detail: connection === "LIVE" ? "Realtime connected" : "Realtime reconnecting", ok: connection === "LIVE" },
+  ];
+  const readyToRun = readiness.every((item) => item.ok);
 
   async function assign(matchId: string, stationId: string | null) {
     setBusy(matchId);
@@ -80,6 +119,7 @@ export default function OperationsClient({ tournamentId }: { tournamentId: strin
       });
       const payload = (await response.json()) as { error?: string };
       if (!response.ok) throw new Error(payload.error ?? "Station assignment failed");
+      setRunAcknowledged(false);
       await load();
     } catch (e) {
       setError(e instanceof Error ? e.message : "Station assignment failed");
@@ -88,62 +128,32 @@ export default function OperationsClient({ tournamentId }: { tournamentId: strin
     }
   }
 
-  const liveStations = stations.filter((s) => s.matches[0]?.status === "LIVE").length;
-  const attentionStations = stations.filter((s) => health(s).label === "ATTENTION" || health(s).label === "ERROR").length;
-
   return (
     <main style={{ minHeight: "100vh", background: "#07080d", color: "#f7f8ff", padding: 28, fontFamily: "Inter, system-ui, sans-serif" }}>
       <div style={{ maxWidth: 1400, margin: "0 auto" }}>
         <header style={{ display: "flex", justifyContent: "space-between", gap: 20, alignItems: "flex-end", marginBottom: 22, flexWrap: "wrap" }}>
-          <div>
-            <div style={eyebrow}>FGC CONTROL ROOM 2.0</div>
-            <h1 style={{ margin: "7px 0 0", fontSize: 34, letterSpacing: "-.03em" }}>Tournament Operations</h1>
-            <p style={{ margin: "7px 0 0", color: "#8b91a3", fontSize: 13 }}>Competition state, station state and broadcast readiness in one operator surface.</p>
-          </div>
-          <a href={`/broadcast/${tournamentId}/control-room`} style={secondaryButton}>← Broadcast Studio</a>
+          <div><div style={eyebrow}>FGC CONTROL ROOM 2.0</div><h1 style={{ margin: "7px 0 0", fontSize: 34, letterSpacing: "-.03em" }}>Tournament Operations</h1><p style={{ margin: "7px 0 0", color: "#8b91a3", fontSize: 13 }}>Competition state, station state and broadcast readiness in one operator surface.</p></div>
+          <div style={{ display: "flex", gap: 10, alignItems: "center" }}><span style={{ ...statusPill, color: connection === "LIVE" ? "#22c55e" : "#f59e0b", borderColor: connection === "LIVE" ? "#22c55e55" : "#f59e0b55" }}>● REALTIME {connection}</span><a href={`/broadcast/${tournamentId}/control-room`} style={secondaryButton}>← Broadcast Studio</a></div>
         </header>
 
-        <section style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 12, marginBottom: 18 }}>
-          <Metric label="STATIONS" value={String(stations.length)} detail={`${stations.filter((s) => s.status !== "OFFLINE").length} online`} />
-          <Metric label="LIVE" value={String(liveStations)} detail="matches on air" />
-          <Metric label="UNASSIGNED" value={String(unassigned.length)} detail="queued matches" />
-          <Metric label="ATTENTION" value={String(attentionStations)} detail="needs operator review" danger={attentionStations > 0} />
+        <section style={{ ...panel, marginBottom: 18, borderColor: readyToRun ? "#166534" : "#252936" }}>
+          <div style={{ display: "flex", justifyContent: "space-between", gap: 18, alignItems: "center", flexWrap: "wrap" }}>
+            <div><div style={eyebrow}>RUN TOURNAMENT</div><h2 style={{ margin: "6px 0 0", fontSize: 22 }}>{readyToRun ? "READY TO GO LIVE" : "Readiness check"}</h2><p style={{ margin: "5px 0 0", fontSize: 12, color: "#747b8c" }}>No production state is changed automatically. This gate verifies the operator can safely hand off to Broadcast Studio.</p></div>
+            <button disabled={!readyToRun} onClick={() => setRunAcknowledged(true)} style={{ ...runButton, opacity: readyToRun ? 1 : .4, cursor: readyToRun ? "pointer" : "not-allowed" }}>{runAcknowledged ? "READY · OPEN STUDIO" : "RUN TOURNAMENT"}</button>
+          </div>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 8, marginTop: 16 }}>{readiness.map((item) => <div key={item.label} style={{ border: `1px solid ${item.ok ? "#14532d" : "#3a3030"}`, background: item.ok ? "#07130c" : "#100d0f", borderRadius: 11, padding: 11 }}><div style={{ fontSize: 11, fontWeight: 800, color: item.ok ? "#86efac" : "#fbbf24" }}>{item.ok ? "✓" : "!"} {item.label}</div><div style={{ marginTop: 4, fontSize: 10, color: "#707789" }}>{item.detail}</div></div>)}</div>
+          {runAcknowledged && readyToRun && <a href={`/broadcast/${tournamentId}/control-room`} style={{ display: "inline-block", marginTop: 12, color: "#c4b5fd", fontSize: 12 }}>Open Broadcast Studio →</a>}
         </section>
 
+        <section style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 12, marginBottom: 18 }}><Metric label="STATIONS" value={String(stations.length)} detail={`${onlineStations} online`} /><Metric label="LIVE" value={String(liveStations)} detail="matches on air" /><Metric label="UNASSIGNED" value={String(unassigned.length)} detail="queued matches" /><Metric label="ATTENTION" value={String(attentionStations)} detail="needs operator review" danger={attentionStations > 0} /></section>
         {error && <div style={{ ...panel, borderColor: "#7f1d1d", color: "#fecaca", marginBottom: 14 }}>⚠ {error}</div>}
 
         <section style={{ ...panel, marginBottom: 18 }}>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, marginBottom: 14, flexWrap: "wrap" }}>
-            <div><div style={eyebrow}>STATION GRID</div><h2 style={{ margin: "6px 0 0", fontSize: 20 }}>Live infrastructure</h2></div>
-            <div style={{ display: "flex", gap: 7 }}>
-              {(["ALL", "LIVE", "UNASSIGNED"] as const).map((item) => <button key={item} onClick={() => setFilter(item)} style={filter === item ? activeButton : filterButton}>{item}</button>)}
-            </div>
-          </div>
-          {loading ? <div style={empty}>Loading station telemetry…</div> : stations.length === 0 ? <div style={empty}>No stations are registered for this tournament.</div> : <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(270px, 1fr))", gap: 10 }}>
-            {stations.map((station) => {
-              const state = health(station);
-              const current = station.matches[0];
-              return <article key={station.id} style={{ ...card, borderColor: state.label === "LIVE" ? "#166534" : state.label === "ATTENTION" || state.label === "ERROR" ? "#78350f" : "#252936" }}>
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}><strong style={{ fontSize: 15 }}>{station.label}</strong><span style={{ ...statusPill, color: state.tone, borderColor: `${state.tone}55` }}>● {state.label}</span></div>
-                <div style={{ marginTop: 16, minHeight: 64 }}>
-                  {current ? <><div style={{ fontSize: 12, color: "#9ca3af" }}>{current.round ?? "MATCH"} · {current.status}</div><div style={{ marginTop: 6, fontWeight: 800 }}>{current.playerOne?.gamertag ?? "TBD"} <span style={{ color: "#6b7280" }}>{current.playerOneScore}–{current.playerTwoScore}</span> {current.playerTwo?.gamertag ?? "TBD"}</div></> : <div style={{ color: "#656b7b", fontSize: 12 }}>No match assigned</div>}
-                </div>
-                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginTop: 12, fontSize: 10, color: "#777e90" }}><div>BITRATE<br /><b style={{ color: "#c9ced9" }}>{station.currentBitrateKbps ?? "—"} kbps</b></div><div>DROPPED<br /><b style={{ color: "#c9ced9" }}>{station.droppedFrames ?? "—"}</b></div></div>
-              </article>;
-            })}
-          </div>}
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, marginBottom: 14, flexWrap: "wrap" }}><div><div style={eyebrow}>STATION GRID</div><h2 style={{ margin: "6px 0 0", fontSize: 20 }}>Live infrastructure</h2></div><div style={{ display: "flex", gap: 7 }}>{(["ALL", "LIVE", "UNASSIGNED"] as const).map((item) => <button key={item} onClick={() => setFilter(item)} style={filter === item ? activeButton : filterButton}>{item}</button>)}</div></div>
+          {loading ? <div style={empty}>Loading station telemetry…</div> : stations.length === 0 ? <div style={empty}>No stations are registered for this tournament.</div> : <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(270px, 1fr))", gap: 10 }}>{stations.map((station) => { const state = health(station); const current = station.matches[0]; return <article key={station.id} style={{ ...card, borderColor: state.label === "LIVE" ? "#166534" : state.label === "ATTENTION" || state.label === "ERROR" ? "#78350f" : "#252936" }}><div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}><strong style={{ fontSize: 15 }}>{station.label}</strong><span style={{ ...statusPill, color: state.tone, borderColor: `${state.tone}55` }}>● {state.label}</span></div><div style={{ marginTop: 16, minHeight: 64 }}>{current ? <><div style={{ fontSize: 12, color: "#9ca3af" }}>{current.round ?? "MATCH"} · {current.status}</div><div style={{ marginTop: 6, fontWeight: 800 }}>{current.playerOne?.gamertag ?? "TBD"} <span style={{ color: "#6b7280" }}>{current.playerOneScore}–{current.playerTwoScore}</span> {current.playerTwo?.gamertag ?? "TBD"}</div></> : <div style={{ color: "#656b7b", fontSize: 12 }}>No match assigned</div>}</div><div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginTop: 12, fontSize: 10, color: "#777e90" }}><div>BITRATE<br /><b style={{ color: "#c9ced9" }}>{station.currentBitrateKbps ?? "—"} kbps</b></div><div>DROPPED<br /><b style={{ color: "#c9ced9" }}>{station.droppedFrames ?? "—"}</b></div></div></article>; })}</div>}
         </section>
 
-        <section style={panel}>
-          <div style={{ marginBottom: 14 }}><div style={eyebrow}>MATCH QUEUE</div><h2 style={{ margin: "6px 0 0", fontSize: 20 }}>Assignment desk</h2><p style={{ margin: "5px 0 0", fontSize: 12, color: "#747b8c" }}>Assignments are atomic and conflict-protected. A station can never receive two queued/live matches.</p></div>
-          {visibleMatches.length === 0 ? <div style={empty}>{filter === "UNASSIGNED" ? "All queued matches are assigned." : "No queued matches are available."}</div> : <div style={{ display: "grid", gap: 8 }}>
-            {visibleMatches.map((match) => <div key={match.id} style={{ display: "grid", gridTemplateColumns: "1.5fr .8fr auto", gap: 12, alignItems: "center", padding: 13, border: "1px solid #252936", borderRadius: 13, background: "#090b10" }}>
-              <div><div style={{ fontSize: 10, color: "#737a8b", letterSpacing: ".12em" }}>{match.round ?? "QUEUED"} · {match.id.slice(0, 8)}</div><div style={{ marginTop: 5, fontWeight: 800 }}>{match.playerOne?.gamertag ?? "TBD"} <span style={{ color: "#5e6575" }}>vs</span> {match.playerTwo?.gamertag ?? "TBD"}</div></div>
-              <select value={match.station?.id ?? ""} disabled={busy === match.id} onChange={(event) => void assign(match.id, event.target.value || null)} style={select}><option value="">Unassigned</option>{stations.map((station) => { const occupied = station.matches.some((item) => item.id !== match.id && (item.status === "QUEUED" || item.status === "LIVE")); return <option key={station.id} value={station.id} disabled={occupied}>{station.label}{occupied ? " · OCCUPIED" : ""}</option>; })}</select>
-              <span style={{ fontSize: 10, color: busy === match.id ? "#a78bfa" : "#667085", minWidth: 72, textAlign: "right" }}>{busy === match.id ? "SYNCING…" : match.station ? "ASSIGNED" : "READY"}</span>
-            </div>)}
-          </div>}
-        </section>
+        <section style={panel}><div style={{ marginBottom: 14 }}><div style={eyebrow}>MATCH QUEUE</div><h2 style={{ margin: "6px 0 0", fontSize: 20 }}>Assignment desk</h2><p style={{ margin: "5px 0 0", fontSize: 12, color: "#747b8c" }}>Assignments are atomic and conflict-protected. A station can never receive two queued/live matches.</p></div>{visibleMatches.length === 0 ? <div style={empty}>{filter === "UNASSIGNED" ? "All queued matches are assigned." : filter === "LIVE" ? "Live matches are shown on station cards above." : "No queued matches are available."}</div> : <div style={{ display: "grid", gap: 8 }}>{visibleMatches.map((match) => <div key={match.id} style={{ display: "grid", gridTemplateColumns: "1.5fr .8fr auto", gap: 12, alignItems: "center", padding: 13, border: "1px solid #252936", borderRadius: 13, background: "#090b10" }}><div><div style={{ fontSize: 10, color: "#737a8b", letterSpacing: ".12em" }}>{match.round ?? "QUEUED"} · {match.id.slice(0, 8)}</div><div style={{ marginTop: 5, fontWeight: 800 }}>{match.playerOne?.gamertag ?? "TBD"} <span style={{ color: "#5e6575" }}>vs</span> {match.playerTwo?.gamertag ?? "TBD"}</div></div><select value={match.station?.id ?? ""} disabled={busy === match.id} onChange={(event) => void assign(match.id, event.target.value || null)} style={select}><option value="">Unassigned</option>{stations.map((station) => { const occupied = station.matches.some((item) => item.id !== match.id && (item.status === "QUEUED" || item.status === "LIVE")); return <option key={station.id} value={station.id} disabled={occupied}>{station.label}{occupied ? " · OCCUPIED" : ""}</option>; })}</select><span style={{ fontSize: 10, color: busy === match.id ? "#a78bfa" : "#667085", minWidth: 72, textAlign: "right" }}>{busy === match.id ? "SYNCING…" : match.station ? "ASSIGNED" : "READY"}</span></div>)}</div>}</section>
       </div>
     </main>
   );
@@ -155,6 +165,7 @@ const panel = { background: "#0c0e14", border: "1px solid #252936", borderRadius
 const card = { background: "#090b10", border: "1px solid #252936", borderRadius: 14, padding: 15 } as const;
 const eyebrow = { fontSize: 10, letterSpacing: ".15em", color: "#666d7e", fontWeight: 700 } as const;
 const secondaryButton = { border: "1px solid #303543", borderRadius: 9, padding: "10px 13px", color: "#c4b5fd", textDecoration: "none", fontSize: 11, fontWeight: 700 } as const;
+const runButton = { border: "1px solid #8b5cf6", borderRadius: 10, padding: "12px 17px", background: "#7c3aed", color: "#fff", fontSize: 11, fontWeight: 850, letterSpacing: ".08em" } as const;
 const filterButton = { border: "1px solid #2b2f3c", borderRadius: 8, padding: "8px 10px", background: "#11131a", color: "#7d8495", fontSize: 10, fontWeight: 800, cursor: "pointer" } as const;
 const activeButton = { ...filterButton, background: "#7c3aed", borderColor: "#8b5cf6", color: "#fff" } as const;
 const statusPill = { border: "1px solid", borderRadius: 999, padding: "4px 7px", fontSize: 9, letterSpacing: ".08em", fontWeight: 800 } as const;
