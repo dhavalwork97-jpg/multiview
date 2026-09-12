@@ -15,9 +15,7 @@ export async function POST(
 ) {
   const { matchId } = await params;
   const parsed = bodySchema.safeParse(await req.json());
-  if (!parsed.success) {
-    return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
-  }
+  if (!parsed.success) return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
 
   const match = await db.match.findUnique({
     where: { id: matchId },
@@ -33,58 +31,35 @@ export async function POST(
   }
 
   if (match.status === "LIVE" || match.status === "COMPLETED") {
-    return NextResponse.json(
-      { error: "Live or completed matches cannot be reassigned. Stop the match before changing its station." },
-      { status: 409 },
-    );
+    return NextResponse.json({ error: "Live or completed matches cannot be reassigned. Stop the match before changing its station." }, { status: 409 });
   }
 
   const nextStationId = parsed.data.stationId;
-  if (nextStationId === match.stationId) {
-    return NextResponse.json({ match, unchanged: true });
-  }
+  if (nextStationId === match.stationId) return NextResponse.json({ match, unchanged: true });
 
   if (nextStationId) {
     const station = await db.station.findFirst({
       where: { id: nextStationId, tournamentId: match.tournamentId },
-      select: { id: true, label: true, status: true },
+      select: { id: true },
     });
     if (!station) return NextResponse.json({ error: "Station does not belong to this tournament" }, { status: 404 });
 
     const occupied = await db.match.findFirst({
-      where: {
-        id: { not: matchId },
-        tournamentId: match.tournamentId,
-        stationId: nextStationId,
-        status: { in: ["QUEUED", "LIVE"] },
-      },
-      select: { id: true, status: true },
+      where: { id: { not: matchId }, tournamentId: match.tournamentId, stationId: nextStationId, status: { in: ["QUEUED", "LIVE"] } },
+      select: { id: true },
     });
-    if (occupied) {
-      return NextResponse.json(
-        { error: "Station is already assigned to another active match", occupiedMatchId: occupied.id },
-        { status: 409 },
-      );
-    }
+    if (occupied) return NextResponse.json({ error: "Station is already assigned to another active match", occupiedMatchId: occupied.id }, { status: 409 });
   }
 
   try {
     const updated = await db.$transaction(async (tx) => {
-      const latest = await tx.match.findUnique({
-        where: { id: matchId },
-        select: { status: true, stationId: true, tournamentId: true },
-      });
+      const latest = await tx.match.findUnique({ where: { id: matchId }, select: { status: true, stationId: true, tournamentId: true } });
       if (!latest) throw new Error("Match not found");
       if (latest.status === "LIVE" || latest.status === "COMPLETED") throw new Error("Match cannot be reassigned while live or after completion");
 
       if (nextStationId) {
         const conflict = await tx.match.findFirst({
-          where: {
-            id: { not: matchId },
-            tournamentId: latest.tournamentId,
-            stationId: nextStationId,
-            status: { in: ["QUEUED", "LIVE"] },
-          },
+          where: { id: { not: matchId }, tournamentId: latest.tournamentId, stationId: nextStationId, status: { in: ["QUEUED", "LIVE"] } },
           select: { id: true },
         });
         if (conflict) throw new Error("Station is already assigned to another active match");
@@ -93,15 +68,14 @@ export async function POST(
       return tx.match.update({
         where: { id: matchId },
         data: { stationId: nextStationId },
-        select: { id: true, tournamentId: true, status: true, stationId: true },
+        select: { id: true, tournamentId: true, status: true, stationId: true, playerOneScore: true, playerTwoScore: true, winnerId: true, winnerSideId: true },
       });
     });
 
-    const action = nextStationId ? "MATCH_STATION_ASSIGNED" : "MATCH_STATION_UNASSIGNED";
     await writeAuditLog({
       tournamentId: updated.tournamentId,
       actorUserId: actor.id,
-      action,
+      action: nextStationId ? "MATCH_STATION_ASSIGNED" : "MATCH_STATION_UNASSIGNED",
       entityType: "match",
       entityId: updated.id,
       metadata: { previousStationId: match.stationId, stationId: updated.stationId },
@@ -112,14 +86,15 @@ export async function POST(
       tournamentId: updated.tournamentId,
       matchId: updated.id,
       status: updated.status,
+      playerOneScore: updated.playerOneScore,
+      playerTwoScore: updated.playerTwoScore,
+      winnerId: updated.winnerId,
+      winnerSideId: updated.winnerSideId,
       stationId: updated.stationId,
     });
 
     return NextResponse.json({ match: updated });
   } catch (error) {
-    return NextResponse.json(
-      { error: error instanceof Error ? error.message : "Failed to assign station" },
-      { status: 409 },
-    );
+    return NextResponse.json({ error: error instanceof Error ? error.message : "Failed to assign station" }, { status: 409 });
   }
 }
