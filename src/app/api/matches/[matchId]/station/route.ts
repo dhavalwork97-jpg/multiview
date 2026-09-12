@@ -40,9 +40,16 @@ export async function POST(
   if (nextStationId) {
     const station = await db.station.findFirst({
       where: { id: nextStationId, tournamentId: match.tournamentId },
-      select: { id: true },
+      select: { id: true, status: true, lastHeartbeatAt: true, youtubeLiveStatus: true },
     });
     if (!station) return NextResponse.json({ error: "Station does not belong to this tournament" }, { status: 404 });
+
+    const stale = station.lastHeartbeatAt
+      ? Date.now() - new Date(station.lastHeartbeatAt).getTime() > 90_000
+      : false;
+    if (station.status === "OFFLINE" || station.status === "ERROR" || stale) {
+      return NextResponse.json({ error: "Station is not healthy enough to receive a match", stationId: station.id, stale }, { status: 409 });
+    }
 
     const occupied = await db.match.findFirst({
       where: { id: { not: matchId }, tournamentId: match.tournamentId, stationId: nextStationId, status: { in: ["QUEUED", "LIVE"] } },
@@ -58,6 +65,16 @@ export async function POST(
       if (latest.status === "LIVE" || latest.status === "COMPLETED") throw new Error("Match cannot be reassigned while live or after completion");
 
       if (nextStationId) {
+        const station = await tx.station.findFirst({
+          where: { id: nextStationId, tournamentId: latest.tournamentId },
+          select: { id: true, status: true, lastHeartbeatAt: true },
+        });
+        if (!station) throw new Error("Station does not belong to this tournament");
+        const stale = station.lastHeartbeatAt
+          ? Date.now() - new Date(station.lastHeartbeatAt).getTime() > 90_000
+          : false;
+        if (station.status === "OFFLINE" || station.status === "ERROR" || stale) throw new Error("Station is not healthy enough to receive a match");
+
         const conflict = await tx.match.findFirst({
           where: { id: { not: matchId }, tournamentId: latest.tournamentId, stationId: nextStationId, status: { in: ["QUEUED", "LIVE"] } },
           select: { id: true },
