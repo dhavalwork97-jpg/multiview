@@ -6,6 +6,8 @@ type BroadcastUpdated = {
   type?: "broadcast:updated";
   tournamentId?: string;
   scene?: string;
+  stationId?: string | null;
+  matchId?: string | null;
   overlay?: Record<string, unknown> | null;
   commandType?: string;
 };
@@ -19,10 +21,6 @@ const configuredTournamentIds = (process.env.FGC_TOURNAMENT_IDS ?? process.env.F
 const obsUrl = process.env.OBS_WEBSOCKET_URL?.trim() || "ws://127.0.0.1:4455";
 const obsPassword = process.env.OBS_WEBSOCKET_PASSWORD ?? "";
 const webUrl = (process.env.FGC_WEB_URL?.trim() || "https://multiview-fjtd.vercel.app").replace(/\/$/, "");
-// OBS browser sources can retain an old document even after SetInputSettings is
-// called with the same URL. A bridge-session cache key guarantees a fresh page
-// whenever the local bridge is restarted, which is important after auth/routing
-// fixes so OBS cannot keep showing an old Clerk sign-in document.
 const bridgeSessionId = randomUUID();
 
 const overlayKinds: Record<string, string> = {
@@ -46,10 +44,14 @@ const socket = io(socketUrl, {
   reconnection: true,
 });
 
-async function ensureFgcScene(tournamentId: string, sceneName: string) {
+async function ensureFgcScene(tournamentId: string, sceneName: string, event: BroadcastUpdated) {
+  const hudPackageId = typeof event.overlay?.hudPackageId === "string" ? event.overlay.hudPackageId.trim() : "";
+  const stationId = event.stationId?.trim() || "main";
   const kind = overlayKinds[sceneName] ?? "program";
-  const overlayUrl = `${webUrl}/broadcast/${encodeURIComponent(tournamentId)}/overlay?kind=${encodeURIComponent(kind)}&obsSession=${bridgeSessionId}`;
-  const sourceName = `FGC Overlay — ${sceneName}`;
+  const overlayUrl = hudPackageId
+    ? `${webUrl}/broadcast/${encodeURIComponent(tournamentId)}/overlay/hud/${encodeURIComponent(hudPackageId)}?station=${encodeURIComponent(stationId)}&obsSession=${bridgeSessionId}`
+    : `${webUrl}/broadcast/${encodeURIComponent(tournamentId)}/overlay?kind=${encodeURIComponent(kind)}&obsSession=${bridgeSessionId}`;
+  const sourceName = hudPackageId ? `FGC HUD — ${stationId}` : `FGC Overlay — ${sceneName}`;
   await obs.ensureSceneWithBrowserSource(sceneName, sourceName, overlayUrl);
   return { sceneName, overlayUrl, sourceName };
 }
@@ -92,9 +94,11 @@ socket.on("broadcast:updated", async (event: BroadcastUpdated) => {
   }
 
   try {
-    await ensureFgcScene(event.tournamentId, sceneName);
+    const provisioned = await ensureFgcScene(event.tournamentId, sceneName, event);
     await obs.setCurrentProgramScene(sceneName);
-    console.log(`[FGC→OBS] ${event.tournamentId}: ${event.scene ?? "unknown"} → ${sceneName}`);
+    const hudPackageId = typeof event.overlay?.hudPackageId === "string" ? event.overlay.hudPackageId : null;
+    console.log(`[FGC→OBS] ${event.tournamentId}: ${event.scene ?? "unknown"} → ${sceneName}${hudPackageId ? ` [HUD ${hudPackageId}]` : ""}`);
+    console.log(`[FGC→OBS] source ready: ${provisioned.sourceName}`);
   } catch (error) {
     console.error(`[FGC→OBS] failed to provision/switch ${sceneName}: ${error instanceof Error ? error.message : String(error)}`);
   }
