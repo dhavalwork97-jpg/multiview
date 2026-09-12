@@ -20,7 +20,15 @@ export async function POST(request: Request) {
 
   const existing = await db.broadcastState.findUnique({ where: { tournamentId: body.tournamentId }, select: { scene: true, matchId: true, stationId: true, overlay: true } });
   const previousOverlay = existing?.overlay && typeof existing.overlay === "object" && !Array.isArray(existing.overlay) ? existing.overlay as Record<string, unknown> : {};
-  const stationId = body.stationId?.trim() || existing?.stationId || null;
+
+  // HUD Studio may send a logical/default station such as "main". BroadcastState.stationId
+  // is a foreign key to the tournament's real Station record, so only persist a station id
+  // that actually belongs to this tournament. Otherwise preserve the current assignment.
+  const requestedStationId = body.stationId?.trim() || null;
+  const requestedStation = requestedStationId
+    ? await db.station.findFirst({ where: { id: requestedStationId, tournamentId: body.tournamentId }, select: { id: true } })
+    : null;
+  const stationId = requestedStation?.id ?? existing?.stationId ?? null;
   const overlay = { ...previousOverlay, hudPackageId: pkg.id, hudPackageName: pkg.name };
 
   await db.broadcastState.upsert({
