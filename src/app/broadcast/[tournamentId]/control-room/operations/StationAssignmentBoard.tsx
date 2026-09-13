@@ -45,9 +45,17 @@ export default function StationAssignmentBoard({ tournamentId }: { tournamentId:
     return () => window.clearInterval(timer);
   }, [load]);
 
-  const availableStations = useMemo(
-    () => stations.filter((station) => station.status !== "OFFLINE" && station.status !== "ERROR" && !station.isStale && station.matches.length === 0),
+  const stationState = useMemo(
+    () => stations.map((station) => ({
+      ...station,
+      activeMatches: station.matches.filter((match) => match.status === "LIVE" || match.status === "QUEUED"),
+    })),
     [stations],
+  );
+
+  const availableStations = useMemo(
+    () => stationState.filter((station) => station.status !== "OFFLINE" && station.status !== "ERROR" && !station.isStale && station.activeMatches.length === 0),
+    [stationState],
   );
 
   const assign = useCallback(async (matchId: string, stationId: string) => {
@@ -130,17 +138,17 @@ export default function StationAssignmentBoard({ tournamentId }: { tournamentId:
         </div>
 
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: 8, alignContent: "start" }}>
-          {stations.map((station) => {
+          {stationState.map((station) => {
             const healthy = station.status !== "OFFLINE" && station.status !== "ERROR" && !station.isStale;
-            const occupied = station.matches.length > 0;
+            const occupied = station.activeMatches.length > 0;
             return (
               <div key={station.id} onDragOver={(event) => event.preventDefault()} onDrop={() => { if (draggedMatch && healthy && !occupied) void assign(draggedMatch, station.id); }} style={{ minHeight: 112, padding: 12, borderRadius: 12, border: `1px solid ${healthy && !occupied ? "rgba(96,165,250,.28)" : "rgba(255,255,255,.08)"}`, background: "rgba(255,255,255,.025)" }}>
                 <div style={{ display: "flex", justifyContent: "space-between", gap: 8 }}>
                   <strong style={{ fontSize: 12 }}>{station.label}</strong>
                   <span style={{ fontSize: 9, opacity: .7 }}>{healthy ? (occupied ? "BUSY" : "READY") : "ATTENTION"}</span>
                 </div>
-                <div style={{ fontSize: 10, opacity: .55, marginTop: 10 }}>{occupied ? `${station.matches.length} active match` : "Drop match here"}</div>
-                {occupied && <div style={{ fontSize: 11, marginTop: 5 }}>{station.matches[0]?.playerOne?.gamertag ?? "TBD"} vs {station.matches[0]?.playerTwo?.gamertag ?? "TBD"}</div>}
+                <div style={{ fontSize: 10, opacity: .55, marginTop: 10 }}>{occupied ? `${station.activeMatches.length} active match` : "Drop match here"}</div>
+                {occupied && <div style={{ fontSize: 11, marginTop: 5 }}>{station.activeMatches[0]?.playerOne?.gamertag ?? "TBD"} vs {station.activeMatches[0]?.playerTwo?.gamertag ?? "TBD"}</div>}
               </div>
             );
           })}
