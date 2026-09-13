@@ -25,7 +25,7 @@ export default async function BroadcastMultiViewPage({
   const stations = await db.station.findMany({
     where: { tournamentId, status: "LIVE" },
     orderBy: { label: "asc" },
-    take: 9,
+    take: 16,
     select: {
       id: true,
       label: true,
@@ -36,7 +36,7 @@ export default async function BroadcastMultiViewPage({
 
   return (
     <main style={{ minHeight: "100vh", background: "#07080d", color: "#f7f8ff", padding: 28, fontFamily: "Inter, system-ui, sans-serif" }}>
-      <div style={{ maxWidth: 1440, margin: "0 auto" }}>
+      <div style={{ maxWidth: 1600, margin: "0 auto" }}>
         <header style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", gap: 20, marginBottom: 22, flexWrap: "wrap" }}>
           <div>
             <div style={{ fontSize: 10, letterSpacing: ".15em", opacity: .45 }}>FGC BROADCAST STUDIO · LIVE POV</div>
@@ -56,7 +56,7 @@ export default async function BroadcastMultiViewPage({
               <div style={label}>OPERATOR MONITOR WALL</div>
               <h2 style={{ margin: "6px 0 0", fontSize: 18 }}>All active station POVs</h2>
             </div>
-            <span style={status}>LIVE SIGNAL · AUDIO FOCUS PER FEED</span>
+            <span style={status}>LIVE SIGNAL · LAZY-MOUNTED UP TO 16 FEEDS</span>
           </div>
           {stations.length ? (
             <MultiView
@@ -66,7 +66,7 @@ export default async function BroadcastMultiViewPage({
                 youtubeVideoId: station.youtubeVideoId,
                 hlsPlaylistKey: station.playbackIdHls ? `${station.playbackIdHls}/index.m3u8` : null,
               }))}
-              layout={9}
+              layout={16}
             />
           ) : (
             <div style={{ padding: "80px 20px", textAlign: "center", border: "1px dashed #252936", borderRadius: 16, color: "#8b90a0" }}>
