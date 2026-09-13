@@ -51,6 +51,8 @@ export default function BroadcastControlRoom({ params }: { params: Promise<{ tou
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
+    // Shortcut handlers intentionally capture the current operator state.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [preview, timelineRunning, elapsedMs, tournamentId, obsMapping]);
 
   return <main style={{ minHeight: "100vh", background: "#07080d", color: "#f7f8ff", padding: 28, fontFamily: "Inter, system-ui, sans-serif" }}><div style={{ maxWidth: 1280, margin: "0 auto" }}>
