@@ -8,6 +8,7 @@ import "./fgc-v32.css";
 import "./fgc-v33-viewer.css";
 import { Nav } from "@/components/layout/Nav";
 import { Footer } from "@/components/layout/Footer";
+import { CommandPalette } from "@/components/layout/CommandPalette";
 
 const displayFont = Barlow_Condensed({
   subsets: ["latin"],
@@ -46,22 +47,17 @@ export default async function RootLayout({
 
   const content = (
     <>
-      <NavGate>
-        <Nav />
-      </NavGate>
+      <NavGate><Nav /></NavGate>
       {children}
       <Footer />
+      <CommandPalette />
     </>
   );
 
   return (
     <html lang="en" className={`${displayFont.variable} ${bodyFont.variable} ${monoFont.variable}`}>
       <body>
-        {clerkConfigured && !demoMode ? (
-          <ClerkProvider publishableKey={clerkPublishableKey}>{content}</ClerkProvider>
-        ) : (
-          content
-        )}
+        {clerkConfigured && !demoMode ? <ClerkProvider publishableKey={clerkPublishableKey}>{content}</ClerkProvider> : content}
       </body>
     </html>
   );
