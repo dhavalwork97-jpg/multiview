@@ -12,7 +12,6 @@ const YouTubePlayer = dynamic(() => import("./YouTubePlayer").then((module) => m
 });
 
 type MultiViewStation = { id: string; label: string; youtubeVideoId: string | null; hlsPlaylistKey: string | null };
-
 type Props = { stations: MultiViewStation[]; layout: 4 | 9 | 16 };
 
 function FeedPlaceholder({ label }: { label: string }) {
@@ -31,7 +30,6 @@ export function MultiView({ stations, layout }: Props) {
   const [audioFocus, setAudioFocus] = useState(0);
   const [mounted, setMounted] = useState<Set<number>>(() => new Set([0, 1, 2, 3].filter((i) => i < visible.length)));
   const tileRefs = useRef<Array<HTMLElement | null>>([]);
-  const [fullscreenIndex, setFullscreenIndex] = useState<number | null>(null);
   const gridClass = layout === 4 ? "grid-cols-1 sm:grid-cols-2" : layout === 9 ? "grid-cols-1 sm:grid-cols-2 lg:grid-cols-3" : "grid-cols-1 sm:grid-cols-2 lg:grid-cols-4";
   const sources = useMemo(() => visible.map((station) => ({ station, hlsUrl: buildHlsUrl(station.hlsPlaylistKey) })), [visible]);
 
@@ -84,14 +82,6 @@ export function MultiView({ stations, layout }: Props) {
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [audioFocus, visible.length]);
-
-  useEffect(() => {
-    const onFullscreenChange = () => {
-      if (!document.fullscreenElement) setFullscreenIndex(null);
-    };
-    document.addEventListener("fullscreenchange", onFullscreenChange);
-    return () => document.removeEventListener("fullscreenchange", onFullscreenChange);
-  }, []);
 
   return (
     <div>
