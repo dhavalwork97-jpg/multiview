@@ -11,8 +11,6 @@ const ClerkProvider = dynamic(
 
 const PUBLIC_PREFIXES = [
   "/",
-  "/sign-in",
-  "/sign-up",
   "/pricing",
   "/community",
   "/community-guidelines",
@@ -32,16 +30,30 @@ const PUBLIC_PREFIXES = [
   "/demo",
 ];
 
+const AUTH_PREFIXES = ["/sign-in", "/sign-up"];
+
+function matchesPrefix(pathname: string, prefix: string) {
+  return pathname === prefix || pathname.startsWith(`${prefix}/`);
+}
+
 function isPublicPath(pathname: string) {
   if (pathname === "/") return true;
-  return PUBLIC_PREFIXES.some((prefix) => prefix !== "/" && (pathname === prefix || pathname.startsWith(`${prefix}/`)));
+  return PUBLIC_PREFIXES.some((prefix) => prefix !== "/" && matchesPrefix(pathname, prefix));
+}
+
+function isAuthPath(pathname: string) {
+  return AUTH_PREFIXES.some((prefix) => matchesPrefix(pathname, prefix));
 }
 
 export function ConditionalClerkProvider({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   const publishableKey = process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY;
+  const needsClerk = isAuthPath(pathname) || !isPublicPath(pathname);
 
-  if (!publishableKey || publishableKey === "pk_test_dummy" || isPublicPath(pathname)) {
+  // Public viewer pages stay Clerk-free. Sign-in/sign-up and protected workspaces
+  // get the provider so authentication works without making Clerk part of the
+  // public browsing runtime.
+  if (!publishableKey || publishableKey === "pk_test_dummy" || !needsClerk) {
     return <>{children}</>;
   }
 
