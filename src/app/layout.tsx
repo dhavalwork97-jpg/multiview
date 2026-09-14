@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Barlow_Condensed, Inter, JetBrains_Mono } from "next/font/google";
 import { NavGate } from "@/components/layout/NavGate";
+import { ConditionalClerkProvider } from "@/components/auth/ConditionalClerkProvider";
 import "./globals.css";
 import "./fgc-v32.css";
 import "./fgc-v33-viewer.css";
@@ -42,10 +43,12 @@ export default function RootLayout({
   return (
     <html lang="en" className={`${displayFont.variable} ${bodyFont.variable} ${monoFont.variable}`}>
       <body>
-        <NavGate><Nav /></NavGate>
-        {children}
-        <Footer />
-        <LazyCommandPalette />
+        <ConditionalClerkProvider>
+          <NavGate><Nav /></NavGate>
+          {children}
+          <Footer />
+          <LazyCommandPalette />
+        </ConditionalClerkProvider>
       </body>
     </html>
   );
