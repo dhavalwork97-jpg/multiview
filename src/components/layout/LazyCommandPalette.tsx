@@ -13,18 +13,19 @@ export function LazyCommandPalette() {
       });
     };
 
-    if ("requestIdleCallback" in window) {
-      const id = window.requestIdleCallback(load, { timeout: 2500 });
+    const requestIdle = window.requestIdleCallback;
+    if (typeof requestIdle === "function") {
+      const id = requestIdle(load, { timeout: 2500 });
       return () => {
         cancelled = true;
         window.cancelIdleCallback(id);
       };
     }
 
-    const timer = window.setTimeout(load, 1500);
+    const timer = setTimeout(load, 1500);
     return () => {
       cancelled = true;
-      window.clearTimeout(timer);
+      clearTimeout(timer);
     };
   }, []);
 
