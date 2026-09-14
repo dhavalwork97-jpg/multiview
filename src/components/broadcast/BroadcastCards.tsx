@@ -15,7 +15,7 @@ export function BroadcastVs({ game = "Valorant", teamA = "ALPHA", teamB = "OMEGA
 
 export function BroadcastLowerThird({ name = "PLAYER NAME", subtitle = "TEAM • PLAYER", game = "Valorant" }: { name?: string; subtitle?: string; game?: string }) {
   const theme = getBroadcastTheme(game);
-  return <div className="flex min-h-screen items-end bg-transparent p-12"><motion.div initial={{ x: -80, opacity: 0 }} animate={{ x: 0 }} className="relative overflow-hidden rounded-r-2xl border border-white/15 bg-black/85 px-7 py-5 shadow-2xl backdrop-blur-md"><div className="absolute inset-y-0 left-0 w-1" style={{ background: theme.accent }} /><div className="text-2xl font-black uppercase tracking-tight text-white">{name}</div><div className="mt-1 text-[11px] font-bold uppercase tracking-[.28em] text-white/45">{subtitle}</div></motion.div></div>;
+  return <div className="flex min-h-screen items-end bg-transparent p-12"><motion.div initial={{ x: -80, opacity: 0 }} animate={{ x: 0, opacity: 1 }} className="relative overflow-hidden rounded-r-2xl border border-white/15 bg-black/85 px-7 py-5 shadow-2xl backdrop-blur-md"><div className="absolute inset-y-0 left-0 w-1" style={{ background: theme.accent }} /><div className="text-2xl font-black uppercase tracking-tight text-white">{name}</div><div className="mt-1 text-[11px] font-bold uppercase tracking-[.28em] text-white/45">{subtitle}</div></motion.div></div>;
 }
 
 export function BroadcastWinner({ winner = "CHAMPIONS", score = "3 — 1", game = "Valorant" }: { winner?: string; score?: string; game?: string }) {
