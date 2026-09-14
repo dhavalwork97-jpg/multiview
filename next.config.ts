@@ -2,33 +2,13 @@ import type { NextConfig } from "next";
 
 const CONTENT_SECURITY_POLICY = [
   "default-src 'self'",
-  // unsafe-inline/eval on scripts is Next.js's own dev/runtime requirement,
-  // not a wildcard for third-party scripts — the only additional origins
-  // allow-listed below are Clerk's (auth) and Cloudflare's (Clerk's bot-
-  // protection CAPTCHA), since both genuinely need to load their own JS.
-  // No ad/analytics domains are added here, consistent with Anthropic's
-  // own ad-free stance on Claude products and this platform's parallel
-  // choice not to run ads.
   "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://*.clerk.accounts.dev https://*.clerk.com https://challenges.cloudflare.com",
   "style-src 'self' 'unsafe-inline'",
-  // media-src covers HLS/clip playback. hls.js buffers into a
-  // MediaSource-backed blob: URL rather than handing the <video> element
-  // a direct network URL, so blob: has to be explicitly allowed here or
-  // playback is blocked even when the manifest itself loaded fine.
   `media-src 'self' blob: https://*.cloudfront.net https://*.supabase.co`,
-  // connect-src covers the Socket.IO server, the LiveKit WebRTC
-  // signaling/media endpoints, Clerk's API, Supabase Storage, and the
-  // browser-to-local-OBS WebSocket used by the Control Room. The local
-  // OBS entries are intentionally limited to the standard OBS WebSocket
-  // port rather than allowing arbitrary local connections.
-  `connect-src 'self' https://*.cloudfront.net https://*.supabase.co wss://*.onrender.com wss://*.fly.dev wss://media.fgcstream.com https://media.fgcstream.com https://*.clerk.accounts.dev https://*.clerk.com https://challenges.cloudflare.com ws://127.0.0.1:4455 ws://localhost:4455`,
+  `connect-src 'self' https://*.cloudfront.net https://*.supabase.co wss://*.onrender.com wss://*.fly.dev wss://media.fgcstream.com https://media.fgcstream.com https://*.clerk.accounts.dev https://*.clerk.com https://clerk-telemetry.com https://challenges.cloudflare.com ws://127.0.0.1:4455 ws://localhost:4455`,
   "img-src 'self' data: https:",
   "font-src 'self' data:",
   "frame-src https://*.clerk.accounts.dev https://*.clerk.com https://challenges.cloudflare.com https://www.youtube-nocookie.com https://www.youtube.com",
-  // Clerk spins up blob:-sourced web workers for background token
-  // refresh. With no worker-src set, browsers fall back to script-src,
-  // which doesn't include blob: — this line stops that fallback from
-  // blocking Clerk's workers.
   "worker-src 'self' blob:",
   "frame-ancestors 'none'",
   "base-uri 'self'",
@@ -45,12 +25,7 @@ const securityHeaders = [
 ];
 
 const nextConfig: NextConfig = {
-  // Keep production builds from being blocked by the repository's existing ESLint debt. TypeScript remains enforced by the build.
   eslint: { ignoreDuringBuilds: true },
-  // BullMQ 5.81 exposes an optional Valkey Glide adapter. FGC deliberately
-  // uses its ioredis connection path, so do not ask the Next.js server
-  // bundle to resolve the unused native Glide client. This removes the
-  // optional-dependency build warning without changing queue behavior.
   webpack(config) {
     config.resolve.alias = {
       ...(config.resolve.alias ?? {}),
