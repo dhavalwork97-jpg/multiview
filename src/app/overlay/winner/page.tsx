@@ -1,2 +1,7 @@
+"use client";
+
 import { BroadcastWinner } from "@/components/broadcast/BroadcastCards";
-export default function WinnerOverlay() { return <BroadcastWinner />; }
+
+export default function WinnerOverlay() {
+  return <BroadcastWinner />;
+}
