@@ -1,14 +1,32 @@
 import type { Metadata } from "next";
 import type { CSSProperties } from "react";
+import dynamic from "next/dynamic";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { db } from "@/lib/db";
-import { BracketExplorer } from "@/components/bracket/BracketExplorer";
 import { GameIcon } from "@/components/competition/GameIcon";
 import { TournamentCommandCenter } from "@/components/competition/TournamentCommandCenter";
-import { UniversalLiveViewer } from "@/components/competition/UniversalLiveViewer";
 import { CompetitionScoreboard } from "@/components/competition/CompetitionScoreboard";
 import { getCompetitionViewerState } from "@/lib/competition/get-viewer-state";
+
+const BracketExplorer = dynamic(
+  () => import("@/components/bracket/BracketExplorer").then((module) => module.BracketExplorer),
+  {
+    loading: () => <div className="surface-quiet rounded-card p-6 text-sm text-ink-faint">Loading bracket explorer…</div>,
+  },
+);
+
+const UniversalLiveViewer = dynamic(
+  () => import("@/components/competition/UniversalLiveViewer").then((module) => module.UniversalLiveViewer),
+  {
+    loading: () => <div className="surface-quiet rounded-card p-6 text-sm text-ink-faint">Loading live competition…</div>,
+  },
+);
+
+// Public tournament hubs are ISR pages. Live data is refreshed by the client
+// viewer/socket after hydration, so a viewer never needs to make the whole
+// tournament page a per-request dynamic render.
+export const revalidate = 30;
 
 export async function generateMetadata({ params }: { params: Promise<{ tournamentId: string }> }): Promise<Metadata> {
   const { tournamentId } = await params;
