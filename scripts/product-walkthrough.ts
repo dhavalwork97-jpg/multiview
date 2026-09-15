@@ -8,6 +8,7 @@ const SCREENSHOTS = path.join(OUT, 'screenshots');
 
 const routes = [
   ['/demo', 'Product overview'],
+  ['/demo/create-tournament', 'Create tournament'],
   ['/demo/admin', 'Tournament administration'],
   ['/demo/organizer', 'Organizer command center'],
   ['/demo/tournament', 'Tournament operations'],
@@ -52,6 +53,29 @@ async function captureFullPageJourney(page: Page, slug: string) {
   return { ...meta, scrollSteps: positions.length };
 }
 
+async function showcaseCreateTournament(page: Page) {
+  const steps: string[] = [];
+  for (const label of ['Competition name', 'Sport / category', 'Game / title', 'Competition type', 'Participant model', 'Format', 'Best of / series', 'Participants']) {
+    const locator = page.getByText(label, { exact: true }).first();
+    if (await locator.count()) {
+      await locator.scrollIntoViewIfNeeded().catch(() => {});
+      await sleep(550);
+      steps.push(label);
+    }
+  }
+  const create = page.getByRole('button', { name: /create tournament/i });
+  if (await create.count()) {
+    await create.scrollIntoViewIfNeeded();
+    await sleep(700);
+    await create.click();
+    await sleep(1000);
+    steps.push('Create tournament confirmation');
+  }
+  await page.evaluate(() => window.scrollTo({ top: 0, behavior: 'instant' as ScrollBehavior }));
+  await sleep(700);
+  return steps;
+}
+
 async function deepControlRoom(page: Page) {
   const keywords = [
     'Program', 'Preview', 'Replay', 'Sponsor', 'Break', 'Rundown', 'Timeline',
@@ -70,7 +94,6 @@ async function deepControlRoom(page: Page) {
     }
   }
 
-  // Explore only controls that are explicitly demo-safe. Never submit forms or mutate data.
   const safeLabels = ['Program', 'Preview', 'Replay', 'Sponsor', 'Break'];
   for (const label of safeLabels) {
     const buttons = page.getByRole('button', { name: new RegExp(`^${label}$`, 'i') });
@@ -107,7 +130,6 @@ async function main() {
     if (msg.type() === 'error') errors.push(`console: ${msg.text()}`);
   });
 
-  // Guard against accidental writes while the recorder is running.
   await page.route('**/api/**', async (route) => {
     const method = route.request().method();
     if (!['GET', 'HEAD', 'OPTIONS'].includes(method)) {
@@ -125,6 +147,7 @@ async function main() {
     const bodyText = (await page.locator('body').innerText().catch(() => '')).slice(0, 5000);
     const notFound = status === 404 || /signal not found|page not found|404/i.test(bodyText);
     let detail: unknown = null;
+    if (route === '/demo/create-tournament' && !notFound) detail = await showcaseCreateTournament(page);
     if (route === '/demo/control-room' && !notFound) detail = await deepControlRoom(page);
     const capture = notFound ? null : await captureFullPageJourney(page, route.slice(1).replaceAll('/', '-'));
     results.push({ route, label, status, notFound, durationMs: Date.now() - started, capture, detail });
@@ -132,10 +155,10 @@ async function main() {
 
   await page.evaluate(() => window.scrollTo({ top: 0, behavior: 'instant' as ScrollBehavior }));
   await sleep(700);
+  const video = await page.video()?.path().catch(() => null);
   await context.close();
   await browser.close();
 
-  const video = await page.video()?.path().catch(() => null);
   await fs.writeFile(path.join(OUT, 'feature-inventory.json'), JSON.stringify({
     baseUrl: BASE,
     generatedAt: new Date().toISOString(),
