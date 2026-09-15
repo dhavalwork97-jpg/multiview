@@ -4,20 +4,12 @@ const nav = [
   ["Overview", "/demo"],
   ["Admin", "/demo/admin"],
   ["Organizer", "/demo/organizer"],
-  ["Tournaments", "/demo/tournaments"],
   ["Tournament", "/demo/tournament"],
   ["Control Room", "/demo/control-room"],
   ["MultiView", "/demo/multiview"],
   ["Overlay", "/demo/overlay"],
-  ["Teams", "/demo/teams"],
-  ["Players", "/demo/players"],
-  ["Brackets", "/demo/brackets"],
   ["Matches", "/demo/matches"],
-  ["Check-in", "/demo/check-in"],
-  ["Stations", "/demo/stations"],
   ["Analytics", "/demo/analytics"],
-  ["Showcase", "/demo/showcase"],
-  ["Settings", "/demo/settings"],
 ] as const;
 
 export function DemoShell({ title, eyebrow, children }: { title: string; eyebrow?: string; children: React.ReactNode }) {
