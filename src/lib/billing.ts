@@ -14,7 +14,7 @@ export function trialDaysRemaining(user: { trialEndsAt?: Date | null } | null | 
   return Math.max(0, Math.ceil(ms / 86400000));
 }
 
-export function maxMultiViewTiles(user: { subscriptionStatus?: string | null; trialEndsAt?: Date | null }): 4 | 9 {
+export function maxMultiViewTiles(user: { subscriptionStatus?: string | null; trialEndsAt?: Date | null } | null | undefined): 4 | 9 {
   return isPremium(user) ? 9 : 4;
 }
 
