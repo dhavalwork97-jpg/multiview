@@ -24,6 +24,22 @@ function placementPoints(stage: CompetitionStageConfig, place: number) {
   return stage.scoring.placementPoints.find((entry) => entry.place === place)?.points ?? 0;
 }
 
+function sideMatchScore(stage: CompetitionStageConfig, side: { scoreEvents: Array<{ metric: string; value: number }> }) {
+  let placement: number | null = null;
+  let eliminations = 0;
+  let directPoints = 0;
+  for (const event of side.scoreEvents) {
+    if (event.metric === "placement") placement = event.value;
+    if (event.metric === "kills" || event.metric === "eliminations") eliminations += event.value;
+    if (event.metric === "points") directPoints += event.value;
+  }
+  return {
+    placement,
+    eliminations,
+    points: directPoints + (placement ? placementPoints(stage, placement) : 0) + eliminations * stage.scoring.eliminationPoints,
+  };
+}
+
 async function calculateBattleRoyaleStandings(tx: Tx, stageId: string, cfg: CompetitionStageConfig): Promise<Standing[]> {
   const matches = await tx.match.findMany({ where: { stageId, status: "COMPLETED" }, include: { sides: { include: { participants: { include: { player: true } }, scoreEvents: true } } }, orderBy: { matchIndex: "asc" } });
   const map = new Map<string, Standing>();
@@ -31,17 +47,42 @@ async function calculateBattleRoyaleStandings(tx: Tx, stageId: string, cfg: Comp
     const participant = side.participants.find((item) => item.playerId)?.player;
     if (!participant) continue;
     const current = map.get(participant.id) ?? { playerId: participant.id, label: participant.gamertag, score: 0, eliminations: 0, wins: 0, firstPlaces: 0, matches: 0, lastMatch: match.matchIndex ?? 0 };
-    let placement: number | null = null; let eliminations = 0; let directPoints = 0;
-    for (const event of side.scoreEvents) {
-      if (event.metric === "placement") placement = event.value;
-      if (event.metric === "kills" || event.metric === "eliminations") eliminations += event.value;
-      if (event.metric === "points") directPoints += event.value;
-    }
-    current.score += directPoints + (placement ? placementPoints(cfg, placement) : 0) + eliminations * cfg.scoring.eliminationPoints;
-    current.eliminations += eliminations; current.wins += placement === 1 ? 1 : 0; current.firstPlaces += placement === 1 ? 1 : 0;
+    const result = sideMatchScore(cfg, side);
+    current.score += result.points;
+    current.eliminations += result.eliminations; current.wins += result.placement === 1 ? 1 : 0; current.firstPlaces += result.placement === 1 ? 1 : 0;
     current.matches += 1; current.lastMatch = match.matchIndex ?? current.lastMatch; map.set(participant.id, current);
   }
   return [...map.values()].sort((a, b) => b.score - a.score || b.firstPlaces - a.firstPlaces || b.eliminations - a.eliminations || b.wins - a.wins || b.lastMatch - a.lastMatch || a.playerId.localeCompare(b.playerId));
+}
+
+async function findMatchPointWinner(tx: Tx, stageId: string, cfg: CompetitionStageConfig): Promise<string | null> {
+  const threshold = cfg.victory.threshold;
+  if (!threshold || !cfg.victory.requiresWinAfterThreshold) return null;
+
+  const matches = await tx.match.findMany({
+    where: { stageId, status: "COMPLETED" },
+    include: { sides: { include: { participants: true, scoreEvents: true } } },
+    orderBy: [{ matchIndex: "asc" }, { id: "asc" }],
+  });
+  const totals = new Map<string, number>();
+
+  for (const match of matches) {
+    const results = match.sides.map((side) => ({
+      playerId: side.participants.find((participant) => participant.playerId)?.playerId ?? null,
+      result: sideMatchScore(cfg, side),
+    })).filter((entry): entry is { playerId: string; result: ReturnType<typeof sideMatchScore> } => Boolean(entry.playerId));
+
+    for (const entry of results) {
+      const beforeMatchScore = totals.get(entry.playerId) ?? 0;
+      if (beforeMatchScore >= threshold && entry.result.placement === 1) return entry.playerId;
+    }
+
+    for (const entry of results) {
+      totals.set(entry.playerId, (totals.get(entry.playerId) ?? 0) + entry.result.points);
+    }
+  }
+
+  return null;
 }
 
 function qualifiedPlayers(standings: Standing[], stage: CompetitionStageConfig): Set<string> {
@@ -99,15 +140,20 @@ export async function progressBattleRoyaleStage(db: PrismaClient, matchId: strin
     const standings = await calculateBattleRoyaleStandings(tx, stage.id, cfg);
     const allComplete = stageMatches.length > 0 && stageMatches.every((row) => row.status === "COMPLETED");
     const thresholdReached = cfg.victory.threshold ? standings.some((row) => row.score >= cfg.victory.threshold!) : false;
-    if (cfg.session.mode === "UNTIL_THRESHOLD" && !thresholdReached) {
+    const matchPointWinner = thresholdReached && cfg.victory.requiresWinAfterThreshold
+      ? await findMatchPointWinner(tx, stage.id, cfg)
+      : null;
+    const victoryReached = thresholdReached && (!cfg.victory.requiresWinAfterThreshold || Boolean(matchPointWinner));
+
+    if (cfg.session.mode === "UNTIL_THRESHOLD" && !victoryReached) {
       if (allComplete) {
         const entrants = standings.map((row) => row.playerId);
         const nextLobbies = await createStageLobbies(tx, match.tournamentId, stage.id, entrants, cfg, true);
-        return { stageCompleted: false, advanced: nextLobbies, standings, nextBatch: true };
+        return { stageCompleted: false, advanced: nextLobbies, standings, nextBatch: true, matchPointWinner: null };
       }
-      return { stageCompleted: false, advanced: [], standings };
+      return { stageCompleted: false, advanced: [], standings, matchPointWinner: null };
     }
-    if (cfg.session.mode === "FIXED_GAMES" && !allComplete) return { stageCompleted: false, advanced: [], standings };
+    if (cfg.session.mode === "FIXED_GAMES" && !allComplete) return { stageCompleted: false, advanced: [], standings, matchPointWinner: null };
     if (stage.status !== "COMPLETED") await tx.competitionStage.update({ where: { id: stage.id }, data: { status: "COMPLETED" } });
     const qualified = qualifiedPlayers(standings, cfg);
     if (qualified.size > 0) await tx.tournamentEntrant.updateMany({ where: { tournamentId: match.tournamentId, playerId: { notIn: [...qualified] } }, data: { eliminated: true } });
@@ -123,8 +169,8 @@ export async function progressBattleRoyaleStage(db: PrismaClient, matchId: strin
       await tx.tournament.update({ where: { id: match.tournamentId }, data: { status: "COMPLETED", endDate: new Date() } });
     }
     const eventExists = await tx.progressionEvent.findFirst({ where: { matchId: match.id, eventType: "STAGE_COMPLETED" }, select: { id: true } });
-    if (!eventExists) await tx.progressionEvent.create({ data: { tournamentId: match.tournamentId, matchId: match.id, eventType: "STAGE_COMPLETED", payload: { stageId: stage.id, qualifiedPlayerIds: [...qualified], standings } } });
-    return { stageCompleted: true, advanced, standings, qualifiedPlayerIds: [...qualified], nextStageId: nextStage?.id ?? null };
+    if (!eventExists) await tx.progressionEvent.create({ data: { tournamentId: match.tournamentId, matchId: match.id, eventType: "STAGE_COMPLETED", payload: { stageId: stage.id, qualifiedPlayerIds: [...qualified], standings, matchPointWinner } } });
+    return { stageCompleted: true, advanced, standings, qualifiedPlayerIds: [...qualified], nextStageId: nextStage?.id ?? null, matchPointWinner };
   }, { timeout: 30_000 });
 }
 
