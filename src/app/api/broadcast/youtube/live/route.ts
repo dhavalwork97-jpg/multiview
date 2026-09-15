@@ -12,8 +12,7 @@ export async function POST(request: Request) {
   if (!tournamentId || !["create", "testing", "live", "complete"].includes(action)) return NextResponse.json({ error: "tournamentId and a valid action are required" }, { status: 400 });
   const authorization = await authorizeBroadcastOperator(userId, tournamentId);
   if (!authorization.ok) return NextResponse.json({ error: authorization.status === 404 ? "Tournament not found" : "Forbidden" }, { status: authorization.status });
-  const vercelOidcToken = request.headers.get("x-vercel-oidc-token");
-  if (!vercelOidcToken) return NextResponse.json({ error: "Managed broadcast secret storage is not configured for this deployment." }, { status: 503 });
+  const vercelOidcToken = request.headers.get("x-vercel-oidc-token") ?? undefined;
   try {
     if (action === "create") {
       const title = typeof body.title === "string" && body.title.trim() ? body.title.trim() : "FGC Stream Tournament";
