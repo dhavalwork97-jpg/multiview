@@ -50,12 +50,13 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: message, code: "INVALID_DESTINATION", fieldErrors }, { status: 400 });
   }
 
-  const vercelOidcToken = request.headers.get("x-vercel-oidc-token");
-  if (!vercelOidcToken) return NextResponse.json({ error: "Managed broadcast secret storage is not configured for this deployment.", code: "MANAGED_KMS_UNAVAILABLE" }, { status: 503 });
   try {
-    if (body.provider === "rtmp" && body.streamKey?.trim()) destination.encryptedStreamKey = await encryptBroadcastSecret(body.streamKey.trim(), vercelOidcToken);
+    if (body.provider === "rtmp" && body.streamKey?.trim()) {
+      const vercelOidcToken = request.headers.get("x-vercel-oidc-token") ?? undefined;
+      destination.encryptedStreamKey = await encryptBroadcastSecret(body.streamKey.trim(), vercelOidcToken);
+    }
   } catch (error) {
-    return NextResponse.json({ error: error instanceof Error ? error.message : "Could not securely store the stream key", code: "MANAGED_KMS_ERROR" }, { status: 503 });
+    return NextResponse.json({ error: error instanceof Error ? error.message : "Could not securely store the stream key", code: "BROADCAST_SECRET_STORAGE_ERROR" }, { status: 503 });
   }
 
   const state = await loadTournament(body.tournamentId);
