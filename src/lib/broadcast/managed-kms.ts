@@ -1,3 +1,5 @@
+import { decryptFallback, encryptFallback, managedKmsConfigured } from "@/lib/broadcast/credential-storage";
+
 const GOOGLE_STS_URL = "https://sts.googleapis.com/v1/token";
 const GOOGLE_IAM_CREDENTIALS_URL = "https://iamcredentials.googleapis.com/v1";
 const GOOGLE_KMS_URL = "https://cloudkms.googleapis.com/v1";
@@ -41,7 +43,7 @@ async function serviceAccountAccessToken(vercelOidcToken: string): Promise<strin
   return data.accessToken;
 }
 
-export async function encryptBroadcastSecret(value: string, vercelOidcToken: string): Promise<string> {
+async function encryptWithKms(value: string, vercelOidcToken: string): Promise<string> {
   const accessToken = await serviceAccountAccessToken(vercelOidcToken);
   const key = env("GCP_KMS_KEY_NAME");
   const response = await fetch(`${GOOGLE_KMS_URL}/${key}:encrypt`, {
@@ -55,9 +57,9 @@ export async function encryptBroadcastSecret(value: string, vercelOidcToken: str
   return `gcp-kms.v1.${Buffer.from(JSON.stringify({ key, ciphertext: data.ciphertext }), "utf8").toString("base64url")}`;
 }
 
-export async function decryptBroadcastSecret(value: string, vercelOidcToken: string): Promise<string> {
+async function decryptWithKms(value: string, vercelOidcToken: string): Promise<string> {
   const prefix = "gcp-kms.v1.";
-  if (!value.startsWith(prefix)) throw new Error("Unsupported broadcast secret format; reconnect the provider");
+  if (!value.startsWith(prefix)) throw new Error("Unsupported managed KMS ciphertext");
   let payload: { key?: string; ciphertext?: string };
   try {
     payload = JSON.parse(Buffer.from(value.slice(prefix.length), "base64url").toString("utf8")) as { key?: string; ciphertext?: string };
@@ -75,4 +77,17 @@ export async function decryptBroadcastSecret(value: string, vercelOidcToken: str
   const data = await response.json().catch(() => ({}));
   if (!response.ok || typeof data.plaintext !== "string") throw new Error(`Managed KMS decryption failed (${response.status})`);
   return Buffer.from(data.plaintext, "base64").toString("utf8");
+}
+
+export async function encryptBroadcastSecret(value: string, vercelOidcToken?: string): Promise<string> {
+  if (!managedKmsConfigured()) return encryptFallback(value);
+  if (!vercelOidcToken) throw new Error("Vercel OIDC token is required when managed KMS is enabled");
+  return encryptWithKms(value, vercelOidcToken);
+}
+
+export async function decryptBroadcastSecret(value: string, vercelOidcToken?: string): Promise<string> {
+  if (value.startsWith("app-encrypted.v1.")) return decryptFallback(value);
+  if (!managedKmsConfigured()) throw new Error("Managed KMS is not configured for this credential");
+  if (!vercelOidcToken) throw new Error("Vercel OIDC token is required when managed KMS is enabled");
+  return decryptWithKms(value, vercelOidcToken);
 }
