@@ -3,6 +3,12 @@ import { auth } from "@clerk/nextjs/server";
 import { authorizeBroadcastOperator } from "@/lib/broadcast/authorization";
 import { connectYouTube, verifyYouTubeOAuthState, youtubeOAuthCookieName } from "@/lib/broadcast/youtube-connection";
 
+function appUrl() {
+  const value = process.env.NEXT_PUBLIC_APP_URL;
+  if (!value) throw new Error("Missing required environment variable NEXT_PUBLIC_APP_URL");
+  return value.replace(/\/$/, "");
+}
+
 export async function GET(request: Request) {
   const { userId } = await auth();
   if (!userId) return new NextResponse("Sign in to connect YouTube.", { status: 401 });
@@ -23,7 +29,7 @@ export async function GET(request: Request) {
     if (!authorization.ok) return new NextResponse("You do not have access to this tournament.", { status: authorization.status });
 
     await connectYouTube(state.tournamentId, code);
-    const destination = `${new URL(request.url).origin}/broadcast/${encodeURIComponent(state.tournamentId)}?youtube=connected`;
+    const destination = `${appUrl()}/broadcast/${encodeURIComponent(state.tournamentId)}?youtube=connected`;
     const response = NextResponse.redirect(destination);
     response.cookies.set(youtubeOAuthCookieName(), "", { httpOnly: true, secure: process.env.NODE_ENV === "production", sameSite: "lax", maxAge: 0, path: "/" });
     return response;
