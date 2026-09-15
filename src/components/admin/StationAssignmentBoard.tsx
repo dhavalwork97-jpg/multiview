@@ -9,6 +9,9 @@ type StationHealth = { id: string; label: string; status: "OFFLINE" | "IDLE" | "
 type StreamCredentials = { ingestUrl: string; streamKey: string };
 type CredentialsState = { status: "idle" } | { status: "loading" } | { status: "ready"; credentials: StreamCredentials } | { status: "error"; message: string };
 type BusyState = Record<string, "start" | "stop" | undefined>;
+type Destination = { id: string; provider: string; label: string; channelName?: string | null; streamUrl?: string | null };
+
+type StreamTarget = { provider: "youtube" | "rtmp"; destinationId?: string };
 
 function playerName(player: PlayerRef) { return player?.gamertag ?? "TBD"; }
 
@@ -19,15 +22,19 @@ export function StationAssignmentBoard({ tournamentId }: { tournamentId: string 
   const [error, setError] = useState<string | null>(null);
   const [credentials, setCredentials] = useState<Record<string, CredentialsState>>({});
   const [busy, setBusy] = useState<BusyState>({});
+  const [destinations, setDestinations] = useState<Destination[]>([]);
+  const [streamTargets, setStreamTargets] = useState<Record<string, StreamTarget>>({});
   const socket = useSocket({ tournamentId });
 
   async function refresh() {
-    const [matchesRes, stationsRes] = await Promise.all([
+    const [matchesRes, stationsRes, destinationsRes] = await Promise.all([
       fetch(`/api/matches?tournamentId=${tournamentId}&status=QUEUED`),
       fetch(`/api/stations?tournamentId=${tournamentId}`),
+      fetch(`/api/broadcast/destinations?tournamentId=${tournamentId}`),
     ]);
     if (matchesRes.ok) { const data = await matchesRes.json(); setQueued(data.matches.filter((m: QueuedMatch) => !m.stationId)); }
     if (stationsRes.ok) { const data = await stationsRes.json(); setStations(data.stations); }
+    if (destinationsRes.ok) { const data = await destinationsRes.json(); setDestinations((data.destinations ?? []).filter((d: Destination) => d.provider === "rtmp")); }
   }
 
   useEffect(() => {
@@ -50,9 +57,14 @@ export function StationAssignmentBoard({ tournamentId }: { tournamentId: string 
   }
 
   async function startStream(matchId: string, stationId: string) {
+    const target = streamTargets[stationId] ?? { provider: "youtube" as const };
+    if (target.provider === "rtmp") {
+      setError("Kick / Custom RTMP uses the saved station credentials in OBS. FGC Stream cannot start an RTMP encoder without an encoder connection.");
+      return;
+    }
     setBusy((prev) => ({ ...prev, [stationId]: "start" })); setError(null);
     try {
-      const res = await fetch(`/api/matches/${matchId}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ status: "LIVE" }) });
+      const res = await fetch(`/api/stations/${stationId}/youtube-session`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ matchId }) });
       if (!res.ok) { const data = await res.json().catch(() => ({})); throw new Error(data.error ?? "Failed to start station stream"); }
       await refresh();
     } catch (err) { setError(err instanceof Error ? err.message : "Failed to start station stream"); }
@@ -94,15 +106,25 @@ export function StationAssignmentBoard({ tournamentId }: { tournamentId: string 
         const assignedMatch = s.matches[0];
         const canEditAssignment = s.status !== "LIVE" && s.status !== "ERROR" && s.status !== "OFFLINE";
         const stationBusy = busy[s.id];
+        const target = streamTargets[s.id] ?? { provider: "youtube" as const };
         return <li key={s.id} className="rounded-card border border-arena-600 bg-arena-800 px-3 py-2 text-sm">
           <div className="flex items-center justify-between"><span className="font-medium">{s.label}</span><StatusPill status={s.isStale ? "ERROR" : s.status} /></div>
           {assignedMatch ? <div className="mt-2 rounded border border-arena-600 bg-arena-900 p-2">
             <p className="text-xs text-ink-faint">Assigned queued match</p>
             <p className="mt-1 text-xs"><span className="text-corner-p1">{playerName(assignedMatch.playerOne)}</span>{" vs "}<span className="text-corner-p2">{playerName(assignedMatch.playerTwo)}</span></p>
-            {s.status !== "LIVE" && <div className="mt-2 flex flex-wrap items-center gap-2">
-              <button type="button" disabled={stationBusy !== undefined} onClick={() => void startStream(assignedMatch.id, s.id)} className="rounded border border-signal-live px-2 py-1 text-[11px] font-mono uppercase tracking-wide text-signal-live hover:bg-signal-live/10 disabled:opacity-50">{stationBusy === "start" ? "Starting…" : "Start Stream"}</button>
-              <select disabled={assigning === assignedMatch.id || !canEditAssignment} defaultValue="" onChange={(e) => { if (e.target.value) void assign(assignedMatch.id, e.target.value); }} className="min-w-0 flex-1 rounded border border-arena-600 bg-arena-950 px-2 py-1 text-[11px]"><option value="">Move to…</option>{stations.filter((candidate) => candidate.id !== s.id && stationIsAvailable(candidate)).map((candidate) => <option key={candidate.id} value={candidate.id}>{candidate.label}</option>)}</select>
-              <button type="button" disabled={assigning === assignedMatch.id || !canEditAssignment} onClick={() => void assign(assignedMatch.id, null)} className="shrink-0 rounded border border-arena-600 px-2 py-1 text-[11px] uppercase tracking-wide text-ink-faint hover:border-signal-error hover:text-signal-error disabled:opacity-50">Unassign</button>
+            {s.status !== "LIVE" && <div className="mt-2 space-y-2">
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="text-[10px] uppercase tracking-widest text-ink-faint">Stream to</span>
+                <button type="button" onClick={() => setStreamTargets((prev) => ({ ...prev, [s.id]: { provider: "youtube" } }))} className={`rounded border px-2 py-1 text-[11px] uppercase tracking-wide ${target.provider === "youtube" ? "border-signal-live bg-signal-live/10 text-signal-live" : "border-arena-600 text-ink-faint"}`}>YouTube</button>
+                {destinations.map((destination) => <button key={destination.id} type="button" onClick={() => setStreamTargets((prev) => ({ ...prev, [s.id]: { provider: "rtmp", destinationId: destination.id } }))} className={`rounded border px-2 py-1 text-[11px] uppercase tracking-wide ${target.provider === "rtmp" && target.destinationId === destination.id ? "border-signal-live bg-signal-live/10 text-signal-live" : "border-arena-600 text-ink-faint"}`}>{destination.label}</button>)}
+                {destinations.length === 0 && <span className="text-[11px] text-ink-faint">No saved RTMP destination</span>}
+              </div>
+              <div className="flex flex-wrap items-center gap-2">
+                <button type="button" disabled={stationBusy !== undefined} onClick={() => void startStream(assignedMatch.id, s.id)} className="rounded border border-signal-live px-2 py-1 text-[11px] font-mono uppercase tracking-wide text-signal-live hover:bg-signal-live/10 disabled:opacity-50">{stationBusy === "start" ? "Starting…" : target.provider === "youtube" ? "Start Stream" : "Use RTMP Credentials"}</button>
+                <select disabled={assigning === assignedMatch.id || !canEditAssignment} defaultValue="" onChange={(e) => { if (e.target.value) void assign(assignedMatch.id, e.target.value); }} className="min-w-0 flex-1 rounded border border-arena-600 bg-arena-950 px-2 py-1 text-[11px]"><option value="">Move to…</option>{stations.filter((candidate) => candidate.id !== s.id && stationIsAvailable(candidate)).map((candidate) => <option key={candidate.id} value={candidate.id}>{candidate.label}</option>)}</select>
+                <button type="button" disabled={assigning === assignedMatch.id || !canEditAssignment} onClick={() => void assign(assignedMatch.id, null)} className="shrink-0 rounded border border-arena-600 px-2 py-1 text-[11px] uppercase tracking-wide text-ink-faint hover:border-signal-error hover:text-signal-error disabled:opacity-50">Unassign</button>
+              </div>
+              {target.provider === "rtmp" && <p className="text-[10px] leading-4 text-ink-faint">Uses the saved {destinations.find((d) => d.id === target.destinationId)?.label ?? "RTMP"} credentials. The encoder/OBS still has to send the video.</p>}
             </div>}
           </div> : <p className="mt-1 text-xs text-ink-faint">No queued match assigned.</p>}
           {s.status === "LIVE" && <div className="mt-2 flex flex-wrap items-center gap-3"><p className="font-mono text-[11px] text-ink-faint">{s.currentBitrateKbps ?? "—"} kbps · {s.droppedFrames ?? 0} dropped frames</p><button type="button" disabled={stationBusy !== undefined} onClick={() => void stopStream(s.id)} className="rounded border border-signal-error px-2 py-1 text-[11px] font-mono uppercase tracking-wide text-signal-error hover:bg-signal-error/10 disabled:opacity-50">{stationBusy === "stop" ? "Stopping…" : "Stop Stream"}</button>{s.youtubeVideoId && <a href={`https://www.youtube.com/watch?v=${s.youtubeVideoId}`} target="_blank" rel="noreferrer" className="rounded border border-arena-600 px-2 py-1 text-[11px] uppercase tracking-wide text-ink-muted hover:text-ink">Preview</a>}</div>}
