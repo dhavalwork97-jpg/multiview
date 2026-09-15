@@ -50,7 +50,10 @@ export default function BroadcastOperationsPanel({ tournamentId }: Props) {
           <div style={{ fontSize: 10, letterSpacing: ".15em", opacity: .45, textTransform: "uppercase" }}>Broadcast Operations</div>
           <h2 style={{ margin: "6px 0 0", fontSize: 20 }}>Broadcast status</h2>
         </div>
-        <a href={`/broadcast/${tournamentId}`} style={{ color: "#c4b5fd", textDecoration: "none", fontSize: 11, letterSpacing: ".1em" }}>OPEN BROADCAST CONSOLE →</a>
+        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+          <a href={`/broadcast/${tournamentId}/connections`} style={{ border: "1px solid #8b5cf6", borderRadius: 10, padding: "9px 12px", background: "#171127", color: "#e8ddff", textDecoration: "none", fontSize: 12, fontWeight: 700 }}>CONNECT BROADCAST</a>
+          <a href={`/broadcast/${tournamentId}`} style={{ color: "#aaa5bb", textDecoration: "none", fontSize: 11, letterSpacing: ".1em" }}>OPEN CONSOLE →</a>
+        </div>
       </div>
       <div style={{ display: "grid", gridTemplateColumns: "repeat(3, minmax(0, 1fr))", gap: 10, marginTop: 14 }}>
         <StatusCard title="YouTube" value={loading ? "Loading…" : youtube ? `Connected${youtube.channelName ? ` · ${youtube.channelName}` : ""}` : "Not connected"} detail={youtube?.broadcast?.videoId ? "Live event has a watch page" : "Channel connection status"} />
