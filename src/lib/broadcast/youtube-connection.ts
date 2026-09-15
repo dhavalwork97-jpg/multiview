@@ -15,15 +15,9 @@ export type YouTubeConnection = {
   encryptedRefreshToken: string;
 };
 
-type OAuthState = {
-  tournamentId: string;
-  clerkUserId: string;
-  exp: number;
-};
-
-type Overlay = Record<string, unknown> & {
-  youtubeConnection?: YouTubeConnection;
-};
+type OAuthState = { tournamentId: string; clerkUserId: string; exp: number };
+type Overlay = Record<string, unknown> & { youtubeConnection?: YouTubeConnection };
+type YouTubeChannelResponse = { items?: Array<{ id?: string; snippet?: { title?: string } }> };
 
 function requiredEnv(name: string) {
   const value = process.env[name];
@@ -32,26 +26,13 @@ function requiredEnv(name: string) {
 }
 
 function keyMaterial() {
-  return createHmac("sha256", requiredEnv("BROADCAST_ENCRYPTION_KEY"))
-    .update("fgc-stream-youtube-refresh-token")
-    .digest();
+  return createHmac("sha256", requiredEnv("BROADCAST_ENCRYPTION_KEY")).update("fgc-stream-youtube-refresh-token").digest();
 }
 
-function stateSecret() {
-  return process.env.BROADCAST_OAUTH_STATE_SECRET || requiredEnv("BROADCAST_ENCRYPTION_KEY");
-}
-
-function encode(value: string) {
-  return Buffer.from(value, "utf8").toString("base64url");
-}
-
-function decode(value: string) {
-  return Buffer.from(value, "base64url").toString("utf8");
-}
-
-export function youtubeOAuthCookieName() {
-  return OAUTH_STATE_COOKIE;
-}
+function stateSecret() { return process.env.BROADCAST_OAUTH_STATE_SECRET || requiredEnv("BROADCAST_ENCRYPTION_KEY"); }
+function encode(value: string) { return Buffer.from(value, "utf8").toString("base64url"); }
+function decode(value: string) { return Buffer.from(value, "base64url").toString("utf8"); }
+export function youtubeOAuthCookieName() { return OAUTH_STATE_COOKIE; }
 
 export function createYouTubeOAuthState(input: Omit<OAuthState, "exp">) {
   const payload = encode(JSON.stringify({ ...input, exp: Math.floor(Date.now() / 1000) + OAUTH_STATE_MAX_AGE_SECONDS }));
@@ -85,70 +66,36 @@ export function decryptRefreshToken(value: string) {
   return Buffer.concat([decipher.update(Buffer.from(encryptedValue, "base64url")), decipher.final()]).toString("utf8");
 }
 
-export function youtubeRedirectUri() {
-  return `${requiredEnv("NEXT_PUBLIC_APP_URL").replace(/\/$/, "")}/api/broadcast/youtube/callback`;
-}
+export function youtubeRedirectUri() { return `${requiredEnv("NEXT_PUBLIC_APP_URL").replace(/\/$/, "")}/api/broadcast/youtube/callback`; }
 
 export function youtubeAuthorizationUrl(state: string) {
-  const params = new URLSearchParams({
-    client_id: requiredEnv("YOUTUBE_CLIENT_ID"),
-    redirect_uri: youtubeRedirectUri(),
-    response_type: "code",
-    access_type: "offline",
-    prompt: "consent",
-    scope: "https://www.googleapis.com/auth/youtube",
-    state,
-  });
+  const params = new URLSearchParams({ client_id: requiredEnv("YOUTUBE_CLIENT_ID"), redirect_uri: youtubeRedirectUri(), response_type: "code", access_type: "offline", prompt: "consent", scope: "https://www.googleapis.com/auth/youtube", state });
   return `${GOOGLE_AUTH_URL}?${params.toString()}`;
 }
 
 async function exchangeCode(code: string) {
-  const response = await fetch(GOOGLE_TOKEN_URL, {
-    method: "POST",
-    headers: { "Content-Type": "application/x-www-form-urlencoded" },
-    body: new URLSearchParams({
-      code,
-      client_id: requiredEnv("YOUTUBE_CLIENT_ID"),
-      client_secret: requiredEnv("YOUTUBE_CLIENT_SECRET"),
-      redirect_uri: youtubeRedirectUri(),
-      grant_type: "authorization_code",
-    }),
-    cache: "no-store",
-  });
+  const response = await fetch(GOOGLE_TOKEN_URL, { method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" }, body: new URLSearchParams({ code, client_id: requiredEnv("YOUTUBE_CLIENT_ID"), client_secret: requiredEnv("YOUTUBE_CLIENT_SECRET"), redirect_uri: youtubeRedirectUri(), grant_type: "authorization_code" }), cache: "no-store" });
   const data = await response.json().catch(() => ({}));
   if (!response.ok || !data.refresh_token) throw new Error(`YouTube OAuth exchange failed (${response.status})`);
   return data as { refresh_token: string; access_token?: string };
 }
 
 async function youtubeChannel(accessToken: string) {
-  const response = await fetch(`${YOUTUBE_API}/channels?part=snippet&mine=true`, {
-    headers: { Authorization: `Bearer ${accessToken}` },
-    cache: "no-store",
-  });
-  const data = await response.json().catch(() => ({}));
+  const response = await fetch(`${YOUTUBE_API}/channels?part=snippet&mine=true`, { headers: { Authorization: `Bearer ${accessToken}` }, cache: "no-store" });
+  const data = await response.json().catch(() => ({})) as YouTubeChannelResponse;
   if (!response.ok) throw new Error(`Could not read YouTube channel (${response.status})`);
   const channel = data.items?.[0];
-  return { channelId: channel?.id as string | undefined, channelName: channel?.snippet?.title as string | undefined };
+  return { channelId: channel?.id, channelName: channel?.snippet?.title };
 }
 
 export async function connectYouTube(tournamentId: string, code: string) {
   const tokens = await exchangeCode(code);
-  const channel = tokens.access_token ? await youtubeChannel(tokens.access_token) : {};
+  const channel = tokens.access_token ? await youtubeChannel(tokens.access_token) : { channelId: undefined, channelName: undefined };
   const state = await db.broadcastState.findUnique({ where: { tournamentId }, select: { overlay: true } });
   const previous = state?.overlay && typeof state.overlay === "object" && !Array.isArray(state.overlay) ? state.overlay as Overlay : {};
-  const connection: YouTubeConnection = {
-    connected: true,
-    channelId: channel.channelId,
-    channelName: channel.channelName,
-    connectedAt: new Date().toISOString(),
-    encryptedRefreshToken: encryptRefreshToken(tokens.refresh_token),
-  };
+  const connection: YouTubeConnection = { connected: true, channelId: channel.channelId, channelName: channel.channelName, connectedAt: new Date().toISOString(), encryptedRefreshToken: encryptRefreshToken(tokens.refresh_token) };
   const overlay = { ...previous, youtubeConnection: connection };
-  await db.broadcastState.upsert({
-    where: { tournamentId },
-    create: { tournamentId, scene: "OFFLINE", overlay: JSON.parse(JSON.stringify(overlay)) },
-    update: { overlay: JSON.parse(JSON.stringify(overlay)) },
-  });
+  await db.broadcastState.upsert({ where: { tournamentId }, create: { tournamentId, scene: "OFFLINE", overlay: JSON.parse(JSON.stringify(overlay)) }, update: { overlay: JSON.parse(JSON.stringify(overlay)) } });
   return { channelId: channel.channelId, channelName: channel.channelName };
 }
 
@@ -166,12 +113,7 @@ export async function getYouTubeAccessToken(tournamentId: string) {
   const connection = overlay.youtubeConnection;
   if (!connection?.encryptedRefreshToken) throw new Error("YouTube is not connected for this tournament");
   const refreshToken = decryptRefreshToken(connection.encryptedRefreshToken);
-  const response = await fetch(GOOGLE_TOKEN_URL, {
-    method: "POST",
-    headers: { "Content-Type": "application/x-www-form-urlencoded" },
-    body: new URLSearchParams({ client_id: requiredEnv("YOUTUBE_CLIENT_ID"), client_secret: requiredEnv("YOUTUBE_CLIENT_SECRET"), refresh_token: refreshToken, grant_type: "refresh_token" }),
-    cache: "no-store",
-  });
+  const response = await fetch(GOOGLE_TOKEN_URL, { method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" }, body: new URLSearchParams({ client_id: requiredEnv("YOUTUBE_CLIENT_ID"), client_secret: requiredEnv("YOUTUBE_CLIENT_SECRET"), refresh_token: refreshToken, grant_type: "refresh_token" }), cache: "no-store" });
   const data = await response.json().catch(() => ({}));
   if (!response.ok || !data.access_token) throw new Error(`YouTube token refresh failed (${response.status})`);
   return data.access_token as string;
