@@ -2,18 +2,19 @@ import Link from "next/link";
 import { DemoShell, Stat } from "./_components/demo-shell";
 
 const sections = [
-  ["Operations", [
+  ["Setup", [
+    ["/demo/create-tournament", "Create Tournament", "Create an event, choose the game, format, participants, stages and stations."],
     ["/demo/admin", "Admin Control Center", "Platform administration and competition operations."],
     ["/demo/organizer", "Organizer Workspace", "Registrations, scheduling, moderation and event readiness."],
     ["/demo/tournament", "Tournament Workspace", "Participants, competition structure, matches and tournament operations."],
   ]],
   ["Production", [
+    ["/demo/matches", "Matches", "Match queue, live state and completed match operations."],
     ["/demo/control-room", "Tournament Control Room", "Rundown, station operations, stream control and live match coordination."],
-    ["/demo/multiview", "MultiView", "Multi-source monitoring and program output for broadcast teams."],
     ["/demo/overlay", "Broadcast Overlay", "Viewer-facing live graphics and HUD presentation."],
+    ["/demo/multiview", "MultiView", "Multi-source monitoring and program output for broadcast teams."],
   ]],
   ["Competition & Insights", [
-    ["/demo/matches", "Matches", "Match queue, live state and completed match operations."],
     ["/demo/analytics", "Analytics", "Competition and broadcast performance views."],
   ]],
 ] as const;
@@ -45,7 +46,7 @@ export default function DemoHome() {
     <div className="mt-10 space-y-10">
       {sections.map(([section, links]) => <section key={section}>
         <p className="mb-3 font-mono text-xs uppercase tracking-[0.24em] text-ink-faint">{section}</p>
-        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
           {links.map(([href, title, desc]) => <Link key={href} href={href} className="group rounded-card border border-arena-700 bg-arena-900 p-5 transition hover:border-signal-live hover:bg-arena-800">
             <p className="font-display text-xl uppercase group-hover:text-signal-live">{title}</p>
             <p className="mt-2 text-sm text-ink-muted">{desc}</p>
