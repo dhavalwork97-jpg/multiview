@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useState } from "react";
 
 type Team = {
@@ -65,7 +66,7 @@ export function TeamDirectoryPicker({ tournamentId }: { tournamentId: string }) 
           placeholder="Search team name or tag…"
           className="min-w-0 flex-1 rounded-md border border-arena-700 bg-arena-950 px-3 py-2 text-sm outline-none focus:border-ink"
         />
-        <a href="/teams" className="action-secondary shrink-0">Browse directory</a>
+        <Link href="/teams" className="action-secondary shrink-0">Browse directory</Link>
       </div>
 
       <div className="mt-4 grid gap-2">
