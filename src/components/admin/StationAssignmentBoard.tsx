@@ -52,7 +52,7 @@ export function StationAssignmentBoard({ tournamentId }: { tournamentId: string 
   async function startStream(matchId: string, stationId: string) {
     setBusy((prev) => ({ ...prev, [stationId]: "start" })); setError(null);
     try {
-      const res = await fetch(`/api/matches/${matchId}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ status: "LIVE" }) });
+      const res = await fetch(`/api/stations/${stationId}/youtube-session`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ matchId }) });
       if (!res.ok) { const data = await res.json().catch(() => ({})); throw new Error(data.error ?? "Failed to start station stream"); }
       await refresh();
     } catch (err) { setError(err instanceof Error ? err.message : "Failed to start station stream"); }
