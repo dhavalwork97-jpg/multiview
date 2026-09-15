@@ -37,7 +37,7 @@ export async function GET(request: Request) {
   if (!userId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const tournamentId = new URL(request.url).searchParams.get("tournamentId");
-  if (!tournamentId) return NextResponse.json({ error: "tournamentId is required" }, { status: 400 });
+  if (!tournamentId) return NextResponse.json({ error: "tournamentId is required", code: "MISSING_TOURNAMENT_ID" }, { status: 400 });
 
   const authorization = await authorizeBroadcastOperator(userId, tournamentId);
   if (!authorization.ok) return NextResponse.json({ error: authorization.status === 404 ? "Tournament not found" : "Forbidden" }, { status: authorization.status });
@@ -50,16 +50,31 @@ export async function POST(request: Request) {
   const { userId } = await auth();
   if (!userId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const body = (await request.json()) as Partial<BroadcastDestinationInput> & { tournamentId?: string };
+  let body: Partial<BroadcastDestinationInput> & { tournamentId?: string };
+  try {
+    body = await request.json();
+  } catch {
+    return NextResponse.json({ error: "Request body must be valid JSON.", code: "INVALID_JSON" }, { status: 400 });
+  }
+
   if (!body.tournamentId || !body.provider || !body.label) {
-    return NextResponse.json({ error: "tournamentId, provider and label are required" }, { status: 400 });
+    const fieldErrors = {
+      ...(body.tournamentId ? {} : { tournamentId: "Tournament is required." }),
+      ...(body.provider ? {} : { provider: "Destination type is required." }),
+      ...(body.label ? {} : { label: "A destination label is required." }),
+    };
+    return NextResponse.json({
+      error: Object.values(fieldErrors)[0] ?? "Required destination fields are missing.",
+      code: "MISSING_REQUIRED_FIELDS",
+      fieldErrors,
+    }, { status: 400 });
   }
 
   const authorization = await authorizeBroadcastOperator(userId, body.tournamentId);
   if (!authorization.ok) return NextResponse.json({ error: authorization.status === 404 ? "Tournament not found" : "Forbidden" }, { status: authorization.status });
 
   if (!["youtube", "twitch", "rtmp"].includes(body.provider)) {
-    return NextResponse.json({ error: "Invalid broadcast provider" }, { status: 400 });
+    return NextResponse.json({ error: "Invalid broadcast provider", code: "INVALID_PROVIDER", fieldErrors: { provider: "Choose a supported destination type." } }, { status: 400 });
   }
 
   let destination: StoredDestination;
@@ -75,7 +90,13 @@ export async function POST(request: Request) {
       destination.encryptedStreamKey = encryptRefreshToken(body.streamKey.trim());
     }
   } catch (error) {
-    return NextResponse.json({ error: error instanceof Error ? error.message : "Invalid destination" }, { status: 400 });
+    const message = error instanceof Error ? error.message : "Invalid destination";
+    const fieldErrors = {
+      ...(body.provider === "rtmp" && !body.streamUrl?.trim() ? { streamUrl: "Enter the RTMP server / ingest URL." } : {}),
+      ...(body.provider === "rtmp" && !body.streamKey?.trim() ? { streamKey: "Enter the stream key provided by your streaming service." } : {}),
+      ...(typeof body.label === "string" && !body.label.trim() ? { label: "Enter a destination label." } : {}),
+    };
+    return NextResponse.json({ error: message, code: "INVALID_DESTINATION", fieldErrors }, { status: 400 });
   }
 
   const state = await loadTournament(body.tournamentId);
