@@ -12,14 +12,16 @@ export async function POST(request: Request) {
   if (!tournamentId || !["create", "testing", "live", "complete"].includes(action)) return NextResponse.json({ error: "tournamentId and a valid action are required" }, { status: 400 });
   const authorization = await authorizeBroadcastOperator(userId, tournamentId);
   if (!authorization.ok) return NextResponse.json({ error: authorization.status === 404 ? "Tournament not found" : "Forbidden" }, { status: authorization.status });
+  const vercelOidcToken = request.headers.get("x-vercel-oidc-token");
+  if (!vercelOidcToken) return NextResponse.json({ error: "Managed broadcast secret storage is not configured for this deployment." }, { status: 503 });
   try {
     if (action === "create") {
       const title = typeof body.title === "string" && body.title.trim() ? body.title.trim() : "FGC Stream Tournament";
       const scheduledStartTime = typeof body.scheduledStartTime === "string" && body.scheduledStartTime ? body.scheduledStartTime : new Date(Date.now() + 10 * 60 * 1000).toISOString();
-      const result = await createYouTubeBroadcast(tournamentId, { title, description: typeof body.description === "string" ? body.description : undefined, scheduledStartTime, privacyStatus: body.privacyStatus === "public" || body.privacyStatus === "private" ? body.privacyStatus : "unlisted" });
+      const result = await createYouTubeBroadcast(tournamentId, { title, description: typeof body.description === "string" ? body.description : undefined, scheduledStartTime, privacyStatus: body.privacyStatus === "public" || body.privacyStatus === "private" ? body.privacyStatus : "unlisted" }, vercelOidcToken);
       return NextResponse.json({ broadcast: result });
     }
-    const broadcast = await transitionYouTubeBroadcast(tournamentId, action);
+    const broadcast = await transitionYouTubeBroadcast(tournamentId, action, vercelOidcToken);
     return NextResponse.json({ broadcast });
   } catch (error) {
     return NextResponse.json({ error: error instanceof Error ? error.message : "YouTube operation failed" }, { status: 502 });

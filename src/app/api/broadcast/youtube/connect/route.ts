@@ -12,7 +12,7 @@ export async function GET(request: Request) {
   if (!authorization.ok) return NextResponse.json({ error: authorization.status === 404 ? "Tournament not found" : "Forbidden" }, { status: authorization.status });
 
   try {
-    const state = createYouTubeOAuthState({ tournamentId, clerkUserId: userId });
+    const state = createYouTubeOAuthState({ tournamentId });
     const response = NextResponse.redirect(youtubeAuthorizationUrl(state));
     response.cookies.set(youtubeOAuthCookieName(), state, {
       httpOnly: true,
