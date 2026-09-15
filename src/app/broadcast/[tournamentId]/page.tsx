@@ -60,6 +60,11 @@ export default function BroadcastProductionConsole({ params }: BroadcastPageProp
   const groups = useMemo(() => [SCENES.slice(0, 4), SCENES.slice(4)], []);
   const youtubeStatus = youtubeConnection?.broadcast?.status ?? "not-created";
   const youtubeWatchUrl = youtubeConnection?.broadcast?.videoId ? `https://www.youtube.com/watch?v=${youtubeConnection.broadcast.videoId}` : null;
+  const destinationCount = destinations.length + (youtubeConnection ? 1 : 0);
+  const broadcastStatus = youtubeConnection?.broadcast ? youtubeStatus : youtubeConnection ? "channel-connected" : "not-connected";
+  const broadcastStatusLabel = youtubeConnection?.broadcast
+    ? youtubeStatus.replaceAll("-", " ").replace(/\b\w/g, (letter) => letter.toUpperCase())
+    : youtubeConnection ? "Channel connected" : "Not connected";
 
   async function send(scene: BroadcastScene, type: BroadcastCommandType) {
     if (!tournamentId) return;
@@ -120,6 +125,23 @@ export default function BroadcastProductionConsole({ params }: BroadcastPageProp
     <main style={{ minHeight: "100vh", background: "#07080d", color: "#f7f8ff", padding: 32, fontFamily: "Inter, system-ui, sans-serif" }}>
       <div style={{ maxWidth: 1180, margin: "0 auto" }}>
         <header style={{ display: "flex", justifyContent: "space-between", alignItems: "end", gap: 24, marginBottom: 28 }}><div><div style={{ fontSize: 12, letterSpacing: ".18em", textTransform: "uppercase", opacity: .55 }}>FGC Broadcast Studio</div><h1 style={{ margin: "8px 0 0", fontSize: 36, lineHeight: 1 }}>Production Console</h1></div><div style={{ padding: "10px 14px", border: "1px solid #252936", borderRadius: 999, fontSize: 13, background: "#0d0f16" }}>● LIVE · {message}</div></header>
+
+        <section style={{ marginBottom: 18, border: "1px solid #222631", borderRadius: 20, background: "linear-gradient(145deg,#10131b,#0a0c11)", padding: 20 }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 16, marginBottom: 14 }}>
+            <div><div style={{ fontSize: 11, opacity: .45, textTransform: "uppercase", letterSpacing: ".12em" }}>Broadcast operations</div><h2 style={{ margin: "5px 0 0", fontSize: 22 }}>Live broadcast status</h2></div>
+            <span style={{ border: "1px solid #292e39", borderRadius: 999, padding: "7px 11px", fontSize: 12, background: "#0d1016" }}>{broadcastStatusLabel}</span>
+          </div>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 10 }}>
+            <div style={statusCardStyle}><div style={eyebrowStyle}>Destination</div><strong>{youtubeConnection ? `YouTube · ${youtubeConnection.channelName || "Connected channel"}` : "No YouTube channel"}</strong><div style={mutedStyle}>{destinationCount} configured destination{destinationCount === 1 ? "" : "s"}</div></div>
+            <div style={statusCardStyle}><div style={eyebrowStyle}>Live event</div><strong>{youtubeConnection?.broadcast ? "YouTube event created" : "No event prepared"}</strong><div style={mutedStyle}>{youtubeConnection?.broadcast?.videoId ? "Watch page available" : "Prepare an event below"}</div></div>
+            <div style={statusCardStyle}><div style={eyebrowStyle}>Encoder / ingest</div><strong>External encoder</strong><div style={mutedStyle}>Health is only shown when the connected provider reports it; no synthetic metrics.</div></div>
+          </div>
+          <div style={{ marginTop: 10, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
+            <div style={{ fontSize: 12, opacity: .5 }}>Broadcast automation sits above the existing Program/Preview controls. Nothing in the production scene workflow has been removed.</div>
+            {youtubeConnection?.broadcast && youtubeWatchUrl && <a href={youtubeWatchUrl} target="_blank" rel="noreferrer" style={{ color: "#c4b5fd", fontSize: 13 }}>Open watch page ↗</a>}
+          </div>
+        </section>
+
         <section style={{ display: "grid", gridTemplateColumns: "1.35fr .65fr", gap: 18 }}><div style={{ border: "1px solid #222631", borderRadius: 20, background: "linear-gradient(145deg,#10131b,#090a10)", padding: 22 }}><div style={{ display: "flex", justifyContent: "space-between", marginBottom: 18 }}><span style={{ fontSize: 13, opacity: .55 }}>PROGRAM</span><strong style={{ color: "#9f7aea" }}>{active.toUpperCase()}</strong></div><div style={{ aspectRatio: "16/9", borderRadius: 14, border: "1px solid #292d39", display: "grid", placeItems: "center", background: "radial-gradient(circle at 50% 40%,#24183b 0,#0b0c12 55%)", overflow: "hidden" }}><div style={{ textAlign: "center" }}><div style={{ fontSize: 12, letterSpacing: ".2em", opacity: .45 }}>FGC LIVE</div><div style={{ fontSize: 52, fontWeight: 800, textTransform: "uppercase", marginTop: 8 }}>{active.replaceAll("-", " ")}</div><div style={{ marginTop: 12, opacity: .5, fontSize: 13 }}>OBS Browser Source · Realtime</div></div></div></div><aside style={{ display: "grid", gap: 12 }}>{groups.map((group, index) => <div key={index} style={{ border: "1px solid #222631", borderRadius: 20, background: "#0c0e14", padding: 14, display: "grid", gap: 10 }}>{group.map((item) => <button key={item.scene} disabled={busy || !tournamentId} onClick={() => send(item.scene, item.type)} style={{ textAlign: "left", border: active === item.scene ? "1px solid #8b5cf6" : "1px solid #242936", borderRadius: 12, padding: "13px 14px", background: active === item.scene ? "#171127" : "#101219", color: "#fff", cursor: busy ? "wait" : "pointer" }}><div style={{ fontWeight: 700 }}>{item.label}</div><div style={{ fontSize: 11, opacity: .45, marginTop: 3 }}>{item.type}</div></button>)}</div>)}</aside></section>
         <section style={{ marginTop: 18, display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 12 }}>{["Program", "Preview", "OBS Sync"].map((labelValue, i) => <div key={labelValue} style={{ border: "1px solid #222631", borderRadius: 16, background: "#0c0e14", padding: 16 }}><div style={{ fontSize: 11, opacity: .45, textTransform: "uppercase", letterSpacing: ".12em" }}>{labelValue}</div><div style={{ marginTop: 8, fontSize: 20, fontWeight: 750 }}>{i === 0 ? active : i === 1 ? "Standby" : "Connected"}</div></div>)}</section>
         <section style={{ marginTop: 18, border: "1px solid #222631", borderRadius: 20, background: "#0c0e14", padding: 20 }}>
@@ -141,3 +163,6 @@ const fieldStyle = { width: "100%", boxSizing: "border-box" as const, border: "1
 const primaryButtonStyle = { border: "1px solid #8b5cf6", borderRadius: 10, padding: "11px 14px", background: "#171127", color: "#fff", fontWeight: 700, cursor: "pointer", whiteSpace: "nowrap" as const };
 const secondaryButtonStyle = { border: "1px solid #343946", borderRadius: 9, padding: "8px 12px", background: "transparent", color: "#fff", cursor: "pointer", whiteSpace: "nowrap" as const };
 const stepButtonStyle = { border: "1px solid #292e39", borderRadius: 10, padding: "11px 12px", background: "#0d1016", color: "#fff", fontWeight: 650, cursor: "pointer" };
+const statusCardStyle = { border: "1px solid #242936", borderRadius: 12, padding: "14px 15px", background: "#0d1016", minHeight: 84 };
+const eyebrowStyle = { fontSize: 10, opacity: .45, textTransform: "uppercase" as const, letterSpacing: ".12em", marginBottom: 7 };
+const mutedStyle = { fontSize: 12, opacity: .5, marginTop: 5 };
