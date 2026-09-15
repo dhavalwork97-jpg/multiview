@@ -2,16 +2,27 @@ import { NextResponse } from "next/server";
 import { auth } from "@clerk/nextjs/server";
 import { authorizeBroadcastOperator } from "@/lib/broadcast/authorization";
 import { db } from "@/lib/db";
+import { encryptRefreshToken } from "@/lib/broadcast/youtube-connection";
 import { createBroadcastDestination, type BroadcastDestination, type BroadcastDestinationInput } from "@/lib/broadcast/destinations";
 
+type StoredDestination = BroadcastDestination & { encryptedStreamKey?: string | null };
 type StoredOverlay = Record<string, unknown> & {
-  broadcastDestinations?: BroadcastDestination[];
+  broadcastDestinations?: StoredDestination[];
 };
 
-function readDestinations(overlay: unknown): BroadcastDestination[] {
+function readDestinations(overlay: unknown): StoredDestination[] {
   if (!overlay || typeof overlay !== "object" || Array.isArray(overlay)) return [];
   const value = (overlay as StoredOverlay).broadcastDestinations;
-  return Array.isArray(value) ? value as BroadcastDestination[] : [];
+  return Array.isArray(value) ? value as StoredDestination[] : [];
+}
+
+function publicDestination(destination: StoredDestination): BroadcastDestination {
+  const { encryptedStreamKey: _encryptedStreamKey, ...safe } = destination;
+  return safe;
+}
+
+function publicDestinations(destinations: StoredDestination[]) {
+  return destinations.map(publicDestination);
 }
 
 async function loadTournament(tournamentId: string) {
@@ -32,7 +43,7 @@ export async function GET(request: Request) {
   if (!authorization.ok) return NextResponse.json({ error: authorization.status === 404 ? "Tournament not found" : "Forbidden" }, { status: authorization.status });
 
   const state = await loadTournament(tournamentId);
-  return NextResponse.json({ destinations: readDestinations(state?.overlay) });
+  return NextResponse.json({ destinations: publicDestinations(readDestinations(state?.overlay)) });
 }
 
 export async function POST(request: Request) {
@@ -51,14 +62,18 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Invalid broadcast provider" }, { status: 400 });
   }
 
-  let destination: BroadcastDestination;
+  let destination: StoredDestination;
   try {
     destination = createBroadcastDestination(crypto.randomUUID(), {
       provider: body.provider,
       label: body.label,
       channelName: body.channelName,
       streamUrl: body.streamUrl,
+      streamKey: body.streamKey,
     });
+    if (body.provider === "rtmp" && body.streamKey?.trim()) {
+      destination.encryptedStreamKey = encryptRefreshToken(body.streamKey.trim());
+    }
   } catch (error) {
     return NextResponse.json({ error: error instanceof Error ? error.message : "Invalid destination" }, { status: 400 });
   }
@@ -76,7 +91,7 @@ export async function POST(request: Request) {
     update: { overlay: JSON.parse(JSON.stringify(overlay)) },
   });
 
-  return NextResponse.json({ ok: true, destination, destinations }, { status: 201 });
+  return NextResponse.json({ ok: true, destination: publicDestination(destination), destinations: publicDestinations(destinations) }, { status: 201 });
 }
 
 export async function DELETE(request: Request) {
@@ -102,5 +117,5 @@ export async function DELETE(request: Request) {
     update: { overlay: JSON.parse(JSON.stringify(overlay)) },
   });
 
-  return NextResponse.json({ ok: true, destinations });
+  return NextResponse.json({ ok: true, destinations: publicDestinations(destinations) });
 }
