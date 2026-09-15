@@ -1,0 +1,42 @@
+name: Product Walkthrough Recorder
+
+on:
+  push:
+    paths:
+      - 'scripts/product-walkthrough.ts'
+      - '.github/workflows/product-walkthrough.yml'
+  workflow_dispatch:
+
+jobs:
+  record:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci --include=dev
+
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+
+      - name: Record complete product walkthrough
+        env:
+          WALKTHROUGH_BASE_URL: https://multiview-fjtd.vercel.app
+        run: npx tsx scripts/product-walkthrough.ts
+
+      - name: Upload walkthrough artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: product-walkthrough
+          path: recordings/product-walkthrough/
+          if-no-files-found: warn
+          retention-days: 14
