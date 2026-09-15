@@ -26,9 +26,8 @@ export async function GET(request: Request) {
     if (!cookieState || cookieState !== stateValue) return new NextResponse("YouTube OAuth session expired. Start the connection again.", { status: 400 });
     const authorization = await authorizeBroadcastOperator(userId, state.tournamentId);
     if (!authorization.ok) return new NextResponse("You do not have access to this tournament.", { status: authorization.status });
-    const vercelOidcToken = request.headers.get("x-vercel-oidc-token");
-    if (!vercelOidcToken) return new NextResponse("Managed broadcast secret storage is not configured for this deployment.", { status: 503 });
 
+    const vercelOidcToken = request.headers.get("x-vercel-oidc-token") ?? undefined;
     await connectYouTube(state.tournamentId, code, vercelOidcToken);
     const destination = `${appUrl()}/broadcast/${encodeURIComponent(state.tournamentId)}?youtube=connected`;
     const response = NextResponse.redirect(destination);
