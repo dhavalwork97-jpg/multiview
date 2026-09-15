@@ -19,6 +19,12 @@ const SCENES: Array<{ scene: BroadcastScene; label: string; type: BroadcastComma
 type BroadcastPageProps = { params: Promise<{ tournamentId: string }> };
 type YouTubeConnection = { connected: true; channelId?: string; channelName?: string; connectedAt: string; broadcast?: { broadcastId: string; streamId: string; streamName?: string; videoId?: string; status?: string } } | null;
 
+type DestinationErrorResponse = {
+  error?: string;
+  code?: string;
+  fieldErrors?: Record<string, string>;
+};
+
 export default function BroadcastProductionConsole({ params }: BroadcastPageProps) {
   const [active, setActive] = useState<BroadcastScene>("gameplay");
   const [busy, setBusy] = useState(false);
@@ -31,6 +37,7 @@ export default function BroadcastProductionConsole({ params }: BroadcastPageProp
   const [streamUrl, setStreamUrl] = useState("");
   const [streamKey, setStreamKey] = useState("");
   const [savingDestination, setSavingDestination] = useState(false);
+  const [destinationError, setDestinationError] = useState<DestinationErrorResponse | null>(null);
   const [youtubeConnection, setYoutubeConnection] = useState<YouTubeConnection>(null);
   const [youtubeLoading, setYoutubeLoading] = useState(false);
   const [youtubeAction, setYoutubeAction] = useState<string | null>(null);
@@ -103,13 +110,24 @@ export default function BroadcastProductionConsole({ params }: BroadcastPageProp
   }
 
   async function addDestination() {
-    if (!tournamentId || !label.trim()) return;
+    if (!tournamentId || !label.trim()) {
+      const error = { error: "A destination label is required.", code: "MISSING_REQUIRED_FIELDS", fieldErrors: { label: "Enter a destination label." } };
+      setDestinationError(error);
+      setMessage(error.error);
+      return;
+    }
+
     setSavingDestination(true);
+    setDestinationError(null);
     setMessage("Saving broadcast destination…");
     try {
       const response = await fetch("/api/broadcast/destinations", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ tournamentId, provider, label, channelName, streamUrl, ...(provider === "rtmp" ? { streamKey } : {}) }) });
-      const data = await response.json();
-      if (!response.ok) throw new Error(data.error ?? "Could not save destination");
+      const data = await response.json().catch(() => ({ error: "The server returned an invalid error response." }));
+      if (!response.ok) {
+        const errorData = data as DestinationErrorResponse;
+        setDestinationError(errorData);
+        throw new Error(errorData.error ?? `Could not save destination (${response.status})`);
+      }
       setDestinations(data.destinations ?? []); setLabel(""); setChannelName(""); setStreamUrl(""); setStreamKey(""); setMessage("Destination saved");
     } catch (error) { setMessage(error instanceof Error ? error.message : "Could not save destination"); }
     finally { setSavingDestination(false); }
@@ -154,7 +172,18 @@ export default function BroadcastProductionConsole({ params }: BroadcastPageProp
             </div></div>}
           <div style={{ marginTop: 10, fontSize: 12, opacity: .45 }}>Organizer setup stays intentionally small: connect the channel once, then create and operate each event here. Google OAuth credentials are platform configuration, not organizer configuration.</div>
         </section>
-        <section style={{ marginTop: 18, border: "1px solid #222631", borderRadius: 20, background: "#0c0e14", padding: 20 }}><div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 16, marginBottom: 16 }}><div><div style={{ fontSize: 11, opacity: .45, textTransform: "uppercase", letterSpacing: ".12em" }}>Fallback destinations</div><h2 style={{ margin: "5px 0 0", fontSize: 22 }}>Optional RTMP / other outputs</h2></div><span style={{ fontSize: 12, opacity: .5 }}>{destinations.length} configured</span></div>{destinations.length > 0 && <div style={{ display: "grid", gap: 8, marginBottom: 16 }}>{destinations.map((destination) => <div key={destination.id} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, border: "1px solid #242936", borderRadius: 12, padding: "12px 14px", background: "#101219" }}><div><strong>{destination.label}</strong><div style={{ fontSize: 12, opacity: .5, marginTop: 3 }}>{destination.provider.toUpperCase()} · {destination.channelName || destination.streamUrl || "Not connected"}{destination.provider === "rtmp" ? " · Stream key saved" : ""}</div></div><button onClick={() => removeDestination(destination.id)} style={secondaryButtonStyle}>Remove</button></div>)}</div>}<div style={{ display: "grid", gridTemplateColumns: provider === "rtmp" ? "150px 1fr 1fr 1.35fr 1.35fr auto" : "150px 1fr 1fr 1.5fr auto", gap: 8, alignItems: "center" }}><select value={provider} onChange={(event) => { setProvider(event.target.value as BroadcastDestinationProvider); setStreamKey(""); }} style={fieldStyle}><option value="rtmp">Custom RTMP</option><option value="twitch">Twitch</option><option value="youtube">YouTube (advanced)</option></select><input value={label} onChange={(event) => setLabel(event.target.value)} placeholder="Destination label" style={fieldStyle} /><input value={channelName} onChange={(event) => setChannelName(event.target.value)} placeholder="Channel name (optional)" style={fieldStyle} /><input value={streamUrl} onChange={(event) => setStreamUrl(event.target.value)} placeholder="rtmp://…" style={fieldStyle} />{provider === "rtmp" && <input type="password" value={streamKey} onChange={(event) => setStreamKey(event.target.value)} placeholder="Stream key" autoComplete="new-password" style={fieldStyle} />}<button disabled={savingDestination || !label.trim() || (provider === "rtmp" && (!streamUrl.trim() || !streamKey.trim()))} onClick={addDestination} style={primaryButtonStyle}>{savingDestination ? "Saving…" : "Add"}</button></div><div style={{ marginTop: 10, fontSize: 12, opacity: .45 }}>Custom RTMP requires both the ingest/server URL and stream key. The stream key is encrypted at rest and is never returned by the destinations API.</div></section>
+        <section style={{ marginTop: 18, border: "1px solid #222631", borderRadius: 20, background: "#0c0e14", padding: 20 }}><div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 16, marginBottom: 16 }}><div><div style={{ fontSize: 11, opacity: .45, textTransform: "uppercase", letterSpacing: ".12em" }}>Fallback destinations</div><h2 style={{ margin: "5px 0 0", fontSize: 22 }}>Optional RTMP / other outputs</h2></div><span style={{ fontSize: 12, opacity: .5 }}>{destinations.length} configured</span></div>{destinations.length > 0 && <div style={{ display: "grid", gap: 8, marginBottom: 16 }}>{destinations.map((destination) => <div key={destination.id} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, border: "1px solid #242936", borderRadius: 12, padding: "12px 14px", background: "#101219" }}><div><strong>{destination.label}</strong><div style={{ fontSize: 12, opacity: .5, marginTop: 3 }}>{destination.provider.toUpperCase()} · {destination.channelName || destination.streamUrl || "Not connected"}{destination.provider === "rtmp" ? " · Stream key saved" : ""}</div></div><button onClick={() => removeDestination(destination.id)} style={secondaryButtonStyle}>Remove</button></div>)}</div>}
+          <div style={{ display: "grid", gridTemplateColumns: provider === "rtmp" ? "150px 1fr 1fr 1.35fr 1.35fr auto" : "150px 1fr 1fr 1.5fr auto", gap: 8, alignItems: "center" }}>
+            <select value={provider} onChange={(event) => { setProvider(event.target.value as BroadcastDestinationProvider); setStreamKey(""); setDestinationError(null); }} style={fieldStyle}><option value="rtmp">Custom RTMP</option><option value="twitch">Twitch</option><option value="youtube">YouTube (advanced)</option></select>
+            <input value={label} onChange={(event) => { setLabel(event.target.value); setDestinationError(null); }} placeholder="Destination label" style={fieldStyle} />
+            <input value={channelName} onChange={(event) => { setChannelName(event.target.value); setDestinationError(null); }} placeholder="Channel name (optional)" style={fieldStyle} />
+            <input value={streamUrl} onChange={(event) => { setStreamUrl(event.target.value); setDestinationError(null); }} placeholder="rtmp://…" style={fieldStyle} />
+            {provider === "rtmp" && <input type="password" value={streamKey} onChange={(event) => { setStreamKey(event.target.value); setDestinationError(null); }} placeholder="Stream key" autoComplete="new-password" style={fieldStyle} />}
+            <button disabled={savingDestination || !label.trim() || (provider === "rtmp" && (!streamUrl.trim() || !streamKey.trim()))} onClick={addDestination} style={primaryButtonStyle}>{savingDestination ? "Saving…" : "Add"}</button>
+          </div>
+          {destinationError && <div role="alert" style={{ marginTop: 12, border: "1px solid #7f1d1d", borderRadius: 10, padding: "12px 14px", background: "#1a0d0d", color: "#fecaca" }}><strong>{destinationError.error || "Could not save destination"}</strong>{destinationError.fieldErrors && Object.entries(destinationError.fieldErrors).length > 0 && <ul style={{ margin: "8px 0 0", paddingLeft: 18, fontSize: 12, lineHeight: 1.5 }}>{Object.entries(destinationError.fieldErrors).map(([field, error]) => <li key={field}><strong>{field === "streamUrl" ? "RTMP server URL" : field === "streamKey" ? "Stream key" : field}:</strong> {error}</li>)}</ul>}</div>}
+          <div style={{ marginTop: 10, fontSize: 12, opacity: .45 }}>Custom RTMP requires both the ingest/server URL and stream key. The stream key is encrypted at rest and is never returned by the destinations API.</div>
+        </section>
       </div>
     </main>
   );
