@@ -2,30 +2,6 @@ const GOOGLE_STS_URL = "https://sts.googleapis.com/v1/token";
 const GOOGLE_IAM_CREDENTIALS_URL = "https://iamcredentials.googleapis.com/v1";
 const GOOGLE_KMS_URL = "https://cloudkms.googleapis.com/v1";
 
-type KmsConfig = {
-  projectNumber: string;
-  serviceAccountEmail: string;
-  workloadIdentityPoolId: string;
-  workloadIdentityProviderId: string;
-  keyName: string;
-};
-
-function requiredEnv(name: keyof KmsConfig): string {
-  const value = process.env[name];
-  if (!value) throw new Error(`Missing required managed KMS configuration: ${name}`);
-  return value;
-}
-
-function config(): KmsConfig {
-  return {
-    projectNumber: requiredEnv("projectNumber" as never) || process.env.GCP_PROJECT_NUMBER!,
-    serviceAccountEmail: process.env.GCP_SERVICE_ACCOUNT_EMAIL || "",
-    workloadIdentityPoolId: process.env.GCP_WORKLOAD_IDENTITY_POOL_ID || "",
-    workloadIdentityProviderId: process.env.GCP_WORKLOAD_IDENTITY_POOL_PROVIDER_ID || "",
-    keyName: process.env.GCP_KMS_KEY_NAME || "",
-  };
-}
-
 function env(name: string): string {
   const value = process.env[name];
   if (!value) throw new Error(`Missing required managed KMS configuration: ${name}`);
@@ -33,10 +9,7 @@ function env(name: string): string {
 }
 
 async function exchangeVercelOidcForGoogleToken(vercelOidcToken: string): Promise<string> {
-  const projectNumber = env("GCP_PROJECT_NUMBER");
-  const poolId = env("GCP_WORKLOAD_IDENTITY_POOL_ID");
-  const providerId = env("GCP_WORKLOAD_IDENTITY_POOL_PROVIDER_ID");
-  const audience = `//iam.googleapis.com/projects/${projectNumber}/locations/global/workloadIdentityPools/${poolId}/providers/${providerId}`;
+  const audience = `//iam.googleapis.com/projects/${env("GCP_PROJECT_NUMBER")}/locations/global/workloadIdentityPools/${env("GCP_WORKLOAD_IDENTITY_POOL_ID")}/providers/${env("GCP_WORKLOAD_IDENTITY_POOL_PROVIDER_ID")}`;
   const response = await fetch(GOOGLE_STS_URL, {
     method: "POST",
     headers: { "Content-Type": "application/x-www-form-urlencoded" },
@@ -57,8 +30,7 @@ async function exchangeVercelOidcForGoogleToken(vercelOidcToken: string): Promis
 
 async function serviceAccountAccessToken(vercelOidcToken: string): Promise<string> {
   const federatedToken = await exchangeVercelOidcForGoogleToken(vercelOidcToken);
-  const serviceAccountEmail = env("GCP_SERVICE_ACCOUNT_EMAIL");
-  const response = await fetch(`${GOOGLE_IAM_CREDENTIALS_URL}/projects/-/serviceAccounts/${encodeURIComponent(serviceAccountEmail)}:generateAccessToken`, {
+  const response = await fetch(`${GOOGLE_IAM_CREDENTIALS_URL}/projects/-/serviceAccounts/${encodeURIComponent(env("GCP_SERVICE_ACCOUNT_EMAIL"))}:generateAccessToken`, {
     method: "POST",
     headers: { Authorization: `Bearer ${federatedToken}`, "Content-Type": "application/json" },
     body: JSON.stringify({ scope: ["https://www.googleapis.com/auth/cloud-platform"], lifetime: "900s" }),
