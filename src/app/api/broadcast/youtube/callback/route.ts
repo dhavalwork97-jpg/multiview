@@ -22,13 +22,14 @@ export async function GET(request: Request) {
 
   try {
     const state = verifyYouTubeOAuthState(stateValue);
-    if (state.clerkUserId !== userId) return new NextResponse("YouTube OAuth state does not match the signed-in operator.", { status: 403 });
     const cookieState = request.headers.get("cookie")?.match(new RegExp(`${youtubeOAuthCookieName()}=([^;]+)`))?.[1];
     if (!cookieState || cookieState !== stateValue) return new NextResponse("YouTube OAuth session expired. Start the connection again.", { status: 400 });
     const authorization = await authorizeBroadcastOperator(userId, state.tournamentId);
     if (!authorization.ok) return new NextResponse("You do not have access to this tournament.", { status: authorization.status });
+    const vercelOidcToken = request.headers.get("x-vercel-oidc-token");
+    if (!vercelOidcToken) return new NextResponse("Managed broadcast secret storage is not configured for this deployment.", { status: 503 });
 
-    await connectYouTube(state.tournamentId, code);
+    await connectYouTube(state.tournamentId, code, vercelOidcToken);
     const destination = `${appUrl()}/broadcast/${encodeURIComponent(state.tournamentId)}?youtube=connected`;
     const response = NextResponse.redirect(destination);
     response.cookies.set(youtubeOAuthCookieName(), "", { httpOnly: true, secure: process.env.NODE_ENV === "production", sameSite: "lax", maxAge: 0, path: "/" });
