@@ -14,6 +14,7 @@ export type BroadcastDestination = {
   status: BroadcastDestinationStatus;
   channelName?: string | null;
   streamUrl?: string | null;
+  encryptedStreamKey?: string | null;
   externalBroadcastId?: string | null;
   lastError?: string | null;
 };
@@ -23,6 +24,7 @@ export type BroadcastDestinationInput = {
   label: string;
   channelName?: string;
   streamUrl?: string;
+  streamKey?: string;
 };
 
 const PROVIDER_LABELS: Record<BroadcastDestinationProvider, string> = {
@@ -42,6 +44,9 @@ export function validateBroadcastDestination(input: BroadcastDestinationInput) {
   if (input.provider === "rtmp" && !input.streamUrl?.trim()) {
     errors.push("A stream URL is required for a custom RTMP destination.");
   }
+  if (input.provider === "rtmp" && !input.streamKey?.trim()) {
+    errors.push("A stream key is required for a custom RTMP destination.");
+  }
 
   return errors;
 }
@@ -60,6 +65,7 @@ export function createBroadcastDestination(
     status: "disconnected",
     channelName: input.channelName?.trim() || null,
     streamUrl: input.provider === "rtmp" ? input.streamUrl?.trim() || null : null,
+    encryptedStreamKey: null,
     externalBroadcastId: null,
     lastError: null,
   };
