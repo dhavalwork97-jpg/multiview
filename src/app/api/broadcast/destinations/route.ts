@@ -4,8 +4,6 @@ import { authorizeBroadcastOperator } from "@/lib/broadcast/authorization";
 import { db } from "@/lib/db";
 import { createBroadcastDestination, type BroadcastDestination, type BroadcastDestinationInput } from "@/lib/broadcast/destinations";
 
-const DESTINATIONS_KEY = "destinations";
-
 type StoredOverlay = Record<string, unknown> & {
   broadcastDestinations?: BroadcastDestination[];
 };
