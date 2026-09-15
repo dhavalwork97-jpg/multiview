@@ -14,25 +14,34 @@ export function trialDaysRemaining(user: { trialEndsAt?: Date | null } | null | 
   return Math.max(0, Math.ceil(ms / 86400000));
 }
 
-export function maxMultiViewTiles(user: { subscriptionStatus?: string | null; trialEndsAt?: Date | null } | null | undefined): 4 | 9 {
+export function maxMultiViewTiles(user: { subscriptionStatus?: string | null; trialEndsAt?: Date | null }): 4 | 9 {
   return isPremium(user) ? 9 : 4;
 }
 
 export const PLANS = [
   {
     name: "Free Trial", price: "Free", cadence: "14 days", status: "Available",
-    features: ["2 streaming stations", "Tournament Control Room", "YouTube Live integration", "Match → station assignment", "Public tournament pages", "Basic branding"],
+    description: "Run a real tournament before you commit.",
+    features: ["Up to 2 stations", "Tournament setup, participants & brackets", "Schedule + station assignment", "Control Room + rundown", "YouTube Live connection", "Saved RTMP destinations", "Broadcast/HUD + Multiview", "Public tournament pages"],
   },
   {
-    name: "Starter", price: "₹1,499", cadence: "/month", status: "Coming Soon",
-    features: ["Up to 5 stations", "Unlimited tournaments", "Control Room", "OBS / stream monitoring", "Custom branding", "Match VOD association", "Multiple operators"],
+    name: "Organizer", price: "₹1,499", cadence: "/month", status: "Coming Soon",
+    description: "For organizers running tournaments regularly.",
+    features: ["Up to 5 stations", "Unlimited tournaments", "Everything in Free Trial", "YouTube + Kick/custom RTMP workflow", "Station streaming credentials", "Multi-operator workspace", "Custom event branding", "Priority support"],
   },
   {
     name: "Pro", price: "₹3,999", cadence: "/month", status: "Coming Soon",
-    features: ["Up to 10 stations", "Everything in Starter", "Advanced event controls", "Sponsor branding", "Advanced stream monitoring", "VOD management", "Event analytics", "Multiple tournament operators"],
+    description: "For clubs, venues and recurring tournament operations.",
+    features: ["Up to 12 stations", "Everything in Organizer", "Advanced broadcast controls", "Reusable event configuration", "Sponsor/brand presentation", "Larger operator teams", "Higher event-day support level"],
   },
   {
-    name: "Event Package", price: "₹7,500–₹25,000", cadence: "/event", status: "Coming Soon",
-    features: ["One-off tournament deployment", "Multiple stations", "Custom event branding", "Broadcast setup", "Operator support"],
+    name: "Event", price: "₹7,500", cadence: "/event", status: "Coming Soon",
+    description: "A full event without a monthly commitment.",
+    features: ["Up to 16 stations", "Full tournament operations", "Broadcast setup", "YouTube + RTMP destinations", "Control Room + Multiview", "Event branding", "Event-day operator support", "Larger events quoted separately"],
+  },
+  {
+    name: "Enterprise", price: "Custom", cadence: "annual / event", status: "Contact Us",
+    description: "For leagues, venues and production companies.",
+    features: ["Custom station capacity", "Multiple organizations / teams", "Dedicated support", "Custom integrations", "Commercial terms", "Multi-event operations"],
   },
 ] as const;
